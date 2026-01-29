@@ -1,6 +1,5 @@
 import os
 import re
-import json
 import psycopg2
 import numpy as np
 from dotenv import load_dotenv
@@ -16,10 +15,10 @@ class StoryBibleQA:
         self.embed_model = SentenceTransformer('BAAI/bge-m3')
         
         self.conn = psycopg2.connect(
-            host=os.getenv("DB_HOST", "localhost"),
-            database=os.getenv("DB_NAME", "postgres"),
-            user=os.getenv("DB_USER", "postgres"),
-            password=os.getenv("DB_PASS", "1234!@#$"),
+            host=os.getenv("DB_HOST"),
+            database=os.getenv("DB_NAME"),
+            user=os.getenv("DB_USER"),
+            password=os.getenv("DB_PASS"),
             sslmode='disable'
         )
         self.cur = self.conn.cursor()
@@ -31,7 +30,6 @@ class StoryBibleQA:
         
         # 2. VectorDB 검색
         query_emb = self.embed_model.encode(query)
-        query_emb_str = "[" + ",".join(map(str, query_emb)) + "]"
         
         try:
             if chapter_match:
@@ -61,7 +59,7 @@ class StoryBibleQA:
             print(f"❌ 검색 중 오류 발생: {e}")
             return
         
-        # 3. Gemini 최종 답변 (작가님 질문의 디테일을 살리기 위해 페르소나 강화)
+        # 3. Gemini 최종 답변 (질문의 디테일을 살리기 위해 페르소나 강화)
         prompt = f"""당신은 소설 '이상한 나라의 앨리스'의 모든 장면을 꿰뚫고 있는 전문 편집자입니다.
         작가님의 질문에 대해 다음 지침을 지켜 답변하세요:
 
@@ -83,10 +81,9 @@ class StoryBibleQA:
 
 if __name__ == "__main__":
     qa = StoryBibleQA()
-    
-    
-    # 2. 테스트 질문들
+
     print("[*] 시스템이 준비되었습니다.")
+    # 테스트 질문들을 여기에 적어주세요. qs.ask("이 안에 질문을 적어주세요.")
     qa.ask("앨리스가 ‘고양이’ 이야기를 꺼냈을 때 상대가 화를 낸 이유는 무엇이었나?")
     qa.ask("코커스 경주에서 도도새는 승자를 어떻게 정했나?")
     qa.ask("코커스 경주가 끝난 뒤 앨리스가 나눠 준 상은 무엇이었나?")
