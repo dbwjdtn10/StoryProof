@@ -1,34 +1,28 @@
-# StoryProof Backend Requirements
+# Core API
+fastapi>=0.100.0
+uvicorn[standard]
+python-multipart
+email-validator
 
-## Core Dependencies
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
-pydantic==2.5.0
-pydantic-settings==2.1.0
+# Database
+sqlalchemy
+psycopg2-binary
+alembic
 
-## Database
-sqlalchemy==2.0.23
-psycopg2-binary==2.9.9
-alembic==1.13.0
+# Pydantic
+pydantic>=2.0
+pydantic-settings
 
-## Authentication & Security
-python-jose[cryptography]==3.3.0
-passlib[bcrypt]==1.7.4
-python-multipart==0.0.6
+# Auth & Security
+passlib[argon2]
+python-jose[cryptography]
 
-## AI & LangChain
-langchain==0.1.0
-openai==1.6.1
-chromadb==0.4.18
+# AI & ML
+sentence-transformers
+pinecone>=3.0.0
+google-genai
+numpy
 
-## File Processing
-python-docx==1.1.0
-PyPDF2==3.0.1
-chardet==5.2.0
-
-## Async & Background Tasks
-celery==5.3.4
-redis==5.0.1
-
-## Utilities
-python-dotenv==1.0.0
+# Utilities
+python-dotenv
+chardet
