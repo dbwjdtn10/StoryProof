@@ -21,8 +21,8 @@ dotenv_path = os.path.join(project_root, ".env")
 load_dotenv(dotenv_path)
 
 # 3. Import settings and models
-from backend.app.core.config import settings
-from backend.app.db.models import Base
+from backend.core.config import settings
+from backend.db.models import Base
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -34,7 +34,7 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # 4. Set sqlalchemy.url from settings
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+config.set_main_option("sqlalchemy.url", settings.DATABASE_URL.replace("%", "%%"))
 
 # add your model's MetaData object here
 # for 'autogenerate' support
