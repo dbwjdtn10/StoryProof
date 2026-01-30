@@ -15,7 +15,6 @@ interface ChapterWithProgress extends Chapter {
 export function FileUpload({ onFileClick, novelId }: FileUploadProps) {
     const [uploadedFiles, setUploadedFiles] = useState<ChapterWithProgress[]>([]);
     const [dragActive, setDragActive] = useState(false);
-    //const [isUploading, setIsUploading] = useState(false);
     const [progressMap, setProgressMap] = useState<{ [key: number]: StoryboardProgress }>({});
     const fileInputRef = useRef<HTMLInputElement>(null);
     const progressIntervalRef = useRef<{ [key: number]: NodeJS.Timeout }>({});
@@ -106,7 +105,6 @@ export function FileUpload({ onFileClick, novelId }: FileUploadProps) {
             return;
         }
 
-        //setIsUploading(true);
         const fileArray = Array.from(files);
 
         // Calculate max chapter number from existing files
@@ -134,7 +132,6 @@ export function FileUpload({ onFileClick, novelId }: FileUploadProps) {
         }
 
         // Refresh list
-        //setIsUploading(false);
         loadChapters();
     };
 

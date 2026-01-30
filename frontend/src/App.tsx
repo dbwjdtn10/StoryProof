@@ -14,7 +14,6 @@ export default function App() {
   const [selectedFile, setSelectedFile] = useState<string>('');
   const [selectedChapterId, setSelectedChapterId] = useState<number | undefined>(undefined);
   const [currentNovel, setCurrentNovel] = useState<Novel | null>(null);
-  //const [loading, setLoading] = useState(false);
 
   // Login/Signup form states
   const [email, setEmail] = useState('');
@@ -30,7 +29,6 @@ export default function App() {
     e.preventDefault();
     console.log('Login attempt:', { email, rememberMe });
 
-    //setLoading(true);
     try {
       // 1. Login
       const tokenResponse = await login({ email, password });
@@ -58,8 +56,6 @@ export default function App() {
     } catch (error) {
       console.error("Login failed:", error);
       alert("로그인에 실패했습니다. 이메일과 비밀번호를 확인해주세요.");
-    } finally {
-      //setLoading(false);
     }
   };
 
