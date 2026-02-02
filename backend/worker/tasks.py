@@ -5,19 +5,19 @@ Celery 비동기 작업 정의
 """
 
 import os
-import sys
 from typing import Dict, Any
 from dataclasses import asdict
-
-# Add parent directory to path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from backend.db.session import SessionLocal
 from backend.db.models import Novel, Chapter, User, StoryboardStatus
 from backend.core.config import settings
-
-# StoryboardSystem import
-from story_analyzer import StoryboardSystem
+from backend.services.analysis import (
+    DocumentLoader,
+    SceneChunker,
+    GeminiStructurer,
+    EmbeddingSearchEngine,
+    StructuredScene
+)
 
 
 def update_chapter_progress(chapter_id: int, progress: int, status: str = None, message: str = None, error: str = None):
@@ -75,9 +75,8 @@ def process_chapter_storyboard(novel_id: int, chapter_id: int):
         
         update_chapter_progress(chapter_id, 5, "PROCESSING", f"{chapter.title} 로드 완료")
         
-        # 2. StoryboardSystem 초기화
+        # 2. Gemini API 키 준비
         gemini_api_key = settings.GOOGLE_API_KEY
-        storyboard = StoryboardSystem(gemini_api_key)
         
         # 3. 회차 content를 임시 파일로 저장
         import tempfile
@@ -88,10 +87,6 @@ def process_chapter_storyboard(novel_id: int, chapter_id: int):
         update_chapter_progress(chapter_id, 10, "PROCESSING", "준비 완료")
         
         # 4. 스토리보드 처리
-        from story_analyzer import (
-            DocumentLoader, SceneChunker, GeminiStructurer, 
-            EmbeddingSearchEngine, StructuredScene
-        )
         
         # 파일 로드
         loader = DocumentLoader()
@@ -146,7 +141,7 @@ def process_chapter_storyboard(novel_id: int, chapter_id: int):
         try:
             # 소설에 설정된 커스텀 프롬프트가 있으면 사용
             custom_prompt = novel.custom_prompt if novel else None
-            global_entities = storyboard.structurer.extract_global_entities(structured_scenes, custom_system_prompt=custom_prompt)
+            global_entities = structurer.extract_global_entities(structured_scenes, custom_system_prompt=custom_prompt)
             
             # Analysis 레코드로 저장
             # 기존 분석 결과가 있으면 업데이트, 없으면 생성

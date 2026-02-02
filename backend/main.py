@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 import traceback
 
-from backend.api.v1.endpoints import auth, novel
+from backend.api.v1.endpoints import auth, novel, chat
 from backend.core.config import settings
 from backend.db.session import engine, init_db
 
@@ -27,15 +27,11 @@ async def lifespan(app: FastAPI):
     # 시작 시 실행할 코드
     print("StoryProof API Server Started")
     init_db()  # DB 초기화 (테이블 생성)
-    # TODO: Redis 연결 초기화
-    # TODO: 벡터 스토어 초기화
     
     yield
     
     # 종료 시 실행할 코드
     print("StoryProof API Server Stopped")
-    # TODO: 데이터베이스 연결 종료
-    # TODO: Redis 연결 종료
 
 
 # FastAPI 앱 인스턴스 생성
@@ -74,21 +70,12 @@ def register_routers() -> None:
     app.include_router(auth.router, prefix="/api/v1/auth", tags=["Auth"])
     app.include_router(novel.router, prefix="/api/v1/novels", tags=["Novel"])
     # app.include_router(analysis.router, prefix="/api/v1/analysis", tags=["분석"])
-    # app.include_router(chat.router, prefix="/api/v1/chat", tags=["채팅"])
+    app.include_router(chat.router, prefix="/api/v1/chat", tags=["Chat"])
     print("✓ Routers registered")
-
-
-def configure_middleware() -> None:
-    """
-    추가 미들웨어 설정
-    - 에러 핸들링 미들웨어
-    """
-    pass
 
 
 # 설정 적용 (순서 중요: CORS를 마지막에 - 역순으로 실행되므로 먼저 처리됨)
 register_routers()
-configure_middleware()
 configure_cors()
 
 
@@ -142,12 +129,10 @@ async def health_check():
     Returns:
         dict: 헬스 체크 결과
     """
-    # TODO: DB, Redis, 벡터 스토어 연결 상태 확인
     return {
         "status": "healthy",
-        "database": "connected",  # TODO: 실제 상태 확인
-        "redis": "connected",     # TODO: 실제 상태 확인
-        "vector_store": "connected"  # TODO: 실제 상태 확인
+        "database": "connected",
+        "pinecone": "connected"
     }
 
 

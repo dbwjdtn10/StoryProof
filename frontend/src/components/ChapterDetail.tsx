@@ -1070,7 +1070,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId }: ChapterD
             <ThemeToggle />
 
             {/* Floating Menu - Settings, Analysis, Chatbot */}
-            <FloatingMenu />
+            <FloatingMenu onNavigateToScene={scrollToScene} />
         </div>
     );
 }
