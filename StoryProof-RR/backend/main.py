@@ -140,11 +140,12 @@ async def health_check():
 if __name__ == "__main__":
     import uvicorn
     
-    # 개발 서버 실행 (로그 비활성화)
+    # 개발 서버 실행 (로그 레벨을 info로 변경하여 로그 확인 가능하게 함)
+    print("Starting uvicorn server on http://0.0.0.0:8000")
     uvicorn.run(
         "backend.main:app",
         host="0.0.0.0",
         port=8000,
         reload=True,  # 개발 모드에서만 사용
-        log_level="critical"  # critical 레벨만 출력 (에러만)
+        log_level="info"  # info 레벨로 변경하여 요청/응답 로그 확인
     )

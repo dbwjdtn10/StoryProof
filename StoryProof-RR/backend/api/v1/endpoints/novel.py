@@ -179,6 +179,7 @@ async def update_novel(
     current_user = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    novel = db.query(Novel).filter(Novel.id == novel_id).first()
     if not novel:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -379,21 +380,9 @@ async def update_chapter(
     db: Session = Depends(get_db)
 ):
     """
-    회차 정보 수정
-    
-    Args:
-        novel_id: 소설 ID
-        chapter_id: 회차 ID
-        chapter_update: 수정할 회차 정보
-        current_user: 현재 인증된 사용자
-        db: 데이터베이스 세션
-        
-    Returns:
-        ChapterResponse: 수정된 회차 정보
-        
-    Raises:
-        HTTPException: 회차를 찾을 수 없거나 권한이 없는 경우
+    회차 정보 수정 (저장 버튼 클릭 시 호출)
     """
+    print(f"📥 회차 수정 요청 수신: novel_id={novel_id}, chapter_id={chapter_id}")
     # 1. 소설 조회 (권한 확인용)
     novel = db.query(Novel).filter(Novel.id == novel_id).first()
     if not novel:
@@ -447,6 +436,21 @@ async def update_chapter(
     db.commit()
     db.refresh(chapter)
     
+    # 5. 백그라운드 작업: 수정한 내용으로 스토리보드 및 인덱스 업데이트
+    try:
+        from backend.worker.tasks import process_chapter_storyboard
+        from threading import Thread
+        
+        print(f"🔄 [시스템] 저장된 내용으로 스토리보드 재분석 및 인덱싱 시작 (chapter_id: {chapter_id})")
+        thread = Thread(
+            target=process_chapter_storyboard,
+            args=(novel_id, chapter_id),
+            daemon=False
+        )
+        thread.start()
+    except Exception as e:
+        print(f"⚠️ 백그라운드 작업 시작 실패: {e}")
+
     return chapter
 
 

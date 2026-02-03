@@ -24,9 +24,9 @@ class EmbeddingSearchEngine:
         except ImportError:
             raise ImportError("sentence-transformers, pinecone 필요: pip install sentence-transformers pinecone")
         
-        print("🔄 BAAI/bge-m3 모델 로딩 중...")
+        print("🔄 [시스템] BAAI/bge-m3 임베딩 모델을 메모리에 로드합니다. (이 작업은 처음에만 수행됩니다...)")
         self.model = SentenceTransformer('BAAI/bge-m3')
-        print("✅ 임베딩 모델 로드 완료")
+        print("✅ [시스템] 임베딩 모델 로드 완료. 이제 분석 시 매우 빠르게 처리됩니다.")
         
         # Pinecone 초기화
         self.pc = Pinecone(api_key=settings.PINECONE_API_KEY)

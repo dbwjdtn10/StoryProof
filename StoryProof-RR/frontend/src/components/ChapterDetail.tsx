@@ -94,7 +94,8 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId }: ChapterD
             await updateChapter(novelId, chapterId, { content: finalContent });
             alert("저장되었습니다.");
         } catch (error) {
-            alert("저장에 실패했습니다.");
+            console.error("❌ 저장 실패 상세 오류:", error);
+            alert("저장에 실패했습니다. 터미널 및 브라우저 콘솔 로그를 확인해주세요.");
         } finally {
             setIsSaving(false);
         }
@@ -170,18 +171,67 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId }: ChapterD
     const navigateToAnalyzedText = () => {
         if (!lastAnalyzedText) return;
 
-        // Find which scene contains the text
-        const index = sceneTexts.findIndex(s => s.trim().includes(lastAnalyzedText.trim()) || lastAnalyzedText.trim().includes(s.trim()));
+        const target = lastAnalyzedText.trim();
+        const normalize = (text: string) => text.replace(/[\s\n\t\r.,!?-]/g, '');
+        const normalizedTarget = normalize(target);
+
+        console.log(`🔎 검색어 정규화: "${normalizedTarget}"`);
+
+        // 1. Find which scene contains the text (using fuzzy normalization)
+        let index = sceneTexts.findIndex(s => {
+            const normalizedScene = normalize(s);
+            return normalizedScene.includes(normalizedTarget);
+        });
 
         if (index !== -1) {
-            scrollToScene(index);
-            // Optionally close the modal
+            console.log(`🎯 문제의 문장을 씬 ${index + 1}에서 발견했습니다.`);
+
+            // Scroll to the scene block
+            const element = document.getElementById(`scene-block-${index}`);
+            const textarea = element?.querySelector('textarea') as HTMLTextAreaElement;
+
+            if (element && textarea) {
+                element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+                // Focus and Precise Selection
+                setTimeout(() => {
+                    textarea.focus();
+                    const content = textarea.value;
+
+                    // 원본에서 위치 찾기
+                    let startPos = content.indexOf(target);
+                    let matchLen = target.length;
+
+                    // 매칭 실패 시 부분 매칭 시도
+                    if (startPos === -1 && target.length > 5) {
+                        const startChunk = target.substring(0, 5);
+                        startPos = content.indexOf(startChunk);
+                    }
+
+                    if (startPos !== -1) {
+                        textarea.setSelectionRange(startPos, startPos + matchLen);
+
+                        // 텍스트박스 내부 스크롤 (커서 위치로 이동)
+                        const lineHeight = 24;
+                        const charsPerLine = Math.floor(textarea.clientWidth / 10) || 40;
+                        const lineNumber = Math.floor(startPos / charsPerLine);
+                        textarea.scrollTop = lineNumber * lineHeight - (textarea.clientHeight / 3);
+
+                        // Visual feedback highlight
+                        element.style.transition = 'box-shadow 0.5s';
+                        element.style.boxShadow = '0 0 25px rgba(79, 70, 229, 0.7)';
+                        setTimeout(() => {
+                            element.style.boxShadow = 'none';
+                        }, 3000);
+                    }
+                }, 600);
+            }
             setAnalysisReport(null);
         } else {
-            // If it's a single content editor, it's already there
-            const editorElement = document.querySelector('.novel-text-editor');
-            if (editorElement) {
-                editorElement.scrollIntoView({ behavior: 'smooth' });
+            console.log("❌ 문제의 문장을 찾지 못해 에디터 상단으로 이동합니다.");
+            const container = document.querySelector('.scenes-container') || document.querySelector('.novel-text-editor');
+            if (container) {
+                container.scrollTo({ top: 0, behavior: 'smooth' });
                 setAnalysisReport(null);
             }
         }
