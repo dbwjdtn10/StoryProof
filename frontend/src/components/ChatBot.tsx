@@ -31,11 +31,12 @@ function ChatMessageItem({ msg, onNavigateToScene }: { msg: Message, onNavigateT
     return (
         <div className={`chatbot-message ${msg.role}`} style={{ marginBottom: '1rem', alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start' }}>
             <div style={{
-                background: msg.role === 'user' ? '#007bff' : '#f1f3f5',
-                color: msg.role === 'user' ? 'white' : 'black',
-                padding: '0.75rem',
-                borderRadius: '1rem',
-                maxWidth: '100%'
+                background: msg.role === 'user' ? 'white' : '#f1f3f5',
+                color: 'black',
+                padding: '0.75rem 1rem',
+                borderRadius: '1.5rem',
+                maxWidth: '100%',
+                border: msg.role === 'user' ? '1px solid #333' : 'none'
             }}>
                 <p style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{mainContent}</p>
 
@@ -78,7 +79,7 @@ function ChatMessageItem({ msg, onNavigateToScene }: { msg: Message, onNavigateT
                                 alignItems: 'center',
                                 gap: '4px',
                                 fontSize: '0.75rem',
-                                color: msg.role === 'user' ? 'rgba(255,255,255,0.8)' : '#666',
+                                color: msg.role === 'user' ? '#666' : '#666',
                                 fontWeight: 'bold'
                             }}
                         >
@@ -89,7 +90,7 @@ function ChatMessageItem({ msg, onNavigateToScene }: { msg: Message, onNavigateT
                         {isSourceOpen && (
                             <div style={{
                                 fontSize: '0.75rem',
-                                color: msg.role === 'user' ? 'rgba(255,255,255,0.8)' : '#888',
+                                color: msg.role === 'user' ? '#666' : '#888',
                                 marginTop: '0.5rem',
                                 fontStyle: 'italic',
                                 display: 'flex',
@@ -252,7 +253,11 @@ export function ChatBot() {
                 }}>
                     <div className="chatbot-header" style={{
                         padding: '1rem',
-                        borderBottom: '1px solid #eee',
+                        background: '#f8f9fa',
+                        color: '#212529',
+                        borderTopLeftRadius: '1rem',
+                        borderTopRightRadius: '1rem',
+                        borderBottom: '1px solid #dee2e6',
                         display: 'flex',
                         justifyContent: 'space-between',
                         alignItems: 'center'
@@ -261,7 +266,7 @@ export function ChatBot() {
                             <MessageCircle size={20} />
                             <h3 className="chatbot-title" style={{ margin: 0 }}>AI 어시스턴트</h3>
                         </div>
-                        <button className="chatbot-close" onClick={() => setIsOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+                        <button className="chatbot-close" onClick={() => setIsOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#212529' }}>
                             <X size={20} />
                         </button>
                     </div>

@@ -152,6 +152,18 @@ class GeminiStructurer:
             
             data = json.loads(json_text)
             
+            # 타입 체크: 리스트가 반환된 경우 처리
+            if isinstance(data, list):
+                print(f"⚠️ 씬 {scene_index}: API가 리스트를 반환했습니다. 첫 번째 항목 사용")
+                if len(data) > 0 and isinstance(data[0], dict):
+                    data = data[0]
+                else:
+                    raise ValueError("유효하지 않은 응답 형식")
+            
+            # 딕셔너리가 아닌 경우 에러
+            if not isinstance(data, dict):
+                raise ValueError(f"예상치 못한 응답 타입: {type(data)}")
+            
             return StructuredScene(
                 scene_index=scene_index,
                 original_text=scene_text,
@@ -178,6 +190,142 @@ class GeminiStructurer:
                 mood="",
                 time_period=None
             )
+    
+    def _extract_global_entities_batched(
+        self,
+        scenes_summary: List[Dict],
+        full_scenes_data: List[Dict],
+        custom_system_prompt: Optional[str],
+        batch_size: int
+    ) -> Dict:
+        """씬을 배치로 나누어 전역 엔티티 추출 후 병합"""
+        
+        num_batches = (len(scenes_summary) + batch_size - 1) // batch_size
+        print(f"📊 총 {num_batches}개 배치로 처리합니다.")
+        
+        # 각 배치별 결과 저장
+        all_characters = {}  # name을 키로 사용
+        all_items = {}
+        all_locations = {}
+        all_key_events = []
+        
+        for batch_idx in range(num_batches):
+            start_idx = batch_idx * batch_size
+            end_idx = min((batch_idx + 1) * batch_size, len(scenes_summary))
+            batch_scenes = scenes_summary[start_idx:end_idx]
+            
+            print(f"  배치 {batch_idx + 1}/{num_batches}: 씬 {start_idx}~{end_idx-1} 분석 중...")
+            
+            # 배치 분석
+            batch_info = {"scenes": batch_scenes}
+            
+            if custom_system_prompt:
+                prompt = f"""{custom_system_prompt}
+
+다음은 소설의 씬 분석 데이터입니다. 이 데이터를 바탕으로 위 프롬프트의 지시사항을 수행하여 JSON 형식으로 응답하세요:
+
+{json.dumps(batch_info, ensure_ascii=False, indent=2)}
+"""
+            else:
+                prompt = f"""{self.system_prompt}
+
+다음은 여러 씬의 분석 결과입니다. 전체 스토리에서 등장하는 주요 엔티티들을 통합하여 정리하세요:
+
+{json.dumps(batch_info, ensure_ascii=False, indent=2)}
+
+다음 형식의 JSON으로 응답하세요:
+
+{{
+  "characters": [
+    {{
+      "name": "인물 이름",
+      "aliases": ["별칭1", "별칭2"],
+      "description": "인물 설명",
+      "first_appearance": 첫_등장_씬_번호,
+      "traits": ["특징1", "특징2"]
+    }}
+  ],
+  "items": [
+    {{
+      "name": "아이템 이름",
+      "description": "설명",
+      "first_appearance": 첫_등장_씬_번호,
+      "significance": "스토리상 의미"
+    }}
+  ],
+  "locations": [
+    {{
+      "name": "장소 이름",
+      "description": "장소 설명",
+      "scenes": [등장한_씬_번호들]
+    }}
+  ],
+  "key_events": [
+    {{
+      "summary": "핵심 사건 내용",
+      "scene_index": 씬_번호,
+      "importance": "상/중/하"
+    }}
+  ]
+}}
+"""
+            
+            try:
+                response = self._generate_with_retry(prompt)
+                json_text = response.text.strip()
+                
+                if json_text.startswith("```"):
+                    json_text = re.sub(r'^```json?\s*|\s*```$', '', json_text, flags=re.MULTILINE)
+                
+                try:
+                    batch_result = json.loads(json_text)
+                except json.JSONDecodeError as json_err:
+                    print(f"    ⚠️ 배치 {batch_idx + 1} JSON 파싱 실패, 부분 복구 시도...")
+                    last_brace = json_text.rfind('}')
+                    if last_brace > 0:
+                        truncated_json = json_text[:last_brace + 1]
+                        batch_result = json.loads(truncated_json)
+                        print("    ✓ 부분 복구 성공")
+                    else:
+                        print("    ✗ 복구 실패, 배치 건너뜀")
+                        continue
+                
+                # 결과 병합
+                for char in batch_result.get('characters', []):
+                    name = char.get('name')
+                    if name and name not in all_characters:
+                        all_characters[name] = char
+                
+                for item in batch_result.get('items', []):
+                    name = item.get('name')
+                    if name and name not in all_items:
+                        all_items[name] = item
+                
+                for loc in batch_result.get('locations', []):
+                    name = loc.get('name')
+                    if name and name not in all_locations:
+                        all_locations[name] = loc
+                
+                all_key_events.extend(batch_result.get('key_events', []))
+                
+                print(f"    ✓ 배치 {batch_idx + 1} 완료")
+                
+            except Exception as e:
+                print(f"    ⚠️ 배치 {batch_idx + 1} 처리 실패: {e}")
+                continue
+        
+        # 최종 결과 구성
+        result = {
+            "characters": list(all_characters.values()),
+            "items": list(all_items.values()),
+            "locations": list(all_locations.values()),
+            "key_events": all_key_events,
+            "scenes": full_scenes_data
+        }
+        
+        print(f"✅ 배치 처리 완료: {len(result['characters'])}명, {len(result['items'])}개 아이템, {len(result['locations'])}개 장소")
+        
+        return result
             
     def extract_global_entities(
         self,
@@ -197,7 +345,19 @@ class GeminiStructurer:
             if 'original_text' in scene_data:
                 del scene_data['original_text']  # 프롬프트용에서는 제거
             scenes_summary.append(scene_data)
-            
+        
+        # [수정] 씬이 너무 많으면 배치 처리 (50개씩)
+        BATCH_SIZE = 50
+        if len(scenes_summary) > BATCH_SIZE:
+            print(f"📦 씬이 {len(scenes_summary)}개로 많습니다. {BATCH_SIZE}개씩 배치 처리합니다.")
+            return self._extract_global_entities_batched(
+                scenes_summary, 
+                full_scenes_data, 
+                custom_system_prompt,
+                BATCH_SIZE
+            )
+        
+        # 50개 이하면 기존 방식대로 한 번에 처리
         all_info = {
             "scenes": scenes_summary
         }
@@ -263,7 +423,25 @@ class GeminiStructurer:
             if json_text.startswith("```"):
                 json_text = re.sub(r'^```json?\s*|\s*```$', '', json_text, flags=re.MULTILINE)
             
-            result = json.loads(json_text)
+            try:
+                result = json.loads(json_text)
+            except json.JSONDecodeError as json_err:
+                print(f"⚠️ JSON 파싱 실패: {json_err}")
+                print(f"   응답 길이: {len(json_text)} 문자")
+                
+                # 부분 JSON 복구 시도
+                try:
+                    # 마지막 완전한 객체까지만 파싱 시도
+                    last_brace = json_text.rfind('}')
+                    if last_brace > 0:
+                        truncated_json = json_text[:last_brace + 1]
+                        result = json.loads(truncated_json)
+                        print("✓ 부분 JSON 복구 성공")
+                    else:
+                        raise json_err
+                except:
+                    print("✗ JSON 복구 실패, 빈 결과 반환")
+                    return {"scenes": full_scenes_data}
             
             # [수정] 씬 텍스트 정보를 결과에 포함
             result['scenes'] = full_scenes_data
@@ -324,4 +502,6 @@ class GeminiStructurer:
         
         except Exception as e:
             print(f"⚠️ 전역 엔티티 추출 실패: {e}")
+            import traceback
+            traceback.print_exc()
             return {"scenes": full_scenes_data}

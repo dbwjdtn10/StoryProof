@@ -72,7 +72,10 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId }: ChapterD
             const bible = await getChapterBible(novelId, chapterId);
             setBibleData(bible);
             if (bible.scenes && bible.scenes.length > 0) {
-                setSceneTexts(bible.scenes.map(s => s.original_text.trim()));
+                // 과도한 줄바꿈 제거: 연속된 2개 이상의 줄바꿈을 1개로 축소
+                setSceneTexts(bible.scenes.map(s =>
+                    s.original_text.trim().replace(/\n{2,}/g, '\n')
+                ));
             }
         } catch (error) {
             // 바이블 데이터가 없어도 계속 진행
@@ -465,14 +468,15 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId }: ChapterD
                                                 padding: '20px',
                                                 paddingTop: '25px',
                                                 fontSize: '1.1rem',
-                                                lineHeight: '1.6',
+                                                lineHeight: '1.4',
                                                 outline: 'none',
                                                 backgroundColor: 'white',
                                                 color: 'inherit',
                                                 fontFamily: 'inherit',
                                                 borderRadius: '8px',
                                                 boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-                                                overflow: 'hidden'
+                                                overflow: 'hidden',
+                                                whiteSpace: 'pre-wrap'
                                             }}
                                             spellCheck={false}
                                         />
@@ -491,11 +495,12 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId }: ChapterD
                                     resize: 'none',
                                     padding: '40px',
                                     fontSize: '1.1rem',
-                                    lineHeight: '1.6',
+                                    lineHeight: '1.4',
                                     outline: 'none',
                                     backgroundColor: 'transparent',
                                     color: 'inherit',
-                                    fontFamily: 'inherit'
+                                    fontFamily: 'inherit',
+                                    whiteSpace: 'pre-wrap'
                                 }}
                                 spellCheck={false}
                             />

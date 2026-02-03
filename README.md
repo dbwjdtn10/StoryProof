@@ -212,7 +212,26 @@ pip install -r requirements.txt
 # (sentence-transformers가 큰 모델을 다운로드하기 때문)
 ```
 
-### 5.3 데이터베이스 마이그레이션
+### 5.3 데이터베이스 초기화
+
+데이터베이스 테이블을 생성하는 방법은 두 가지가 있습니다.
+
+#### 방법 A: 초기화 스크립트 사용 (권장)
+
+```bash
+# 데이터베이스 상태 확인
+python scripts/check_db.py
+
+# 데이터베이스 초기화 (테이블 생성)
+python scripts/init_db.py
+
+# Alembic 마이그레이션 히스토리 설정
+alembic stamp head
+
+# ✅ "데이터베이스 초기화 완료!" 메시지가 보이면 성공
+```
+
+#### 방법 B: Alembic 마이그레이션 사용
 
 ```bash
 # 데이터베이스에 필요한 테이블 생성
@@ -220,6 +239,20 @@ alembic upgrade head
 
 # ✅ "Running upgrade ... -> ..., done" 메시지가 보이면 성공
 ```
+
+#### 🔄 데이터베이스 완전 리셋 (문제 발생 시)
+
+```bash
+# ⚠️ 주의: 모든 데이터가 삭제됩니다!
+python scripts/init_db.py --reset
+
+# Alembic 마이그레이션 히스토리 재설정
+alembic stamp head
+
+# 상태 확인
+python scripts/check_db.py
+```
+
 
 ### 5.4 백엔드 서버 실행
 
@@ -276,24 +309,80 @@ npm run dev
 
 ### 🔴 `alembic upgrade head` 실패
 
-**증상**: `sqlalchemy.exc.OperationalError` 또는 연결 오류
+**증상**: `sqlalchemy.exc.OperationalError`, `ProgrammingError`, 또는 연결 오류
 
-**해결 방법**:
-1. PostgreSQL이 실행 중인지 확인
+**원인 1: PostgreSQL이 실행되지 않음**
+
+```bash
+# Docker 사용 시
+docker ps
+# postgres 컨테이너가 보이지 않으면:
+docker-compose up -d
+
+# 로컬 설치 시
+# Windows: 작업 관리자 → 서비스 → postgresql 확인
+# Mac: brew services list
+```
+
+**원인 2: DATABASE_URL이 잘못됨**
+
+1. `.env` 파일 확인
+   - 사용자명, 비밀번호, 포트, 데이터베이스명이 정확한지 확인
+   - 특수문자는 URL 인코딩 필요 (! → %21, @ → %40, # → %23, $ → %24)
+
+2. 데이터베이스 연결 테스트
    ```bash
-   # Docker 사용 시
-   docker ps
-   
-   # 로컬 설치 시
-   # Windows: 작업 관리자 → 서비스 → postgresql 확인
-   # Mac: brew services list
+   python scripts/check_db.py
    ```
 
-2. `.env` 파일의 `DATABASE_URL` 확인
-   - 사용자명, 비밀번호, 포트, 데이터베이스명이 정확한지 확인
-   - 특수문자는 URL 인코딩 필요
+**원인 3: 데이터베이스가 생성되지 않음**
 
-3. `StoryProof` 데이터베이스가 생성되어 있는지 확인
+```bash
+# PostgreSQL에 접속하여 데이터베이스 생성
+# Docker 사용 시:
+docker exec -it storyproof-postgres psql -U postgres
+CREATE DATABASE "StoryProof";
+\q
+
+# 또는 pgAdmin 사용
+```
+
+**원인 4: 스키마 불일치 (테이블 형식이 다름)**
+
+```bash
+# 데이터베이스 완전 리셋
+python scripts/init_db.py --reset
+
+# Alembic 히스토리 재설정
+alembic stamp head
+
+# 상태 확인
+python scripts/check_db.py
+```
+
+---
+
+### 🔴 데이터베이스 스키마 오류
+
+**증상**: `column "..." does not exist`, `relation "..." does not exist`
+
+**해결 방법**:
+
+```bash
+# 1. 현재 데이터베이스 상태 확인
+python scripts/check_db.py
+
+# 2. 문제가 있으면 데이터베이스 리셋
+python scripts/init_db.py --reset
+
+# 3. Alembic 히스토리 설정
+alembic stamp head
+
+# 4. 백엔드 서버 재시작
+uvicorn backend.main:app --reload
+```
+
+**주의**: `--reset` 옵션은 모든 데이터를 삭제하므로 프로덕션 환경에서는 사용하지 마세요!
 
 ---
 
@@ -381,6 +470,31 @@ alembic revision --autogenerate -m "변경 내용 설명"
 # 3. 마이그레이션 적용
 alembic upgrade head
 ```
+
+### 데이터베이스 관리 명령어
+```bash
+# 데이터베이스 상태 확인
+python scripts/check_db.py
+
+# 데이터베이스 초기화 (테이블 생성)
+python scripts/init_db.py
+
+# 데이터베이스 완전 리셋 (⚠️ 모든 데이터 삭제)
+python scripts/init_db.py --reset
+
+# 테스트 데이터 포함 초기화
+python scripts/init_db.py --with-seed-data
+
+# 마이그레이션 히스토리 확인
+alembic history
+
+# 현재 마이그레이션 버전 확인
+alembic current
+
+# 특정 버전으로 다운그레이드
+alembic downgrade <revision_id>
+```
+
 
 ### 새로운 Python 패키지 추가
 ```bash
