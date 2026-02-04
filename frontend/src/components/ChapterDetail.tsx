@@ -2,7 +2,11 @@ import { ArrowLeft, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Users, Pa
 import { useState, useEffect } from 'react';
 import { FloatingMenu } from './FloatingMenu';
 import { ThemeToggle } from './ThemeToggle';
+<<<<<<< HEAD
+import { getChapter, updateChapter, getChapterBible, reanalyzeChapter, BibleData } from '../api/novel';
+=======
 import { getChapter, updateChapter, getChapterBible, BibleData } from '../api/novel';
+>>>>>>> 4858bfa79e3b722e4335a5b4f2052ebda1a0ee9e
 
 interface ChapterDetailProps {
     fileName: string;
@@ -21,6 +25,11 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId }: ChapterD
     const [content, setContent] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
+<<<<<<< HEAD
+    const [isReanalyzing, setIsReanalyzing] = useState(false);
+    const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+=======
+>>>>>>> 4858bfa79e3b722e4335a5b4f2052ebda1a0ee9e
     const [initialLoadDone, setInitialLoadDone] = useState(false);
 
     const [bibleData, setBibleData] = useState<BibleData | null>(null);
@@ -71,11 +80,33 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId }: ChapterD
         try {
             const bible = await getChapterBible(novelId, chapterId);
             setBibleData(bible);
+<<<<<<< HEAD
+
+            // 씬 데이터가 있으면 sceneTexts 설정 (씬별 편집 UI)
+            // 단, 저장된 content와 씬 데이터가 동기화되어 있을 때만
+            if (bible.scenes && bible.scenes.length > 0) {
+                // 씬 텍스트를 합친 것과 현재 content를 비교
+                const scenesJoined = bible.scenes.map(s => s.original_text.trim()).join("\n\n");
+                const contentTrimmed = content.trim();
+
+                // 길이가 비슷하면 동기화된 것으로 간주 (±5% 허용)
+                const lengthDiff = Math.abs(scenesJoined.length - contentTrimmed.length);
+                const isSynced = lengthDiff < contentTrimmed.length * 0.05;
+
+                if (isSynced) {
+                    // 동기화되어 있으면 씬 UI 사용
+                    setSceneTexts(bible.scenes.map(s => s.original_text.trim()));
+                } else {
+                    // 동기화 안 되어 있으면 content 사용 (재분석 필요)
+                    console.log("⚠️ 씬 데이터와 저장된 content가 동기화되지 않음. 재분석을 권장합니다.");
+                }
+=======
             if (bible.scenes && bible.scenes.length > 0) {
                 // 과도한 줄바꿈 제거: 연속된 2개 이상의 줄바꿈을 1개로 축소
                 setSceneTexts(bible.scenes.map(s =>
                     s.original_text.trim().replace(/\n{2,}/g, '\n')
                 ));
+>>>>>>> 4858bfa79e3b722e4335a5b4f2052ebda1a0ee9e
             }
         } catch (error) {
             // 바이블 데이터가 없어도 계속 진행
@@ -92,7 +123,15 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId }: ChapterD
                 ? sceneTexts.map(s => s.trim()).join("\n\n")
                 : content;
             await updateChapter(novelId, chapterId, { content: finalContent });
+<<<<<<< HEAD
+
+            // 저장 성공 후 content 상태 업데이트
+            setContent(finalContent);
+            setHasUnsavedChanges(false);
+            alert("저장되었습니다. 참고: 수정된 내용을 씬 분석에 반영하려면 '재분석' 버튼을 눌러주세요.");
+=======
             alert("저장되었습니다.");
+>>>>>>> 4858bfa79e3b722e4335a5b4f2052ebda1a0ee9e
         } catch (error) {
             alert("저장에 실패했습니다.");
         } finally {
@@ -100,6 +139,31 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId }: ChapterD
         }
     };
 
+<<<<<<< HEAD
+    const handleReanalyze = async () => {
+        if (!novelId || !chapterId) return;
+        if (hasUnsavedChanges) {
+            const confirmed = window.confirm('저장하지 않은 변경사항이 있습니다. 저장 후 재분석할까요?');
+            if (confirmed) {
+                await handleSave();
+            } else {
+                return;
+            }
+        }
+        setIsReanalyzing(true);
+        try {
+            await reanalyzeChapter(novelId, chapterId);
+            alert('재분석이 시작되었습니다. 잠시 후 페이지를 새로고침하세요.');
+        } catch (error) {
+            console.error('재분석 실패:', error);
+            alert('재분석 요청에 실패했습니다.');
+        } finally {
+            setIsReanalyzing(false);
+        }
+    };
+
+=======
+>>>>>>> 4858bfa79e3b722e4335a5b4f2052ebda1a0ee9e
     const [selectedCharacter, setSelectedCharacter] = useState<any | null>(null);
     const [selectedItem, setSelectedItem] = useState<any | null>(null);
     const [selectedKeyEvent, setSelectedKeyEvent] = useState<any | null>(null);
@@ -110,6 +174,12 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId }: ChapterD
     const [isItemAppearancesExpanded, setIsItemAppearancesExpanded] = useState(false);
     const [isLocationAppearancesExpanded, setIsLocationAppearancesExpanded] = useState(false);
 
+<<<<<<< HEAD
+    // 🆕 하이라이팅 상태
+    const [highlightedSentence, setHighlightedSentence] = useState<{ sceneIndex: number; sentenceIndex: number } | null>(null);
+
+=======
+>>>>>>> 4858bfa79e3b722e4335a5b4f2052ebda1a0ee9e
     const scrollToScene = (index: number) => {
         // Close all modals first
         setSelectedCharacter(null);
@@ -141,6 +211,34 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId }: ChapterD
         element.style.height = `${element.scrollHeight}px`;
     };
 
+<<<<<<< HEAD
+    // 🆕 문장 단위 하이라이팅 함수
+    const highlightCharacterMention = (sceneIndex: number, sentenceIndex: number | undefined) => {
+        if (sentenceIndex === undefined || sentenceIndex === null) {
+            // 문장 번호가 없으면 그냥 씬으로 스크롤
+            scrollToScene(sceneIndex);
+            return;
+        }
+
+        // 하이라이트 활성화
+        setHighlightedSentence({ sceneIndex, sentenceIndex });
+
+        // 5초 후 자동 제거
+        setTimeout(() => {
+            setHighlightedSentence(null);
+        }, 5000);
+
+        // 해당 씬으로 스크롤
+        setTimeout(() => {
+            const element = document.getElementById(`scene-block-${sceneIndex}`);
+            if (element) {
+                element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }, 100);
+    };
+
+=======
+>>>>>>> 4858bfa79e3b722e4335a5b4f2052ebda1a0ee9e
     // ... (rest of the setup)
 
     // 바이블 데이터 또는 기본 샘플 데이터
@@ -189,6 +287,50 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId }: ChapterD
                     <h1 className="chapter-detail-title">{fileName}</h1>
                 </div>
                 {novelId && chapterId && (
+<<<<<<< HEAD
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                        <button
+                            className="save-button"
+                            onClick={handleSave}
+                            disabled={isSaving || !hasUnsavedChanges}
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                padding: '8px 16px',
+                                backgroundColor: hasUnsavedChanges ? '#4F46E5' : '#9CA3AF',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '6px',
+                                cursor: isSaving || !hasUnsavedChanges ? 'not-allowed' : 'pointer',
+                                opacity: hasUnsavedChanges ? 1 : 0.6
+                            }}
+                        >
+                            <Save size={18} />
+                            {isSaving ? '저장 중...' : '저장'}
+                        </button>
+
+                        <button
+                            className="reanalyze-button"
+                            onClick={handleReanalyze}
+                            disabled={isReanalyzing}
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                padding: '8px 16px',
+                                backgroundColor: '#10B981',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '6px',
+                                cursor: isReanalyzing ? 'wait' : 'pointer'
+                            }}
+                        >
+                            🔄
+                            {isReanalyzing ? '재분석 중...' : '재분석'}
+                        </button>
+                    </div>
+=======
                     <button
                         className="save-button"
                         onClick={handleSave}
@@ -208,6 +350,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId }: ChapterD
                         <Save size={18} />
                         {isSaving ? '저장 중...' : '저장'}
                     </button>
+>>>>>>> 4858bfa79e3b722e4335a5b4f2052ebda1a0ee9e
                 )}
             </div>
 
@@ -430,8 +573,13 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId }: ChapterD
                                     <div
                                         key={index}
                                         id={`scene-block-${index}`}
+<<<<<<< HEAD
+                                        className={`scene-block ${highlightedSentence?.sceneIndex === index ? 'scene-highlighted' : ''}`}
+                                        style={{ marginBottom: '30px', position: 'relative', transition: 'all 0.3s ease' }}
+=======
                                         className="scene-block"
                                         style={{ marginBottom: '30px', position: 'relative' }}
+>>>>>>> 4858bfa79e3b722e4335a5b4f2052ebda1a0ee9e
                                     >
                                         <div style={{
                                             position: 'absolute',
@@ -458,6 +606,10 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId }: ChapterD
                                                 const newScenes = [...sceneTexts];
                                                 newScenes[index] = e.target.value;
                                                 setSceneTexts(newScenes);
+<<<<<<< HEAD
+                                                setHasUnsavedChanges(true);
+=======
+>>>>>>> 4858bfa79e3b722e4335a5b4f2052ebda1a0ee9e
                                             }}
                                             style={{
                                                 width: '100%',
@@ -468,15 +620,23 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId }: ChapterD
                                                 padding: '20px',
                                                 paddingTop: '25px',
                                                 fontSize: '1.1rem',
+<<<<<<< HEAD
+                                                lineHeight: '1.6',
+=======
                                                 lineHeight: '1.4',
+>>>>>>> 4858bfa79e3b722e4335a5b4f2052ebda1a0ee9e
                                                 outline: 'none',
                                                 backgroundColor: 'white',
                                                 color: 'inherit',
                                                 fontFamily: 'inherit',
                                                 borderRadius: '8px',
                                                 boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+<<<<<<< HEAD
+                                                overflow: 'hidden'
+=======
                                                 overflow: 'hidden',
                                                 whiteSpace: 'pre-wrap'
+>>>>>>> 4858bfa79e3b722e4335a5b4f2052ebda1a0ee9e
                                             }}
                                             spellCheck={false}
                                         />
@@ -487,7 +647,14 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId }: ChapterD
                             <textarea
                                 className="novel-text-editor"
                                 value={content}
+<<<<<<< HEAD
+                                onChange={(e) => {
+                                    setContent(e.target.value);
+                                    setHasUnsavedChanges(true);
+                                }}
+=======
                                 onChange={(e) => setContent(e.target.value)}
+>>>>>>> 4858bfa79e3b722e4335a5b4f2052ebda1a0ee9e
                                 style={{
                                     width: '100%',
                                     height: '100%',
@@ -495,12 +662,20 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId }: ChapterD
                                     resize: 'none',
                                     padding: '40px',
                                     fontSize: '1.1rem',
+<<<<<<< HEAD
+                                    lineHeight: '1.6',
+                                    outline: 'none',
+                                    backgroundColor: 'transparent',
+                                    color: 'inherit',
+                                    fontFamily: 'inherit'
+=======
                                     lineHeight: '1.4',
                                     outline: 'none',
                                     backgroundColor: 'transparent',
                                     color: 'inherit',
                                     fontFamily: 'inherit',
                                     whiteSpace: 'pre-wrap'
+>>>>>>> 4858bfa79e3b722e4335a5b4f2052ebda1a0ee9e
                                 }}
                                 spellCheck={false}
                             />
@@ -600,7 +775,14 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId }: ChapterD
                             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                                 <strong>첫 등장:</strong>
                                 <button
+<<<<<<< HEAD
+                                    onClick={() => {
+                                        const firstMention = (selectedCharacter as any).first_mention_sentence;
+                                        highlightCharacterMention(selectedCharacter.first_appearance, firstMention);
+                                    }}
+=======
                                     onClick={() => scrollToScene(selectedCharacter.first_appearance)}
+>>>>>>> 4858bfa79e3b722e4335a5b4f2052ebda1a0ee9e
                                     style={{
                                         background: 'none',
                                         border: 'none',
@@ -654,7 +836,18 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId }: ChapterD
                                         {selectedCharacter.appearances.map((sceneIdx: number) => (
                                             <button
                                                 key={sceneIdx}
+<<<<<<< HEAD
+                                                onClick={() => {
+                                                    const firstMention = (selectedCharacter as any).first_mention_sentence;
+                                                    // 해당 씬이 첫 등장 씬인 경우에만 문장 번호 전달
+                                                    highlightCharacterMention(
+                                                        sceneIdx,
+                                                        sceneIdx === selectedCharacter.first_appearance ? firstMention : undefined
+                                                    );
+                                                }}
+=======
                                                 onClick={() => scrollToScene(sceneIdx)}
+>>>>>>> 4858bfa79e3b722e4335a5b4f2052ebda1a0ee9e
                                                 style={{
                                                     background: '#f1f5f9',
                                                     border: 'none',

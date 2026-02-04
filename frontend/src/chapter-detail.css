@@ -260,7 +260,12 @@
 .section-header {
     width: 100%;
     padding: 1rem 1.5rem;
+<<<<<<< HEAD
+    background: #ffffff;
+    /* 라이트 모드: 헤더 흰색 */
+=======
     background: transparent;
+>>>>>>> 4858bfa79e3b722e4335a5b4f2052ebda1a0ee9e
     border: none;
     display: flex;
     align-items: center;
@@ -271,7 +276,12 @@
 }
 
 .section-header:hover {
+<<<<<<< HEAD
+    background: #f3f4f6;
+    /* 라이트 모드: 헤더 호버 시 약간 더 진한 회색 */
+=======
     background: #f9fafb;
+>>>>>>> 4858bfa79e3b722e4335a5b4f2052ebda1a0ee9e
 }
 
 .section-header-content {
@@ -288,6 +298,11 @@
 
 .section-content {
     padding: 0 1.5rem 1rem 1.5rem;
+<<<<<<< HEAD
+    background: #f3f4f6;
+    /* 라이트 모드: 내용물 옅은 회색 */
+=======
+>>>>>>> 4858bfa79e3b722e4335a5b4f2052ebda1a0ee9e
     animation: slideDown 0.3s ease;
 }
 
@@ -305,7 +320,12 @@
 
 .section-item {
     padding: 0.75rem 0;
+<<<<<<< HEAD
+    border-bottom: 1px solid #e5e7eb;
+    /* 라이트 모드: 아이템 구분선 */
+=======
     border-bottom: 1px solid #f3f4f6;
+>>>>>>> 4858bfa79e3b722e4335a5b4f2052ebda1a0ee9e
 }
 
 .section-item:last-child {
@@ -331,15 +351,35 @@
 }
 
 [data-theme="dark"] .section-header {
+<<<<<<< HEAD
+    background: #000000;
+    /* 다크 모드: 헤더 검은색 */
+=======
+>>>>>>> 4858bfa79e3b722e4335a5b4f2052ebda1a0ee9e
     color: #ffffff;
 }
 
 [data-theme="dark"] .section-header:hover {
+<<<<<<< HEAD
+    background: #1a1a1a;
+    /* 다크 모드: 헤더 호버 시 약간 밝게 */
+}
+
+[data-theme="dark"] .section-content {
+    background: #374151;
+    /* 다크 모드: 내용물 진한 회색 */
+}
+
+[data-theme="dark"] .section-item {
+    border-bottom-color: #4b5563;
+    /* 다크 모드: 아이템 구분선 */
+=======
     background: #333333;
 }
 
 [data-theme="dark"] .section-item {
     border-bottom-color: #444444;
+>>>>>>> 4858bfa79e3b722e4335a5b4f2052ebda1a0ee9e
 }
 
 [data-theme="dark"] .item-name {
@@ -348,4 +388,53 @@
 
 [data-theme="dark"] .item-description {
     color: #999999;
+<<<<<<< HEAD
+}
+
+/* 🆕 Scene Highlighting Animation */
+.scene-highlighted {
+    animation: scene-highlight-fade 5s ease-out;
+    background-color: rgba(253, 224, 71, 0.15) !important;
+    border-radius: 8px;
+}
+
+@keyframes scene-highlight-fade {
+    0% {
+        background-color: rgba(253, 224, 71, 0.3);
+        box-shadow: 0 0 20px rgba(253, 224, 71, 0.5);
+    }
+
+    80% {
+        background-color: rgba(253, 224, 71, 0.15);
+        box-shadow: 0 0 10px rgba(253, 224, 71, 0.3);
+    }
+
+    100% {
+        background-color: transparent;
+        box-shadow: none;
+    }
+}
+
+/* Dark Mode */
+[data-theme="dark"] .scene-highlighted {
+    animation: scene-highlight-fade-dark 5s ease-out;
+}
+
+@keyframes scene-highlight-fade-dark {
+    0% {
+        background-color: rgba(253, 224, 71, 0.25);
+        box-shadow: 0 0 20px rgba(253, 224, 71, 0.4);
+    }
+
+    80% {
+        background-color: rgba(253, 224, 71, 0.12);
+        box-shadow: 0 0 10px rgba(253, 224, 71, 0.25);
+    }
+
+    100% {
+        background-color: transparent;
+        box-shadow: none;
+    }
+=======
+>>>>>>> 4858bfa79e3b722e4335a5b4f2052ebda1a0ee9e
 }

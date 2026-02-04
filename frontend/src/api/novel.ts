@@ -222,4 +222,19 @@ export const getChapterBible = async (novelId: number, chapterId: number): Promi
     } catch (error) {
         throw error;
     }
+<<<<<<< HEAD
+};
+
+export const reanalyzeChapter = async (novelId: number, chapterId: number): Promise<{ message: string; chapter_id: number; novel_id: number }> => {
+    try {
+        const result = await request<{ message: string; chapter_id: number; novel_id: number }>(`/novels/${novelId}/chapters/${chapterId}/reanalyze`, {
+            method: 'POST',
+            headers: getHeaders(),
+        });
+        return result;
+    } catch (error) {
+        throw error;
+    }
+=======
+>>>>>>> 4858bfa79e3b722e4335a5b4f2052ebda1a0ee9e
 };
