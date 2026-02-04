@@ -422,6 +422,12 @@ async def update_chapter(
         )
         
     # 4. 회차 정보 업데이트
+    print(f"📝 update_chapter called: novel_id={novel_id}, chapter_id={chapter_id}")
+    print(f"   - Received title: {chapter_update.title}")
+    print(f"   - Received content length: {len(chapter_update.content) if chapter_update.content else 'None'}")
+    print(f"   - Current DB content length: {len(chapter.content) if chapter.content else 'None'}")
+    
+
     if chapter_update.title is not None:
         chapter.title = chapter_update.title
         
@@ -429,6 +435,8 @@ async def update_chapter(
         chapter.content = chapter_update.content
         # 단어 수 재계산
         chapter.word_count = len(chapter_update.content.split())
+        print(f"   ✅ Updated chapter.content to {len(chapter.content)} chars")
+
         
     if chapter_update.chapter_number is not None:
         # 회차 번호 중복 확인 (다른 회차와 겹치는지)
@@ -446,6 +454,8 @@ async def update_chapter(
     
     db.commit()
     db.refresh(chapter)
+    print(f"   ✅ Committed! DB content length after commit: {len(chapter.content) if chapter.content else 'None'}")
+
     
     return chapter
 
@@ -501,6 +511,115 @@ async def delete_chapter(
     # 4. 회차 삭제
     db.delete(chapter)
     db.commit()
+
+
+# ===== 챕터 재분석 =====
+
+
+@router.post("/{novel_id}/chapters/{chapter_id}/reanalyze")
+async def reanalyze_chapter(
+    novel_id: int,
+    chapter_id: int,
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    챕터 재분석 트리거
+    
+    Args:
+        novel_id: 소설 ID
+        chapter_id: 회차 ID
+        current_user: 현재 인증된 사용자
+        db: 데이터베이스 세션
+        
+    Returns:
+        dict: 재분석 시작 메시지
+    """
+    # 1. 소설 조회 (권한 확인용)
+    novel = db.query(Novel).filter(Novel.id == novel_id).first()
+    if not novel:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="소설을 찾을 수 없습니다."
+        )
+        
+    # 2. 권한 확인
+    if novel.author_id != current_user.id and not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="권한이 없습니다."
+        )
+
+    # 3. 회차 조회
+    chapter = db.query(Chapter).filter(
+        Chapter.id == chapter_id,
+        Chapter.novel_id == novel_id
+    ).first()
+    
+    if not chapter:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="회차를 찾을 수 없습니다."
+        )
+    
+    # 4. 기존 분석 결과 삭제
+    from backend.db.models import Analysis, VectorDocument
+    
+    # VectorDocument에서 vector_id 목록 수집 (Pinecone 삭제용)
+    vector_docs = db.query(VectorDocument).filter(
+        VectorDocument.chapter_id == chapter_id
+    ).all()
+    vector_ids_to_delete = [doc.vector_id for doc in vector_docs if doc.vector_id]
+    
+    # Analysis 삭제
+    db.query(Analysis).filter(
+        Analysis.chapter_id == chapter_id
+    ).delete()
+    
+    # VectorDocument 삭제
+    db.query(VectorDocument).filter(
+        VectorDocument.chapter_id == chapter_id
+    ).delete()
+    
+    db.commit()
+    
+    # Pinecone에서도 벡터 삭제
+    if vector_ids_to_delete:
+        try:
+            from backend.services.analysis import EmbeddingSearchEngine
+            search_engine = EmbeddingSearchEngine()
+            # Pinecone index에서 벡터 삭제
+            if hasattr(search_engine, 'index') and search_engine.index:
+                search_engine.index.delete(ids=vector_ids_to_delete)
+                print(f"🗑️ Deleted {len(vector_ids_to_delete)} vectors from Pinecone")
+        except Exception as e:
+            print(f"⚠️ Pinecone 벡터 삭제 실패 (무시됨): {e}")
+    
+    # 5. 챕터 상태 초기화
+    chapter.storyboard_status = "PENDING"
+    chapter.storyboard_progress = 0
+    chapter.storyboard_message = "재분석 대기 중..."
+    chapter.storyboard_error = None
+    db.commit()
+    
+    print(f"🔄 Reanalyze triggered for novel_id={novel_id}, chapter_id={chapter_id}")
+    
+    # 6. 백그라운드 작업 시작
+    try:
+        import asyncio
+        from backend.worker.tasks import process_chapter_storyboard
+        
+        asyncio.create_task(
+            asyncio.to_thread(process_chapter_storyboard, novel_id, chapter_id)
+        )
+    except Exception as e:
+        print(f"⚠️ 백그라운드 작업 시작 실패: {e}")
+    
+    return {
+        "message": "재분석이 시작되었습니다",
+        "novel_id": novel_id,
+        "chapter_id": chapter_id
+    }
 
 
 # ===== 파일 업로드로 회차 생성 =====
@@ -596,20 +715,19 @@ async def upload_chapter_file(
         db.refresh(new_chapter)
         
         # 백그라운드 작업: 스토리보드 처리
-        # 별도 스레드에서 비동기 실행하여 API 응답이 빠르게 나가도록 함
+        # asyncio를 사용하여 비동기적으로 실행
         try:
+            import asyncio
             from backend.worker.tasks import process_chapter_storyboard
-            from threading import Thread
             
-            # 스토리보드 처리를 별도 스레드에서 실행 (메인 스레드 차단 안 함)
-            thread = Thread(
-                target=process_chapter_storyboard,
-                args=(novel_id, new_chapter.id),
-                daemon=False
+            # 동기 함수를 별도 스레드에서 실행하되, asyncio.to_thread 사용
+            asyncio.create_task(
+                asyncio.to_thread(process_chapter_storyboard, novel_id, new_chapter.id)
             )
-            thread.start()
         except Exception as e:
-            pass
+            # 백그라운드 작업 시작 실패 시 로깅하고 계속 진행
+            print(f"⚠️ 백그라운드 작업 시작 실패 (무시됨): {e}")
+
         
         return new_chapter
     except Exception as e:
@@ -872,3 +990,4 @@ async def get_chapter_bible(
     ]
     
     return bible_data
+

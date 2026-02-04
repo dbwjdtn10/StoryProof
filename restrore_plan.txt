@@ -1,0 +1,432 @@
+================================================================================
+                    StoryProof - 프로젝트 통합 문서
+================================================================================
+
+작성일: 2026-02-03
+최종 업데이트: 2026-02-03 15:57
+
+
+================================================================================
+[ 목차 ]
+================================================================================
+
+I.   프로젝트 개요 및 아키텍처
+II.  현재 구현 상태
+III. 진행 중인 기능
+IV.  향후 계획 (보류 포함)
+V.   개선이 필요한 UI/기능
+VI.  기술 부채 및 개선사항
+
+
+================================================================================
+I. 프로젝트 개요 및 아키텍처
+================================================================================
+
+[핵심 목적]
+소설 텍스트를 자동으로 분석하여 등장인물, 사건, 장소 등을 구조화하고,
+RAG(Retrieval-Augmented Generation) 기반 챗봇으로 질의응답 제공
+
+[기술 스택]
+
+Backend:
+- FastAPI (Python 3.10+)
+- PostgreSQL 15+ (메타데이터)
+- Pinecone (벡터 DB)
+- Google Gemini 2.5 Flash (LLM)
+- BAAI/bge-m3 (임베딩 모델, 1024차원)
+- SQLAlchemy + Alembic
+
+Frontend:
+- React 18 + TypeScript
+- Vite 6.3.5
+- Radix UI
+- Tailwind CSS (추정)
+- Axios
+
+Infrastructure:
+- Docker (PostgreSQL)
+- Background Tasks: asyncio.to_thread (현재)
+
+[주요 데이터 흐름]
+
+1. 파일 업로드
+   → 인코딩 자동 감지 (UTF-8/CP949/EUC-KR)
+   → Chapter 레코드 생성 (status=PENDING)
+
+2. 백그라운드 분석
+   → DocumentLoader: 파일 로드
+   → SceneChunker: 씬 분할 (동적 임계값)
+   → GeminiStructurer: LLM 구조화 (인물/장소/사건)
+   → EmbeddingEngine: 벡터 생성 및 Pinecone 업로드
+   → Analysis 테이블 저장
+
+3. RAG 챗봇
+   → 질문 임베딩
+   → Pinecone 검색 (코사인 유사도)
+   → 상위 5개 씬 컨텍스트 구성
+   → Gemini API 답변 생성
+   → ChatHistory 저장
+
+
+================================================================================
+II. 현재 구현 상태 ✅
+================================================================================
+
+[1] UI 개선
+───────────────────────────────────────
+✅ 드롭다운 카테고리 색상 구분
+   - 라이트: 헤더(흰색) / 내용물(옅은 회색)
+   - 다크: 헤더(검은색) / 내용물(진한 회색)
+   파일: frontend/src/chapter-detail.css
+
+✅ 다크모드 본문 개선
+   - 본문 textarea: 배경(#1a1a1a), 텍스트(#e2e8f0)
+   파일: frontend/src/theme.css
+
+[2] 핵심 기능
+───────────────────────────────────────
+✅ 캐릭터 위치 하이라이팅 (5초 휘발성)
+   - 사이드바 캐릭터 클릭 → 씬으로 스크롤
+   - 노란색 배경 애니메이션 (5초 후 자동 제거)
+   파일: frontend/src/components/ChapterDetail.tsx
+         backend/services/analysis/gemini_structurer.py
+
+   💡 백엔드 변경사항:
+   - Character 데이터클래스에 `first_mention_sentence` 필드 추가
+   - Gemini 프롬프트에 문장 번호 추출 로직 추가
+
+✅ 저장/재분석 버튼 분리
+   - 저장: 미저장 변경사항만 저장 (벡터 유지)
+   - 재분석: 기존 벡터 삭제 → 새로 분석
+   - 미저장 변경사항 경고 로직 포함
+   파일: frontend/src/components/ChapterDetail.tsx
+         backend/api/v1/endpoints/novel.py
+
+   API: POST /novels/{id}/chapters/{ch_id}/reanalyze
+
+[3] RAG 챗봇
+───────────────────────────────────────
+✅ 소설 기반 질의응답
+   - Hybrid Retrieval (의미 검색 + Novel Filter)
+   - 유사도 임계값 0.5 (50% 미만 제외)
+   - Top-K 5개 씬 컨텍스트
+   파일: backend/services/chatbot_service.py
+
+
+================================================================================
+III. 진행 중인 기능 🚧
+================================================================================
+
+[1] 캐릭터 관계도 시각화 (계획 완료, 구현 대기)
+───────────────────────────────────────────────
+상태: ✅ 최종 계획 수립 완료 → 구현 시작 가능
+
+핵심 전략:
+- Phase 1 (MVP): 체크박스 선택 → 스냅샷 네트워크
+- 그래프 라이브러리: Cytoscape.js
+- 비용 최적화: 공동 등장 빈도 → 상위 N개만 LLM 분석
+
+2단 관계 라벨 체계 (7개 상위 카테고리):
+1. 친밀/우호 (파랑) - 친구, 동료, 신뢰, 보호자
+2. 로맨스/애정 (빨강) - 연인, 짝사랑, 배신한 연인
+3. 가족/혈연 (초록) - 부모-자식, 형제, 혼인
+4. 권력/지배 (보라) - 상사-부하, 스승-제자
+5. 갈등/적대 (검정) - 경쟁자, 원수, 복수, 살의
+6. 거래/이해 (주황) - 동업, 계약, 동맹
+7. 모호/미정 (회색) - 관계 불명
+
+UX 플로우:
+1. 인물 헤더 [관계도] 버튼 클릭
+2. [보기] 버튼 생성 (비활성) + 체크박스 표시
+3. 2개 이상 선택 → [보기] 활성화 (파란색)
+4. [보기] 클릭 → 관계도 그래프 표시
+
+시각화 규칙:
+- 선 굵기: 관계 강도 (공동 등장 빈도)
+- 선 색상: 관계 유형 (7가지 카테고리)
+- 선 스타일: 실선(확실) / 점선(추정)
+
+API:
+POST /novels/{novel_id}/chapters/{chapter_id}/relationships
+Request: { "character_names": ["홍길동", "임꺽정"] }
+Response: { "nodes": [...], "edges": [...] }
+
+예상 소요 시간: 8-10시간
+상세 문서: relationship_settings.txt
+          relationship_visualization_plan.md
+
+Phase 2 (추후):
+- 구간 스냅샷 (시작/중간/끝 3탭)
+- 타임라인 리본형 (관계 변화 시각화)
+- 이벤트 마커 (살해/배신/키스 등)
+
+
+================================================================================
+IV. 향후 계획 (보류 포함) 📋
+================================================================================
+
+[보류] 백그라운드 작업 (Celery 도입)
+───────────────────────────────────────
+상태: ⏸️ 보류 (복잡도 높음)
+이유: "샐러리하면 일이 복잡해져" (사용자 피드백)
+
+현재 방식 유지:
+- asyncio.to_thread 사용
+- 단점: 페이지 이동 시 작업 중단 가능
+- 장점: 설정 간단, 추가 의존성 없음
+
+[보류] 설정 파괴 분석기
+───────────────────────
+상태: ⏸️ 보류 (다른 팀원 작업 중)
+
+[계획] 캐릭터 챗봇 - 대화방 시스템
+──────────────────────────────────
+상태: 📝 기획 완료, 구현 대기
+
+기능 요구사항:
+- FloatingMenu에 "캐릭터 챗봇" 버튼 추가
+- 대화방 목록 + 새 대화방 추가 (+버튼)
+- 캐릭터 이름 입력 → AI 페르소나 생성 → 대화 시작
+- 카카오톡 스타일 대화 기록 저장
+
+백엔드:
+- CharacterChatRoom 모델
+- CharacterChatMessage 모델
+- POST /character-chat/generate-persona
+- POST /character-chat/rooms
+- GET /character-chat/rooms
+- POST /character-chat/rooms/{id}/chat
+
+프론트엔드:
+- CharacterChatRoomList 컴포넌트
+- CreateCharacterChatModal 컴포넌트
+- CharacterChatInterface 컴포넌트
+
+페르소나 생성 로직:
+- Analysis에서 캐릭터 정보 가져오기
+- Gemini로 페르소나 프롬프트 생성
+- 1인칭 시점, 캐릭터 말투 유지
+
+
+================================================================================
+V. 개선이 필요한 UI/기능 💡
+================================================================================
+
+[현재 restrored.txt 원본 요구사항 상태]
+
+1. ✅ 인물/장소/아이템/사건 - 연한 회색 색상 구분
+   → 구현 완료 (chapter-detail.css)
+
+2. ✅ 다크모드 본문 배경/텍스트 개선
+   → 구현 완료 (theme.css)
+
+3. ⏸️ 백그라운드 작업 (Celery)
+   → 보류 (복잡도 높음)
+
+4. ✅ 씬 별 캐릭터 위치 추적
+   → 구현 완료 (5초 휘발성 하이라이팅)
+
+5. ✅ 저장/재분석 버튼 분리
+   → 구현 완료
+
+6. ⏸️ 설정 파괴 분석기
+   → 보류 (팀원 작업 중)
+
+7. 📝 캐릭터 챗봇
+   → 기획 완료, 구현 대기
+
+8. 🚧 관계도 시각화
+   → 최종 계획 완료, 구현 시작 가능
+
+
+================================================================================
+VI. 기술 부채 및 개선사항 ⚠️
+================================================================================
+
+[🔴 Critical (즉시 수정 필요)]
+
+1. 인증 보안 강화
+   - JWT Secret Key 기본값 → 강력한 랜덤 키 생성
+   - Refresh Token 로직 미구현
+   - HTTPS 미적용 (프로덕션 시 필요)
+
+2. 에러 핸들링 개선
+   - 백그라운드 작업 실패 시 복구 메커니즘 없음
+   - Gemini API 실패 시 부분적 처리만
+   - 사용자에게 에러 상세 노출 위험
+   권장: Sentry/Rollbar 연동, 구조화된 로깅
+
+3. Database 연결 풀 관리
+   - SessionLocal() 직접 호출로 연결 누수 위험
+   - context manager 패턴 사용 권장
+
+[🟡 Important (단기 개선)]
+
+4. ⏸️ Celery 도입 (보류 중)
+   - 현재: asyncio.to_thread (작업 손실 가능성)
+   - 장점: 재시도 정책, 우선순위, 분산 처리
+   - 대안:  FastAPI BackgroundTasks (임시)
+
+5. Redis 캐싱 전략
+   - 동일 질문 매번 Pinecone 검색
+   - Gemini API 비용 증가
+   권장: Redis 캐시 (1시간 TTL)
+
+6. API Rate Limiting
+   - 무제한 API 호출 가능 (DDoS 취약)
+   권장: SlowAPI 도입 (분당 10회 제한)
+
+[🟢 Nice to Have (중장기)]
+
+7. 벡터 검색 고도화
+   - Hybrid Search (BM25 + Semantic)
+   - Elasticsearch + Pinecone 결합
+
+8. LangChain 통합
+   - Conversation Memory
+   - Agent 기반 작업 분할
+
+9. 관계도 캐싱
+   - 관계 분석 결과 PostgreSQL 저장
+   - 필요 시 Redis 캐시
+
+
+================================================================================
+VII. 프로젝트 구조 요약
+================================================================================
+
+[디렉토리 구조]
+
+StoryProof/
+├── backend/
+│   ├── api/v1/endpoints/       # API 엔드포인트
+│   │   ├── auth.py            # 인증
+│   │   ├── novel.py           # 소설/챕터 CRUD + 재분석
+│   │   ├── chat.py            # RAG 챗봇
+│   │   └── analysis.py        # 분석 조회
+│   │
+│   ├── services/
+│   │   ├── analysis/          # 분석 모듈
+│   │   │   ├── document_loader.py
+│   │   │   ├── scene_chunker.py
+│   │   │   ├── gemini_structurer.py
+│   │   │   └── embedding_engine.py
+│   │   ├── chatbot_service.py
+│   │   └── relationship_analyzer.py  (예정)
+│   │
+│   ├── db/
+│   │   ├── models.py          # SQLAlchemy 모델
+│   │   └── session.py         # DB 세션
+│   │
+│   ├── worker/
+│   │   └── tasks.py           # 백그라운드 작업
+│   │
+│   └── main.py
+
+├── frontend/
+│   └── src/
+│       ├── components/
+│       │   ├── ChapterDetail.tsx     # 챕터 상세 (메인 페이지)
+│       │   ├── ChapterBible.tsx      # 사이드바 (인물/장소 등)
+│       │   ├── FloatingMenu.tsx      # 우측 하단 메뉴
+│       │   └── (예정) RelationshipGraph.tsx
+│       │
+│       ├── api/
+│       │   └── novel.ts
+│       │
+│       └── styles/
+│           ├── chapter-detail.css
+│           └── theme.css
+
+[주요 모델]
+
+User: 사용자 정보
+Novel: 소설 정보 (title, genre, custom_prompt)
+Chapter: 회차 (content, storyboard_status, progress)
+Analysis: 분석 결과 (JSONB)
+VectorDocument: 씬 벡터 (Pinecone 연동)
+ChatHistory: 대화 기록
+
+
+================================================================================
+VIII. 개발 예정 순서 (우선순위)
+================================================================================
+
+1. ✅ UI 색상 구분 (완료)
+2. ✅ 다크모드 개선 (완료)
+3. ✅ 캐릭터 하이라이팅 (완료)
+4. ✅ 저장/재분석 분리 (완료)
+5. 🚧 관계도 시각화 (계획 완료 → 구현 시작 가능)
+6. 📝 캐릭터 챗봇 대화방 (기획 완료 → 구현 대기)
+7. ⏸️ Celery 도입 (복잡도로 인해 보류)
+8. ⏸️ 설정 파괴 분석기 (팀원 작업 중)
+
+
+================================================================================
+IX. 실행 가이드
+================================================================================
+
+[환경 설정]
+
+1. 환경 변수 (.env):
+   - DATABASE_URL
+   - GOOGLE_API_KEY (Gemini)
+   - PINECONE_API_KEY
+   - PINECONE_ENVIRONMENT
+   - JWT_SECRET_KEY (보안 강화 필요!)
+
+2. PostgreSQL 시작:
+   docker-compose up -d
+
+3. DB 마이그레이션:
+   alembic upgrade head
+
+[실행]
+
+Backend:
+cd c:\KDT_AI\STORY_PROOF\StoryProof-main
+python -m uvicorn backend.main:app --reload
+
+Frontend:
+cd c:\KDT_AI\STORY_PROOF\StoryProof-main\frontend
+npm install
+npm run dev
+
+
+================================================================================
+X. 참고 문서
+================================================================================
+
+1. project_architecture_analysis.md
+   - 전체 아키텍처 상세 분석
+   - 데이터 흐름 다이어그램
+   - 주요 컴포넌트 설명
+
+2. refactoring_roadmap.md
+   - 리팩토링 계획
+   - 기능별 구현 방안
+   - 코드 예시 포함
+
+3. ui_improvements_walkthrough.md
+   - UI 개선 완료 내역
+   - 색상 구분 및 다크모드
+
+4. character_highlight_implementation_plan.md
+   - 캐릭터 하이라이팅 구현 계획
+   - 저장/재분석 분리 방안
+
+5. feature_implementation_walkthrough.md
+   - 구현 완료 기능 정리
+   - 테스트 방법
+
+6. relationship_settings.txt
+   - 관계도 시각화 설정 요약 (간결)
+
+7. relationship_visualization_plan.md
+   - 관계도 시각화 상세 계획
+   - 코드 예시 및 구현 가이드
+
+
+================================================================================
+끝.
+================================================================================
