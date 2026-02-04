@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 import traceback
 
-from backend.api.v1.endpoints import auth, novel, chat
+from backend.api.v1.endpoints import auth, novel, chat, character_chat
 from backend.core.config import settings
 from backend.db.session import engine, init_db
 
@@ -71,6 +71,7 @@ def register_routers() -> None:
     app.include_router(novel.router, prefix="/api/v1/novels", tags=["Novel"])
     # app.include_router(analysis.router, prefix="/api/v1/analysis", tags=["분석"])
     app.include_router(chat.router, prefix="/api/v1/chat", tags=["Chat"])
+    app.include_router(character_chat.router, prefix="/api/v1/character-chat", tags=["Character Chat"])
     print("✓ Routers registered")
 
 

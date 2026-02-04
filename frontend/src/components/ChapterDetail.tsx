@@ -1074,8 +1074,8 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId }: ChapterD
             {/* Theme Toggle */}
             <ThemeToggle />
 
-            {/* Floating Menu - Settings, Analysis, Chatbot */}
-            <FloatingMenu onNavigateToScene={scrollToScene} />
+            {/* Floating Menu - Settings, Analysis, Chatbot, Character chat */}
+            <FloatingMenu onNavigateToScene={scrollToScene} novelId={novelId} /> {/*HJE*/}
         </div>
     );
 }

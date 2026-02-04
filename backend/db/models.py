@@ -62,7 +62,9 @@ class User(Base):
     # 관계
     novels = relationship("Novel", back_populates="author", cascade="all, delete-orphan")
     chat_histories = relationship("ChatHistory", back_populates="user", cascade="all, delete-orphan")
-    
+ #HJE
+    character_chat_rooms = relationship("CharacterChatRoom", back_populates="user", cascade="all, delete-orphan") # Added relationship
+ #HJE   
     def __repr__(self):
         return f"<User(id={self.id}, email={self.email}, username={self.username})>"
 
@@ -93,7 +95,9 @@ class Novel(Base):
     author = relationship("User", back_populates="novels")
     chapters = relationship("Chapter", back_populates="novel", cascade="all, delete-orphan")
     analyses = relationship("Analysis", back_populates="novel", cascade="all, delete-orphan")
-    
+#HJE 
+    character_chat_rooms = relationship("CharacterChatRoom", back_populates="novel", cascade="all, delete-orphan") # Added relationship
+#HJE    
     def __repr__(self):
         return f"<Novel(id={self.id}, title={self.title}, author_id={self.author_id})>"
 
@@ -205,3 +209,46 @@ class VectorDocument(Base):
     
     def __repr__(self):
         return f"<VectorDocument(id={self.id}, vector_id={self.vector_id})>"
+
+#HJE
+class CharacterChatRoom(Base):
+    """캐릭터 챗봇 대화방"""
+    __tablename__ = "character_chat_rooms"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    novel_id = Column(Integer, ForeignKey("novels.id"), nullable=False)
+    
+    character_name = Column(String(255), nullable=False)
+    persona_prompt = Column(Text, nullable=False)  # Gemini가 생성한 페르소나 시스템 프롬프트
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # 관계
+    user = relationship("User", back_populates="character_chat_rooms")
+    novel = relationship("Novel", back_populates="character_chat_rooms")
+    messages = relationship("CharacterChatMessage", back_populates="room", cascade="all, delete-orphan")
+
+    def __repr__(self):
+        return f"<CharacterChatRoom(id={self.id}, character={self.character_name})>"
+
+
+class CharacterChatMessage(Base):
+    """캐릭터 챗봇 메시지"""
+    __tablename__ = "character_chat_messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    room_id = Column(Integer, ForeignKey("character_chat_rooms.id"), nullable=False)
+    
+    role = Column(String(50), nullable=False)  # 'user' or 'assistant'
+    content = Column(Text, nullable=False)
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # 관계
+    room = relationship("CharacterChatRoom", back_populates="messages")
+
+    def __repr__(self):
+        return f"<CharacterChatMessage(id={self.id}, role={self.role})>"
+#HJE
