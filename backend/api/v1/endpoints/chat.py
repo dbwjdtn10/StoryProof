@@ -69,6 +69,8 @@ async def ask_question(
         question=request.question,
         alpha=request.alpha,
         similarity_threshold=request.similarity_threshold,
+        novel_id=request.novel_id,
+        chapter_id=request.chapter_id,
         novel_filter=request.novel_filter
     )
     

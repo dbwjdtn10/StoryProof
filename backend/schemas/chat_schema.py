@@ -75,7 +75,9 @@ class ChatFeedback(BaseModel):
 class ChatQuestionRequest(BaseModel):
     """챗봇 질문 요청 스키마"""
     question: str = Field(..., min_length=1, description="사용자 질문")
-    novel_filter: Optional[str] = Field(None, description="특정 소설로 필터링 (파일명)")
+    novel_id: Optional[int] = Field(None, description="소설 ID (우선 순위)")
+    chapter_id: Optional[int] = Field(None, description="회차 ID (정밀 필터링)")
+    novel_filter: Optional[str] = Field(None, description="특정 소설로 필터링 (파일명, 레거시)")
     alpha: float = Field(0.297, ge=0.0, le=1.0, description="유사도 가중치")
     similarity_threshold: float = Field(0.5, ge=0.0, le=1.0, description="유사도 임계값")
 

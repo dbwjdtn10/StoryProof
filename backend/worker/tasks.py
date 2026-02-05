@@ -19,6 +19,10 @@ from backend.services.analysis import (
     StructuredScene
 )
 
+from datetime import datetime
+
+from .celery_app import celery_app
+
 
 def update_chapter_progress(chapter_id: int, progress: int, status: str = None, message: str = None, error: str = None):
     """
@@ -45,12 +49,16 @@ def update_chapter_progress(chapter_id: int, progress: int, status: str = None, 
                 chapter.storyboard_error = error
             
             db.commit()
+            # print(f"[DB Update] Chapter {chapter_id}: {progress}% - {status} ({message})")
+        else:
+            print(f"⚠️ [DB Update Fail] Chapter {chapter_id} not found")
         
         db.close()
     except Exception as e:
         pass
 
 
+@celery_app.task
 def process_chapter_storyboard(novel_id: int, chapter_id: int):
     """
     회차를 스토리보드화하여 Pinecone에 저장하는 백그라운드 작업
@@ -69,8 +77,9 @@ def process_chapter_storyboard(novel_id: int, chapter_id: int):
         novel = db.query(Novel).filter(Novel.id == novel_id).first()
         
         if not chapter or not novel:
-            error_msg = f"회차를 찾을 수 없습니다: {novel_id}/{chapter_id}"
-            update_chapter_progress(chapter_id, 0, "FAILED", message="오류 발생", error=error_msg)
+            error_msg = f"회차를 찾을 수 없습니다: {novel_id}/{chapter_id} (이미 삭제되었을 수 있습니다.)"
+            print(f"⚠️ {error_msg}")
+            # 이미 삭제된 경우 상태 업데이트가 무의미하므로 즉시 종료
             return
         
         update_chapter_progress(chapter_id, 5, "PROCESSING", f"{chapter.title} 로드 완료")
@@ -93,14 +102,19 @@ def process_chapter_storyboard(novel_id: int, chapter_id: int):
         text = loader.load_txt(temp_file_path)
         update_chapter_progress(chapter_id, 15, "PROCESSING", "텍스트 로드 완료")
         
-        # 씬 분할
-        chunker = SceneChunker(threshold=8)
-        scenes = chunker.split_into_scenes(text)
-        update_chapter_progress(chapter_id, 25, "PROCESSING", f"{len(scenes)}개 씬 분할 완료")
-        
-        # 씬 구조화 (병렬 처리로 속도 향상)
-        from concurrent.futures import ThreadPoolExecutor, as_completed
+        # 1. Gemini 초기화 (씬 분할 및 구조화에 사용)
         structurer = GeminiStructurer(gemini_api_key)
+        
+        # 2. 씬 분할 (LLM Anchor-based Approach)
+        # LLM이 전체 텍스트를 읽고 '시작 문장'들을 찾아서 자름
+        update_chapter_progress(chapter_id, 20, "PROCESSING", "LLM으로 전체 소설 구조 분석 중...")
+        
+        scenes = structurer.split_scenes(text)
+        
+        update_chapter_progress(chapter_id, 30, "PROCESSING", f"{len(scenes)}개 씬 분할 완료")
+        
+        # 3. 씬 구조화 (병렬 처리로 속도 향상)
+        from concurrent.futures import ThreadPoolExecutor, as_completed
         structured_scenes = [None] * len(scenes)
         failed_scenes = []
         
@@ -133,7 +147,7 @@ def process_chapter_storyboard(novel_id: int, chapter_id: int):
         
         search_engine = EmbeddingSearchEngine()
         documents = [asdict(scene) for scene in structured_scenes]
-        search_engine.add_documents(documents, novel_id)
+        search_engine.add_documents(documents, novel_id, chapter_id)
         update_chapter_progress(chapter_id, 90, "PROCESSING", "저장 완료")
         
         # 5. 전역 엔티티 분석 (캐릭터 특성 등 추출)
@@ -175,7 +189,8 @@ def process_chapter_storyboard(novel_id: int, chapter_id: int):
         os.unlink(temp_file_path)
         
         # 6. 처리 완료
-        from datetime import datetime
+        # 6. 처리 완료
+        # from datetime import datetime (Removed: use top-level import)
         chapter.storyboard_status = "COMPLETED"
         chapter.storyboard_progress = 100
         chapter.storyboard_message = "처리 완료"

@@ -10,7 +10,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 import traceback
-
 from backend.api.v1.endpoints import auth, novel, chat
 from backend.core.config import settings
 from backend.db.session import engine, init_db
