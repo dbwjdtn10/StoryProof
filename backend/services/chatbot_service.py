@@ -38,7 +38,7 @@ class ChatbotService:
     
     # 기본 설정값 (클래스 상수)
     DEFAULT_ALPHA = 0.297  # 레거시 파라미터 (Pinecone에서는 미사용)
-    DEFAULT_SIMILARITY_THRESHOLD = 0.5  # 유사도 0.5 미만은 필터링
+    DEFAULT_SIMILARITY_THRESHOLD = 0.35  # 유사도 임계값 완화 (0.5 -> 0.35)
 
     def __init__(self):
         """
@@ -78,50 +78,19 @@ class ChatbotService:
         top_k: int = 5,
         alpha: float = DEFAULT_ALPHA,
         similarity_threshold: float = DEFAULT_SIMILARITY_THRESHOLD,
+        novel_id: Optional[int] = None,
+        chapter_id: Optional[int] = None,
         novel_filter: Optional[str] = None
     ) -> List[Dict]:
         """
         질문과 가장 유사한 씬(청크)을 Pinecone에서 검색합니다.
-        
-        동작 과정:
-        1. 질문을 BGE-M3 모델로 임베딩 벡터로 변환
-        2. Pinecone에서 코사인 유사도 기반 검색
-        3. novel_filter가 있으면 특정 소설로 필터링
-        4. similarity_threshold 이상인 결과만 반환
-        
-        Args:
-            question (str): 사용자 질문 (예: "주인공의 이름은?")
-            top_k (int): 반환할 최대 결과 개수 (기본값: 5)
-            alpha (float): 레거시 파라미터, 현재 미사용 (호환성 유지용)
-            similarity_threshold (float): 최소 유사도 (0.0~1.0, 기본값: 0.5)
-            novel_filter (Optional[str]): 소설 제목 또는 파일명으로 필터링
-                                         (예: "alice", "KR_fantasy_alice")
-            
-        Returns:
-            List[Dict]: 유사한 씬 목록, 각 딕셔너리는 다음 키를 포함:
-                - text (str): 씬의 원본 텍스트
-                - filename (str): 소설 제목 또는 요약
-                - similarity (float): 유사도 점수 (0.0~1.0)
-                - scene_index (int): 씬 번호
-                - summary (str): 씬 요약
-                
-        Example:
-            >>> service = ChatbotService()
-            >>> results = service.find_similar_chunks(
-            ...     question="앨리스는 어디로 떨어졌나요?",
-            ...     top_k=3,
-            ...     novel_filter="alice"
-            ... )
-            >>> print(f"찾은 씬 개수: {len(results)}")
         """
         # 검색 엔진이 초기화되지 않은 경우 빈 리스트 반환
         if not self.engine:
             return []
             
-        # Step 1: novel_filter로 소설 ID 조회
-        # 특정 소설 내에서만 검색하고 싶을 때 사용
-        novel_id = None
-        if novel_filter:
+        # Step 1: novel_filter로 소설 ID 조회 (novel_id가 직접 전달되지 않은 경우만)
+        if novel_id is None and novel_filter:
             db = SessionLocal()
             try:
                 # 파일명에서 확장자 제거 (예: "alice.txt" → "alice")
@@ -131,35 +100,41 @@ class ChatbotService:
                 novel = db.query(Novel).filter(Novel.title.ilike(f"%{search_term}%")).first()
                 if novel:
                     novel_id = novel.id
+                    print(f"🔎 Chatbot: Resolved novel_filter '{novel_filter}' to ID {novel_id} ({novel.title})")
+                else:
+                    print(f"⚠️ Chatbot: novel_filter '{novel_filter}' not found in DB")
             finally:
                 db.close()
+        elif novel_id:
+            print(f"🔎 Chatbot: Using direct novel_id {novel_id}")
         
         # Step 2: Pinecone 벡터 검색 실행
-        # EmbeddingSearchEngine.search()는 다음을 수행:
-        # 1. 질문을 BGE-M3로 임베딩 변환
-        # 2. Pinecone에서 유사 벡터 검색
-        # 3. PostgreSQL에서 메타데이터 조회
         try:
-            results = self.engine.search(query=question, novel_id=novel_id, top_k=top_k)
+            results = self.engine.search(query=question, novel_id=novel_id, chapter_id=chapter_id, top_k=top_k)
+            print(f"🔍 Chatbot: Found {len(results)} results (Novel: {novel_id}, Chapter Context: {chapter_id})")
             
             # Step 3: 결과 포맷 변환 및 필터링
             formatted_results = []
             for res in results:
                 similarity = res['similarity']
+                doc = res['document']
+                scene_idx = doc.get('scene_index', '?')
                 
                 # 유사도가 임계값 미만이면 제외
                 if similarity < similarity_threshold:
+                    print(f"  - [DROP] Scene {scene_idx}: similarity {similarity:.4f} < {similarity_threshold}")
                     continue
+                
+                print(f"  - [KEEP] Scene {scene_idx}: similarity {similarity:.4f}")
                     
-                doc = res['document']
                 formatted_results.append({
                     'text': doc.get('original_text', ''),
-                    'filename': doc.get('summary', 'Unknown'), # summary를 filename 대신 사용하거나 메타데이터에서 찾음
-                    'similarity': similarity,
-                    'original_similarity': similarity,
-                    # 추가 메타데이터
                     'scene_index': doc.get('scene_index'),
-                    'summary': doc.get('summary')
+                    'chapter_id': res.get('chapter_id'),
+                    'summary': doc.get('summary'),
+                    'novel_id': novel_id,
+                    'similarity': similarity,
+                    'original_similarity': similarity
                 })
             
             return formatted_results
@@ -228,42 +203,91 @@ class ChatbotService:
         # Gemini API 호출
         try:
             response = self.client.models.generate_content(
-                model=settings.GEMINI_MODEL,  # 예: "gemini-2.5-flash"
+                model=settings.GEMINI_CHAT_MODEL,  # 예: "gemini-2.5-flash"
                 contents=prompt
             )
             return response.text
         except Exception as e:
             return f"답변 생성 중 오류가 발생했습니다: {str(e)}"
     
+    def augment_query(self, question: str) -> str:
+        """
+        사용자 질문을 검색에 최적화된 형태로 확장합니다.
+        Gemini를 사용하여 관련 키워드, 동의어, 구체적인 표현을 추가합니다.
+        """
+        if not self.client:
+            return question
+
+        prompt = f"""Role: 전문 검색 증강 어시스턴트
+Task: 사용자의 질문을 분석하여, 소설 내용 검색에 도움이 될 '검색 키워드'와 '확장 쿼리'를 제안하세요.
+Goal: 사용자가 모호하게 질문하더라도, 정확한 씬을 찾을 수 있도록 구체적인 단어들을 덧붙여주세요.
+
+User Question: "{question}"
+
+Rules:
+1. Return ONLY the augmented search query string. No explanations.
+2. Include original entities (names, places) exactly.
+3. Add synonyms or related context keywords.
+4. Format: "Original Question keyword1 keyword2 related_context"
+
+Example:
+Q: "앨리스가 떨어진 곳"
+A: "앨리스가 떨어진 곳 토끼 굴 낙하 이상한 나라 깊은 구멍"
+
+Output:"""
+        try:
+            response = self.client.models.generate_content(
+                model=settings.GEMINI_CHAT_MODEL,
+                contents=prompt
+            )
+            augmented = response.text.strip()
+            print(f"🧬 Query Augmented: '{question}' -> '{augmented}'")
+            return augmented
+        except Exception as e:
+            print(f"⚠️ Query Augmentation Failed: {e}")
+            return question
+
     def ask(
         self,
         question: str,
         alpha: float = DEFAULT_ALPHA,
         similarity_threshold: float = DEFAULT_SIMILARITY_THRESHOLD,
+        novel_id: Optional[int] = None,
+        chapter_id: Optional[int] = None,
         novel_filter: Optional[str] = None
     ) -> Dict:
         """
         질문에 대한 답변 생성 (전체 파이프라인)
-        
-        Args:
-            question: 사용자 질문
-            alpha: 가중치
-            similarity_threshold: 유사도 임계값
-            novel_filter: 소설 필터
-            
-        Returns:
-            Dict: 답변 및 메타데이터
         """
-        # 1. 유사한 상위 청크 찾기 (Top 5)
+        # 1. 1차 검색 (원본 쿼리)
         top_chunks = self.find_similar_chunks(
             question=question,
             top_k=5,
             alpha=alpha,
             similarity_threshold=similarity_threshold,
+            novel_id=novel_id,
+            chapter_id=chapter_id,
             novel_filter=novel_filter
         )
         
-        # 2. 유사한 스토리보드가 없는 경우
+        # 2. 결과가 없으면 2차 검색 (쿼리 확장)
+        if not top_chunks:
+            print("🕵️ 1차 검색 실패. 쿼리 확장을 시도합니다...")
+            augmented_query = self.augment_query(question)
+            
+            # 확장이 실제로 일어났을 때만 재검색
+            if augmented_query != question:
+                top_chunks = self.find_similar_chunks(
+                    question=augmented_query,
+                    top_k=5,
+                    alpha=alpha,
+                    similarity_threshold=similarity_threshold, # 동일 임계값 사용 (또는 약간 낮출 수 있음)
+                    novel_id=novel_id,
+                    chapter_id=chapter_id,
+                    novel_filter=novel_filter
+                )
+
+        # 3. 여전히 유사한 스토리보드가 없는 경우
         if not top_chunks:
             error_msg = "죄송합니다. 관련 내용을 찾을 수 없습니다."
             if not self.engine:
@@ -276,7 +300,7 @@ class ChatbotService:
                 "found_context": False
             }
         
-        # 3. 컨텍스트 생성 (상위 청크 텍스트 결합)
+        # 4. 컨텍스트 생성 (상위 청크 텍스트 결합)
         context_texts = []
         for i, chunk in enumerate(top_chunks):
             # 씬 번호나 요약이 있으면 포함
@@ -290,20 +314,33 @@ class ChatbotService:
         
         context = "\n\n".join(context_texts)
         
-        # 가장 높은 유사도 정보
-        best_chunk = top_chunks[0]
-        
         # 4. LLM으로 답변 생성
         answer = self.generate_answer(question, context)
         
+        # 가장 높은 유사도 정보
+        best_chunk = top_chunks[0]
+        
+        # novel title 가져오기
+        novel_title = "Unknown Novel"
+        if best_chunk.get('novel_id'):
+            db = SessionLocal()
+            try:
+                novel = db.query(Novel).filter(Novel.id == best_chunk['novel_id']).first()
+                if novel:
+                    novel_title = novel.title
+            finally:
+                db.close()
+
         return {
             "answer": answer,
             "source": {
-                "filename": best_chunk.get('filename') or f"Scene {best_chunk.get('scene_index')}",
+                "filename": novel_title,
+                "chapter_id": best_chunk.get('chapter_id'),
                 "scene_index": best_chunk.get('scene_index'),
+                "summary": best_chunk.get('summary'),
                 "total_scenes": len(top_chunks)
             },
-            "similarity": best_chunk['similarity'],
+            "similarity": best_chunk.get('similarity', 0.0), # similarity might be missing in some cases if not careful
             "found_context": True
         }
 

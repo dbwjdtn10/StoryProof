@@ -57,7 +57,8 @@ class Settings(BaseSettings):
     
     # ===== Google Gemini 설정 =====
     GOOGLE_API_KEY: Optional[str] = None
-    GEMINI_MODEL: str = "gemini-2.5-flash"
+    GEMINI_STRUCTURING_MODEL: str = "gemini-2.5-flash"  # 앵커 찾기 등 구조화용
+    GEMINI_CHAT_MODEL: str = "gemini-2.5-flash"  # 챗봇용
     
     # ===== LangChain 설정 =====
     LANGCHAIN_API_KEY: Optional[str] = None
@@ -70,7 +71,15 @@ class Settings(BaseSettings):
     # ===== Pinecone 설정 =====
     PINECONE_API_KEY: Optional[str] = None
     PINECONE_ENV: str = "your-pinecone-environment"
-    PINECONE_INDEX_NAME: str = "storyproof-index"
+    PINECONE_INDEX_NAME: str = "story-child-index-384" # Single index for both 384d models
+    
+    # ===== Embedding Models =====
+    KOREAN_EMBEDDING_MODEL: str = "dragonkue/multilingual-e5-small-ko"
+    MULTILINGUAL_EMBEDDING_MODEL: str = "intfloat/multilingual-e5-small"
+    
+    # ===== Chunking Strategy =====
+    CHILD_CHUNK_SIZE: int = 500  # 200 -> 500 (문맥 확보)
+    CHILD_CHUNK_OVERLAP: int = 100  # 50 -> 100 (연결성 강화)
     
     # ===== Celery 설정 =====
     CELERY_BROKER_URL: str = "redis://localhost:6379/1"

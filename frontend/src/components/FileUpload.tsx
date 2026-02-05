@@ -24,9 +24,10 @@ export function FileUpload({ onFileClick, novelId }: FileUploadProps) {
         if (!novelId) return;
         try {
             const status = await getStoryboardStatus(novelId, chapterId);
+            // console.log(`[Status] Chapter ${chapterId}:`, status); // 디버깅용
             setProgressMap(prev => ({ ...prev, [chapterId]: status }));
 
-            // COMPLETED 또는 FAILED 상태면 폴링 중지 (대문자 지원)
+            // COMPLETED 또는 FAILED 상태면 폴링 중지
             const statusUpper = status.status?.toUpperCase();
             if (statusUpper === 'COMPLETED' || statusUpper === 'FAILED') {
                 if (progressIntervalRef.current[chapterId]) {
@@ -35,7 +36,7 @@ export function FileUpload({ onFileClick, novelId }: FileUploadProps) {
                 }
             }
         } catch (error) {
-            // 조용히 무시
+            // console.error(`[Error] Failed to fetch status for ${chapterId}:`, error);
         }
     };
 
@@ -67,8 +68,17 @@ export function FileUpload({ onFileClick, novelId }: FileUploadProps) {
         try {
             const chapters = await getChapters(novelId);
             setUploadedFiles(chapters);
+
+            // 기존 파일 중 처리 중인 파일이 있으면 폴링 시작
+            chapters.forEach(chapter => {
+                // chapter 객체에 storyboard_status가 없는 경우를 대비해 초기화
+                const status = (chapter as any).storyboard_status?.toUpperCase();
+                if (status === 'PROCESSING' || status === 'PENDING') {
+                    startProgressPolling(chapter.id);
+                }
+            });
         } catch (error) {
-            // 조용히 무시
+            console.error("Failed to load chapters:", error);
         }
     };
 
@@ -173,6 +183,7 @@ export function FileUpload({ onFileClick, novelId }: FileUploadProps) {
             {/* Hidden File Input */}
             <input
                 ref={fileInputRef}
+                id="file-upload-input"
                 type="file"
                 className="upload-input"
                 onChange={handleChange}
@@ -195,8 +206,8 @@ export function FileUpload({ onFileClick, novelId }: FileUploadProps) {
 
                     {/* Show upload area only if no files uploaded */}
                     {uploadedFiles.length === 0 && (
-                        <div className="upload-area">
-                            <label htmlFor="file-upload-input" className="upload-label">
+                        <div className="upload-area" onClick={openFileDialog} style={{ cursor: 'pointer' }}>
+                            <label htmlFor="file-upload-input" className="upload-label" style={{ cursor: 'pointer' }}>
                                 <Upload size={48} className="upload-icon" />
                                 <p className="upload-text-main">파일을 드래그하거나 클릭하여 업로드</p>
                                 <p className="upload-text-sub">PDF, HWP, TXT 파일 지원</p>

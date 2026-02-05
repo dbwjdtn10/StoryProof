@@ -1,12 +1,15 @@
 import { MessageCircle, MoreVertical, Settings, FileText, X } from 'lucide-react';
 import { useState } from 'react';
 import { ChatInterface } from './ChatBot';
+import '../chatbot.css';
 
 interface FloatingMenuProps {
     onNavigateToScene?: (sceneIndex: number) => void;
+    novelId?: number;
+    chapterId?: number;
 }
 
-export function FloatingMenu({ onNavigateToScene }: FloatingMenuProps) {
+export function FloatingMenu({ onNavigateToScene, novelId, chapterId }: FloatingMenuProps) {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [isChatOpen, setIsChatOpen] = useState(false);
 
@@ -49,12 +52,11 @@ export function FloatingMenu({ onNavigateToScene }: FloatingMenuProps) {
             {isChatOpen && (
                 <div className="chatbot-modal" style={{
                     position: 'fixed',
-                    bottom: '80px',
-                    right: '20px',
-                    width: '600px',
-                    height: '900px',
-                    backgroundColor: 'white',
-                    borderRadius: '12px',
+                    bottom: '15px',
+                    right: '25px',
+                    width: '650px',
+                    height: '850px',
+                    borderRadius: '1rem',
                     boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
                     display: 'flex',
                     flexDirection: 'column',
@@ -65,18 +67,18 @@ export function FloatingMenu({ onNavigateToScene }: FloatingMenuProps) {
                         padding: '16px',
                         borderBottom: '1px solid #eee',
                         display: 'flex',
-                        justifyContent: 'space-between',
+                        justifyContent: 'flex-end',
                         alignItems: 'center',
                         backgroundColor: 'black',
                         color: 'white'
                     }}>
-                        <h3 style={{ margin: 0, fontSize: '1.2rem' }}>챗봇</h3>
+
                         <button className="chatbot-close" onClick={closeChat} style={{ color: 'white', background: 'none', border: 'none', cursor: 'pointer' }}>
                             <X size={20} />
                         </button>
                     </div>
                     <div className="chatbot-content" style={{ flex: 1, overflow: 'hidden' }}>
-                        <ChatInterface onNavigateToScene={onNavigateToScene} />
+                        <ChatInterface onNavigateToScene={onNavigateToScene} novelId={novelId} chapterId={chapterId} />
                     </div>
                 </div>
             )}
