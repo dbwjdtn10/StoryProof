@@ -1,15 +1,16 @@
-import { MessageCircle, MoreVertical, Settings, FileText, X } from 'lucide-react';
+import { MessageCircle, MoreVertical, Settings, ShieldAlert, X } from 'lucide-react';
 import { useState } from 'react';
 import { ChatInterface } from './ChatBot';
 import '../chatbot.css';
 
 interface FloatingMenuProps {
     onNavigateToScene?: (sceneIndex: number) => void;
+    onCheckConsistency?: () => void;
     novelId?: number;
     chapterId?: number;
 }
 
-export function FloatingMenu({ onNavigateToScene, novelId, chapterId }: FloatingMenuProps) {
+export function FloatingMenu({ onNavigateToScene, onCheckConsistency, novelId, chapterId }: FloatingMenuProps) {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [isChatOpen, setIsChatOpen] = useState(false);
 
@@ -26,6 +27,13 @@ export function FloatingMenu({ onNavigateToScene, novelId, chapterId }: Floating
         setIsChatOpen(false);
     };
 
+    const handleConsistencyClick = () => {
+        if (onCheckConsistency) {
+            onCheckConsistency();
+        }
+        setIsMenuOpen(false);
+    };
+
     return (
         <>
             {/* Floating Menu Button */}
@@ -35,8 +43,8 @@ export function FloatingMenu({ onNavigateToScene, novelId, chapterId }: Floating
                         <button className="menu-option" onClick={() => alert('환경설정')} title="환경설정">
                             <Settings size={20} />
                         </button>
-                        <button className="menu-option" onClick={() => alert('설정파괴분석기')} title="설정파괴분석기">
-                            <FileText size={20} />
+                        <button className="menu-option highlight-btn" onClick={handleConsistencyClick} title="설정파괴분석기">
+                            <ShieldAlert size={20} color="#4F46E5" />
                         </button>
                         <button className="menu-option" onClick={openChat} title="챗봇">
                             <MessageCircle size={20} />
