@@ -9,3 +9,6 @@
 5. 설정오류탐지 기능 실행 : StoryProof-main/start_worker
 
 => 총 5개 terminal 열림
+
+
+## 비동기 작동순서
