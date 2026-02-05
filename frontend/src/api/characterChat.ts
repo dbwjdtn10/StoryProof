@@ -76,3 +76,18 @@ export const getMessages = async (roomId: number): Promise<CharacterChatMessage[
         headers: getHeaders(),
     });
 };
+
+export const updateRoom = async (roomId: number, personaPrompt: string): Promise<CharacterChatRoom> => {
+    return request<CharacterChatRoom>(`/character-chat/rooms/${roomId}`, {
+        method: 'PUT',
+        headers: getHeaders(),
+        body: JSON.stringify({ persona_prompt: personaPrompt }),
+    });
+};
+
+export const deleteRoom = async (roomId: number): Promise<void> => {
+    return request<void>(`/character-chat/rooms/${roomId}`, {
+        method: 'DELETE',
+        headers: getHeaders(),
+    });
+};

@@ -85,6 +85,11 @@ export function RoomList({ novelId, onSelectRoom }: RoomListProps) {
                 </div>
             )}
 
+            {/* Notice Footer */}
+            <div style={{ marginTop: '20px', textAlign: 'center', fontSize: '0.75rem', color: '#999', paddingBottom: '80px' }}>
+                * 이미 생성된 대화방의 페르소나(Persona)는 <br /> 자동으로 업데이트되지 않습니다.
+            </div>
+
             {/* Floating Action Button for New Chat */}
             <button
                 onClick={() => setIsCreateModalOpen(true)}

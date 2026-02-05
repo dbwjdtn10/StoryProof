@@ -5,13 +5,16 @@ import { generatePersona, createRoom, CharacterChatRoom } from '../../api/charac
 interface CreateRoomModalProps {
     novelId: number;
     onClose: () => void;
-    onCreated: (room: CharacterChatRoom) => void;
+    onCreated?: (room: CharacterChatRoom) => void;
+    onUpdated?: (room: CharacterChatRoom) => void;
+    initialData?: CharacterChatRoom;
+    mode?: 'create' | 'edit';
 }
 
-export function CreateRoomModal({ novelId, onClose, onCreated }: CreateRoomModalProps) {
-    const [characterName, setCharacterName] = useState('');
-    const [personaPrompt, setPersonaPrompt] = useState('');
-    const [step, setStep] = useState<'input' | 'review'>('input');
+export function CreateRoomModal({ novelId, onClose, onCreated, onUpdated, initialData, mode = 'create' }: CreateRoomModalProps) {
+    const [characterName, setCharacterName] = useState(initialData?.character_name || '');
+    const [personaPrompt, setPersonaPrompt] = useState(initialData?.persona_prompt || '');
+    const [step, setStep] = useState<'input' | 'review'>(mode === 'edit' ? 'review' : 'input');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -30,14 +33,23 @@ export function CreateRoomModal({ novelId, onClose, onCreated }: CreateRoomModal
         }
     };
 
-    const handleCreate = async () => {
+    const handleCreateOrUpdate = async () => {
         if (!personaPrompt.trim()) return;
         setLoading(true);
         try {
-            const room = await createRoom(novelId, characterName, personaPrompt);
-            onCreated(room);
+            if (mode === 'create') {
+                const room = await createRoom(novelId, characterName, personaPrompt);
+                onCreated?.(room);
+            } else {
+                // Update mode
+                if (initialData?.id) {
+                    const { updateRoom } = await import('../../api/characterChat'); // Dynamic import to avoid cycles if any, or just import at top
+                    const room = await updateRoom(initialData.id, personaPrompt);
+                    onUpdated?.(room);
+                }
+            }
         } catch (err: any) {
-            setError(err.message || "대화방 생성 실패");
+            setError(err.message || (mode === 'create' ? "대화방 생성 실패" : "대화방 수정 실패"));
             setLoading(false);
         }
     };
@@ -56,7 +68,7 @@ export function CreateRoomModal({ novelId, onClose, onCreated }: CreateRoomModal
             padding: '20px'
         }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
-                <h3 style={{ margin: 0 }}>새 대화 시작</h3>
+                <h3 style={{ margin: 0 }}>{mode === 'create' ? '새 대화 시작' : '페르소나 수정'}</h3>
                 <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
                     <X size={20} />
                 </button>
@@ -123,7 +135,20 @@ export function CreateRoomModal({ novelId, onClose, onCreated }: CreateRoomModal
             ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', flex: 1 }}>
                     <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                        <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>페르소나 프롬프트 (수정 가능)</label>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                            <label style={{ fontWeight: 'bold' }}>페르소나 프롬프트 (수정 가능)</label>
+                            <button
+                                onClick={handleGenerate}
+                                title="AI 자동 업데이트 (현재 분석 데이터 기반)"
+                                style={{
+                                    background: 'none', border: 'none', cursor: 'pointer',
+                                    color: '#666', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem'
+                                }}
+                            >
+                                <Sparkles size={14} />
+                                AI 자동 갱신
+                            </button>
+                        </div>
                         <textarea
                             value={personaPrompt}
                             onChange={(e) => setPersonaPrompt(e.target.value)}
@@ -141,23 +166,25 @@ export function CreateRoomModal({ novelId, onClose, onCreated }: CreateRoomModal
                     </div>
 
                     <div style={{ display: 'flex', gap: '10px' }}>
+                        {mode !== 'edit' && (
+                            <button
+                                onClick={() => setStep('input')}
+                                style={{
+                                    flex: 1,
+                                    backgroundColor: '#f0f0f0',
+                                    color: '#333',
+                                    border: 'none',
+                                    padding: '14px',
+                                    borderRadius: '8px',
+                                    fontWeight: 'bold',
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                뒤로
+                            </button>
+                        )}
                         <button
-                            onClick={() => setStep('input')}
-                            style={{
-                                flex: 1,
-                                backgroundColor: '#f0f0f0',
-                                color: '#333',
-                                border: 'none',
-                                padding: '14px',
-                                borderRadius: '8px',
-                                fontWeight: 'bold',
-                                cursor: 'pointer'
-                            }}
-                        >
-                            뒤로
-                        </button>
-                        <button
-                            onClick={handleCreate}
+                            onClick={handleCreateOrUpdate}
                             disabled={loading}
                             style={{
                                 flex: 2,
@@ -171,7 +198,7 @@ export function CreateRoomModal({ novelId, onClose, onCreated }: CreateRoomModal
                                 opacity: loading ? 0.7 : 1
                             }}
                         >
-                            {loading ? '생성 중...' : '대화 시작'}
+                            {loading ? (mode === 'create' ? '생성 중...' : '저장 중...') : (mode === 'create' ? '대화 시작' : '수정 저장')}
                         </button>
                     </div>
                 </div>

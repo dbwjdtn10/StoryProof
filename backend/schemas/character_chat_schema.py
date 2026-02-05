@@ -7,6 +7,9 @@ class CharacterChatRoomCreate(BaseModel):
     character_name: str
     persona_prompt: str
 
+class CharacterChatRoomUpdate(BaseModel):
+    persona_prompt: Optional[str] = None
+
 class CharacterChatRoomResponse(BaseModel):
     id: int
     user_id: int
