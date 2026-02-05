@@ -206,14 +206,15 @@ class EmbeddingSearchEngine:
         finally:
             db.close()
     
-    def search(self, query: str, novel_id: Optional[int] = None, chapter_id: Optional[int] = None, top_k: int = 5):
+    def search(self, query: str, novel_id: Optional[int] = None, chapter_id: Optional[int] = None, exclude_chapter_id: Optional[int] = None, top_k: int = 5):
         """
         벡터 유사도 검색을 수행하고 Parent Scene 정보를 집계합니다.
         
         Args:
             query (str): 검색 질문
             novel_id (int): 필터링할 소설 ID
-            chapter_id (int): 필터링할 회차 ID (선택)
+            chapter_id (int): 필터링할 회차 ID (선택 - 포함 필터)
+            exclude_chapter_id (int): 제외할 회차 ID (선택 - 설정 파괴 분석용)
             top_k (int): 반환할 상위 결과 수
         """
         query_embedding = self.embed_text(query)
@@ -222,6 +223,12 @@ class EmbeddingSearchEngine:
         filter_dict = {}
         if novel_id:
             filter_dict['novel_id'] = novel_id
+        
+        if chapter_id:
+            filter_dict['chapter_id'] = chapter_id
+        elif exclude_chapter_id:
+            # 특정 챕터 제외 (설정 파괴 분석 시 현재 챕터 데이터 제외용)
+            filter_dict['chapter_id'] = {"$ne": exclude_chapter_id}
         
         # 검색 (Child Chunk를 찾음)
         # top_k를 조금 넉넉하게 잡음 (같은 씬의 여러 청크가 나올 수 있으므로)

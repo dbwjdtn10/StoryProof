@@ -1,8 +1,9 @@
 import { ArrowLeft, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Users, Package, Clock, Save, MapPin } from 'lucide-react';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { FloatingMenu } from './FloatingMenu';
 import { ThemeToggle } from './ThemeToggle';
 import { getChapter, updateChapter, getChapterBible, reanalyzeChapter, BibleData } from '../api/novel';
+import { AnalysisResultModal, AnalysisResult } from './AnalysisResultModal';
 
 interface ChapterDetailProps {
     fileName: string;
@@ -191,6 +192,12 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId }: ChapterD
     const [selectedItem, setSelectedItem] = useState<any | null>(null);
     const [selectedKeyEvent, setSelectedKeyEvent] = useState<any | null>(null);
     const [selectedExtraItem, setSelectedExtraItem] = useState<{ title: string, item: any } | null>(null);
+
+    // 설정 파괴 분석 상태
+    const [isAnalysisModalOpen, setIsAnalysisModalOpen] = useState(false);
+    const [isAnalysisLoading, setIsAnalysisLoading] = useState(false);
+    const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
+
     const [selectedLocation, setSelectedLocation] = useState<any | null>(null);
     const [extraSectionStates, setExtraSectionStates] = useState<Record<string, boolean>>({});
     const [isAppearancesExpanded, setIsAppearancesExpanded] = useState(false);
@@ -230,6 +237,119 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId }: ChapterD
                 }, 1000);
             }
         }, 100);
+    };
+
+    // 설정 파괴 분석 실행
+    const handleCheckConsistency = async () => {
+        setIsAnalysisModalOpen(true);
+        setIsAnalysisLoading(true);
+        setAnalysisResult(null);
+
+        try {
+            // 현재 모든 씬의 텍스트를 합쳐서 분석 요청 (씬 모드 vs 에디터 모드)
+            const allText = sceneTexts.length > 0
+                ? sceneTexts.join('\n\n')
+                : content;
+
+            const response = await fetch(`http://localhost:8000/api/v1/analysis/consistency`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    novel_id: novelId,
+                    chapter_id: chapterId,
+                    text: allText
+                })
+            });
+
+            if (!response.ok) throw new Error('분석 요청 실패');
+
+            const { task_id } = await response.json();
+
+            // 폴링 시작
+            const pollInterval = setInterval(async () => {
+                try {
+                    const statusRes = await fetch(`http://localhost:8000/api/v1/analysis/task/${task_id}`);
+                    const data = await statusRes.json();
+
+                    if (data.status === "COMPLETED") {
+                        clearInterval(pollInterval);
+                        setAnalysisResult(data.result);
+                        setIsAnalysisLoading(false);
+                    } else if (data.status === "FAILED") {
+                        clearInterval(pollInterval);
+                        setAnalysisResult({ status: "분석 실패", message: data.error });
+                        setIsAnalysisLoading(false);
+                    }
+                } catch (err) {
+                    console.error("Polling error:", err);
+                }
+            }, 2000);
+
+            // 컴포넌트 언마운트 시 인터벌 클리어를 위해 (실제로는 cleanup에서 처리해야 하지만 여기서는 로직 단순화)
+        } catch (error) {
+            console.error("Analysis error:", error);
+            setAnalysisResult({ status: "오류 발생", message: "서버와 통신 중 오류가 발생했습니다." });
+            setIsAnalysisLoading(false);
+        }
+    };
+
+    const handleNavigateToQuote = (quote: string) => {
+        if (!quote) return;
+
+        // 정규화 함수: 공백과 줄바꿈을 단순화하여 비교
+        const normalize = (str: string) => str.replace(/\s+/g, ' ').trim();
+        const targetQ = normalize(quote);
+
+        // 1. Scene Mode Navigation (sceneTexts exists)
+        if (sceneTexts.length > 0) {
+            // Find the scene containing the quote
+            const sceneIndex = sceneTexts.findIndex((s: string) => normalize(s).includes(targetQ));
+
+            if (sceneIndex !== -1) {
+                // Determine the exact substring to highlight within the original text
+                // This is a best-effort match since we normalized both
+                const originalText = sceneTexts[sceneIndex];
+                // Simple heuristic: try to find the quote roughly
+                // If exact match fails, we still scroll to the scene but might not highlight perfectly
+                scrollToScene(sceneIndex, quote);
+            } else {
+                alert('해당 문장을 본문에서 찾을 수 없습니다.');
+            }
+        }
+        // 2. Single Textarea Mode (content)
+        else {
+            const textArea = document.querySelector('.novel-text-editor') as HTMLTextAreaElement;
+            if (textArea && content) {
+                // Find position
+                // Simple exact match first
+                let pos = content.indexOf(quote);
+
+                // If not found, try normalized match logic (harder in textarea selection)
+                if (pos === -1) {
+                    // Try to find by splitting and matching parts? 
+                    // For now, let's just alert if exact match fails in raw mode, 
+                    // or improved searching could be added later.
+                    const normalizedContent = normalize(content);
+                    if (normalizedContent.includes(targetQ)) {
+                        alert("문장을 찾았으나, 텍스트 에디터 모드에서는 정확한 위치로 이동하기 어렵습니다. (줄바꿈 차이 등)");
+                        return;
+                    }
+                }
+
+                if (pos !== -1) {
+                    textArea.focus();
+                    textArea.setSelectionRange(pos, pos + quote.length);
+                    // Scroll to cursor
+                    const fullText = textArea.value;
+                    const textBefore = fullText.substring(0, pos);
+                    const lines = textBefore.split("\n").length;
+                    const lineHeight = 24; // approximate
+                    textArea.scrollTop = (lines - 1) * lineHeight;
+                } else {
+                    alert('해당 문장을 본문에서 찾을 수 없습니다.');
+                }
+            }
+        }
     };
 
     const adjustTextareaHeight = (element: HTMLTextAreaElement) => {
@@ -1283,8 +1403,22 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId }: ChapterD
             {/* Theme Toggle */}
             <ThemeToggle />
 
+            {/* 설정 파괴 분석 결과 모달 */}
+            <AnalysisResultModal
+                isOpen={isAnalysisModalOpen}
+                onClose={() => setIsAnalysisModalOpen(false)}
+                result={analysisResult}
+                isLoading={isAnalysisLoading}
+                onNavigate={handleNavigateToQuote}
+            />
+
             {/* Floating Menu - Settings, Analysis, Chatbot */}
-            <FloatingMenu onNavigateToScene={scrollToScene} novelId={novelId} chapterId={chapterId} />
+            <FloatingMenu
+                onNavigateToScene={scrollToScene}
+                onCheckConsistency={handleCheckConsistency}
+                novelId={novelId}
+                chapterId={chapterId}
+            />
         </div >
     );
 }

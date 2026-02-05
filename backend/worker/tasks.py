@@ -5,7 +5,7 @@ Celery 비동기 작업 정의
 """
 
 import os
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from dataclasses import asdict
 
 from backend.db.session import SessionLocal
@@ -346,6 +346,24 @@ def cancel_task(task_id: str) -> bool:
     pass
 
 
+# backend/worker/tasks.py
+
+
+import asyncio
+from .celery_app import celery_app
+from backend.services.analysis.agent import StoryConsistencyAgent
+from backend.core.config import settings
+
+@celery_app.task(name="detect_inconsistency_task", bind=True, max_retries=2)
+def detect_inconsistency_task(self, novel_id: int, text_fragment: str, chapter_id: Optional[int] = None):
+    try:
+        agent = StoryConsistencyAgent(api_key=settings.GOOGLE_API_KEY)
+        # 동기 환경(Celery)에서 비동기 함수 실행
+        result = asyncio.run(agent.check_consistency(novel_id, text_fragment, chapter_id))
+        return result
+    except Exception as exc:
+        raise self.retry(exc=exc, countdown=30)
+
 # ===== Celery Beat 스케줄 (정기 작업) =====
 
 # celery_app.conf.beat_schedule = {
@@ -356,5 +374,4 @@ def cancel_task(task_id: str) -> bool:
 #     "cleanup-old-chat-histories": {
 #         "task": "backend.worker.tasks.cleanup_old_chat_histories_task",
 #         "schedule": 86400.0,  # 매일
-#     },
 # }
