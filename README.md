@@ -7,3 +7,5 @@
 3. 설정오류탐지 기능 실행 전 : terminal 에서 wsl -> sudo service redis-server start -> redis-cli ping 후 pong 이 나오면 실행완료
 4. 설정오류탐지 기능 서버 실행 : StoryProof-main/start_server
 5. 설정오류탐지 기능 실행 : StoryProof-main/start_worker
+
+=> 총 5개 terminal 열림
