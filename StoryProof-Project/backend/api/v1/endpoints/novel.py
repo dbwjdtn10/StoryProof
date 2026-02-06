@@ -78,8 +78,16 @@ class MergeRequest(BaseModel):
 async def merge_novel_contents(
     novel_id: int, 
     request: MergeRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
+    novel = db.query(Novel).filter(
+        Novel.id == novel_id, 
+        Novel.author_id == current_user.id  # 모델 정의에 맞춰 author_id로 변경
+    ).first()
+    
+    if not novel:
+        raise HTTPException(status_code=403, detail="해당 소설에 대한 권한이 없습니다.")
     try:
         # 1. 순서 결정 (target_id를 가장 앞으로)
         ordered_ids = []
@@ -105,9 +113,9 @@ async def merge_novel_contents(
         for ch_id in ordered_ids:
             ch = ch_map.get(ch_id)
             if ch and ch.content:
-                # 분석 엔진이 장 구분을 명확히 할 수 있도록 헤더 삽입
-                header = f"\n\n### {ch.title if ch.title else f'제 {ch.chapter_number}화'} ###\n"
-                combined_content_list.append(header + ch.content)
+                # 앞뒤 공백을 제거하고 확실하게 구분선을 넣어줍니다.
+                header = f"\n\n--- {ch.title if ch.title else f'제 {ch.chapter_number}화'} 시작 ---\n"
+                combined_content_list.append(header + ch.content.strip())
 
         final_content = "".join(combined_content_list).strip()
 
@@ -115,13 +123,17 @@ async def merge_novel_contents(
         last_ch = db.query(Chapter).filter(Chapter.novel_id == novel_id).order_by(Chapter.chapter_number.desc()).first()
         new_num = (last_ch.chapter_number + 1) if last_ch else 1
 
+        # [수정] 병합된 회차 정보를 제목에 반영
+        source_titles = [ch_map[ch_id].title for ch_id in ordered_ids if ch_id in ch_map]
+        auto_title = f"통합본 ({' + '.join(source_titles[:2])}{' 등' if len(source_titles) > 2 else ''})"
+
         new_chapter = Chapter(
             novel_id=novel_id,
             chapter_number=new_num,
-            title="통합 분석본",
+            title=auto_title, # 임시값 대신 자동 생성된 제목 사용
             content=final_content,
             word_count=len(final_content.split()),
-            storyboard_status="PENDING"  # 분석 대기 상태로 시작
+            storyboard_status="PENDING"
         )
         db.add(new_chapter)
         db.flush()
