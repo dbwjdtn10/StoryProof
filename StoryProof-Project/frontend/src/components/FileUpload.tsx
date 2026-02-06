@@ -10,7 +10,9 @@ interface FileUploadProps {
 
 interface ChapterWithProgress extends Chapter {
     storyboardProgress?: StoryboardProgress;
-    storyboard_status?: string;
+    storyboard_status?: string; 
+    storyboard_progress?: number;
+    storyboard_message?: string;
 }
 
 export function FileUpload({ onFileClick, novelId }: FileUploadProps) {
@@ -103,17 +105,22 @@ export function FileUpload({ onFileClick, novelId }: FileUploadProps) {
             alert("합칠 파일을 2개 이상 선택해 주세요.");
             return;
         }
-    
+
+        const token = localStorage.getItem('token');
+        if (!token) {
+            alert("로그인이 필요합니다.");
+            return;
+        }
+
         const targetId = selectedSourceIds[0];
         const sourceIds = selectedSourceIds.slice(1);
-    
+
         try {
-            // 주소를 http://localhost:8000으로 명시하여 3000번 포트(프론트)에서 404가 나는 것을 방지합니다.
             const res = await fetch(`http://localhost:8000/api/v1/novels/${novelId}/merge-contents`, { 
                 method: 'PATCH', 
                 headers: { 
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json'
+                    'Authorization': `Bearer ${token}` 
                 },
                 body: JSON.stringify({ 
                     source_ids: sourceIds, 
@@ -131,15 +138,17 @@ export function FileUpload({ onFileClick, novelId }: FileUploadProps) {
                 if (data.new_id) {
                     startProgressPolling(data.new_id);
                 }
-            
-                await loadChapters();
+
+                await loadChapters(); 
             } else {
+                // FastAPI의 에러 메시지 구조(detail)에 맞춰 처리
                 const errorData = await res.json().catch(() => ({}));
-                alert(`합치기 실패: ${errorData.message || '서버 응답 오류'}`);
+                alert(`합치기 실패: ${errorData.detail || '서버 오류가 발생했습니다.'}`);
             }
         } catch (error) {
+            // fetch 자체가 실패한 경우(네트워크 오프라인 등) 실행됨
             console.error("Network Error:", error);
-            alert("네트워크 오류가 발생했습니다. 서버가 실행 중인지 확인해주세요.");
+            alert("네트워크 연결을 확인해 주세요.");
         }
     };
     
