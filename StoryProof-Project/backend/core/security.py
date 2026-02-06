@@ -12,11 +12,14 @@ from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
-# from backend.core.config import settings
+from backend.core.config import settings
+from backend.db.session import get_db
+from backend.db.models import User
+from sqlalchemy.orm import Session
 
 
 # 비밀번호 해싱 컨텍스트
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 
 # HTTP Bearer 토큰 스키마
 security = HTTPBearer()
@@ -34,7 +37,7 @@ def hash_password(password: str) -> str:
     Returns:
         str: 해싱된 비밀번호
     """
-    pass
+    return pwd_context.hash(password)
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -48,7 +51,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     Returns:
         bool: 비밀번호가 일치하면 True
     """
-    pass
+    return pwd_context.verify(plain_password, hashed_password)
 
 
 # ===== JWT 토큰 관련 함수 =====
@@ -64,7 +67,14 @@ def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta]
     Returns:
         str: JWT 액세스 토큰
     """
-    pass
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    return encoded_jwt
 
 
 def create_refresh_token(data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
@@ -78,7 +88,14 @@ def create_refresh_token(data: Dict[str, Any], expires_delta: Optional[timedelta
     Returns:
         str: JWT 리프레시 토큰
     """
-    pass
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    return encoded_jwt
 
 
 def decode_token(token: str) -> Dict[str, Any]:
@@ -94,7 +111,21 @@ def decode_token(token: str) -> Dict[str, Any]:
     Raises:
         HTTPException: 토큰이 유효하지 않은 경우
     """
-    pass
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        return payload
+    except JWTError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
 
 def verify_token(token: str) -> Optional[str]:
@@ -107,7 +138,11 @@ def verify_token(token: str) -> Optional[str]:
     Returns:
         Optional[str]: 사용자 ID (토큰이 유효하지 않으면 None)
     """
-    pass
+    try:
+        payload = decode_token(token)
+        return payload.get("sub")
+    except HTTPException:
+        return None
 
 
 # ===== 인증 의존성 함수 =====
@@ -127,12 +162,30 @@ async def get_current_user_id(
     Raises:
         HTTPException: 인증 실패 시
     """
-    pass
+    try:
+        token = credentials.credentials
+        payload = decode_token(token)
+        user_id = payload.get("sub")
+        if user_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Could not validate credentials",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        return str(user_id)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication failed",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
 
 async def get_current_user(
     user_id: str = Depends(get_current_user_id),
-    # db: Session = Depends(get_db)
+    db: Session = Depends(get_db)
 ):
     """
     현재 인증된 사용자 객체 반환 (의존성 주입용)
@@ -147,7 +200,23 @@ async def get_current_user(
     Raises:
         HTTPException: 사용자를 찾을 수 없는 경우
     """
-    pass
+    try:
+        user = db.query(User).filter(User.id == int(user_id)).first()
+        if user is None:
+            print(f"ERROR >>> 토큰의 ID({user_id})에 해당하는 유저가 DB에 없습니다.")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found",
+            )
+        return user
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"ERROR >>> 유저 조회 중 예외 발생: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="User lookup failed",
+        )
 
 
 async def get_optional_user(
