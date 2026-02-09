@@ -25,11 +25,15 @@ FloatingMenu.tsx => 화면 하단에 나오는 버튼
 
 <벡엔드>
 
-StoryProof-main\backend\api\v1\endpoints\chat.py
+backend/services/agent.py => 핵심로직
 
-StoryProof-main\backend\services\chatbot_service.py ==> 함수정의
+backend/worker/tasks.py => 비동기 작업
 
-StoryProof-main\backend\schemas\chat_schema.py ==> 요청과 응답 
+backend/api/v1/endpoints/analysis.py => API 작업
+
+backend/core/prompts.py => 프롬프트 작업
+
+=> API 요청 → Celery 비동기 작업 → Agent 서비스 로직 → LLM(Gemini) 순서
 
 
 ## 스토리 예측 모델 동작원리
@@ -50,12 +54,10 @@ chapterDetail.tsx  => 설정파괴 탐지기
 
 < 벡엔드 >
 
-backend/worker/celery_app.py => 비동기 처리 작업실행
+backend/services/agent.py => 핵심로직 
 
-backend\worker\tasks.py => Celery 비동기 작업 정의
+backend/worker/tasks.py => 비동기 작업
 
-backend/services/agent.py  => agent 정의 및 실행
+backend/api/v1/endpoints/analysis.py => API 작업
 
-backend/services/chatbot_service.py => 챗봇 실행
-
-backend/services/analysis/ => 분석 엔진 
+backend/core/prompts.py => 프롬프트 작업 
