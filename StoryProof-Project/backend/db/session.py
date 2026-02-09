@@ -8,8 +8,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from typing import Generator
 
-# from backend.core.config import settings
-# from backend.db.models import Base
+from backend.core.config import settings
+from backend.db.models import Base
 
 
 # ===== 데이터베이스 엔진 생성 =====
@@ -21,19 +21,17 @@ def create_db_engine():
     Returns:
         Engine: SQLAlchemy 엔진
     """
-    # TODO: settings에서 DATABASE_URL 가져오기
-    # engine = create_engine(
-    #     settings.DATABASE_URL,
-    #     echo=settings.DB_ECHO,
-    #     pool_size=settings.DB_POOL_SIZE,
-    #     max_overflow=settings.DB_MAX_OVERFLOW,
-    # )
-    # return engine
-    pass
+    engine = create_engine(
+        settings.DATABASE_URL,
+        echo=settings.DB_ECHO,
+        pool_size=settings.DB_POOL_SIZE,
+        max_overflow=settings.DB_MAX_OVERFLOW,
+    )
+    return engine
 
 
 # 엔진 인스턴스 (전역)
-# engine = create_db_engine()
+engine = create_db_engine()
 
 
 # ===== 세션 팩토리 생성 =====
@@ -45,18 +43,16 @@ def create_session_factory():
     Returns:
         sessionmaker: SQLAlchemy 세션 팩토리
     """
-    # TODO: engine 생성 후 세션 팩토리 생성
-    # SessionLocal = sessionmaker(
-    #     autocommit=False,
-    #     autoflush=False,
-    #     bind=engine
-    # )
-    # return SessionLocal
-    pass
+    SessionLocal = sessionmaker(
+        autocommit=False,
+        autoflush=False,
+        bind=engine
+    )
+    return SessionLocal
 
 
 # 세션 팩토리 인스턴스 (전역)
-# SessionLocal = create_session_factory()
+SessionLocal = create_session_factory()
 
 
 # ===== 데이터베이스 초기화 =====
@@ -66,8 +62,7 @@ def init_db() -> None:
     데이터베이스 초기화
     모든 테이블 생성
     """
-    # TODO: Base.metadata.create_all(bind=engine)
-    pass
+    Base.metadata.create_all(bind=engine)
 
 
 def drop_db() -> None:
@@ -75,8 +70,7 @@ def drop_db() -> None:
     데이터베이스 삭제
     모든 테이블 삭제 (주의: 개발 환경에서만 사용)
     """
-    # TODO: Base.metadata.drop_all(bind=engine)
-    pass
+    Base.metadata.drop_all(bind=engine)
 
 
 def reset_db() -> None:
@@ -104,12 +98,11 @@ def get_db() -> Generator[Session, None, None]:
             users = db.query(User).all()
             return users
     """
-    # db = SessionLocal()
-    # try:
-    #     yield db
-    # finally:
-    #     db.close()
-    pass
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 
 # ===== 트랜잭션 헬퍼 =====
@@ -127,8 +120,7 @@ class DatabaseTransaction:
     
     def __init__(self):
         """트랜잭션 초기화"""
-        # self.db = SessionLocal()
-        pass
+        self.db = SessionLocal()
     
     def __enter__(self) -> Session:
         """
@@ -137,8 +129,7 @@ class DatabaseTransaction:
         Returns:
             Session: 데이터베이스 세션
         """
-        # return self.db
-        pass
+        return self.db
     
     def __exit__(self, exc_type, exc_val, exc_tb):
         """
@@ -149,12 +140,11 @@ class DatabaseTransaction:
             exc_val: 예외 값
             exc_tb: 예외 트레이스백
         """
-        # if exc_type is None:
-        #     self.db.commit()
-        # else:
-        #     self.db.rollback()
-        # self.db.close()
-        pass
+        if exc_type is None:
+            self.db.commit()
+        else:
+            self.db.rollback()
+        self.db.close()
 
 
 # ===== 비동기 세션 (선택사항) =====

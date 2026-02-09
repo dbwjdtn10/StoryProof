@@ -24,6 +24,14 @@ class AnalysisStatus(str, enum.Enum):
     FAILED = "failed"        # 실패
 
 
+class StoryboardStatus(str, enum.Enum):
+    """스토리보드 처리 상태"""
+    PENDING = "pending"         # 대기 중
+    PROCESSING = "processing"   # 처리 중 (청킹, 구조화, 임베딩)
+    COMPLETED = "completed"     # 완료
+    FAILED = "failed"           # 실패
+
+
 class AnalysisType(str, enum.Enum):
     """분석 유형"""
     CHARACTER = "character"   # 캐릭터 분석
@@ -59,6 +67,10 @@ class User(Base):
         return f"<User(id={self.id}, email={self.email}, username={self.username})>"
 
 
+from sqlalchemy.dialects.postgresql import JSONB
+
+# ... (Previous imports)
+
 class Novel(Base):
     """소설 모델"""
     __tablename__ = "novels"
@@ -67,6 +79,7 @@ class Novel(Base):
     title = Column(String(255), nullable=False, index=True)
     description = Column(Text, nullable=True)
     genre = Column(String(100), nullable=True)
+    custom_prompt = Column(Text, nullable=True) # 사용자 정의 분석 프롬프트
     
     author_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     
@@ -86,7 +99,7 @@ class Novel(Base):
 
 
 class Chapter(Base):
-    """회차 모델"""
+    # ... (No changes needed for Chapter)
     __tablename__ = "chapters"
     
     id = Column(Integer, primary_key=True, index=True)
@@ -97,6 +110,13 @@ class Chapter(Base):
     content = Column(Text, nullable=False)
     
     word_count = Column(Integer, default=0)
+    
+    # 스토리보드 처리 상태
+    storyboard_status = Column(String(50), default="PENDING")  # VARCHAR로 저장
+    storyboard_progress = Column(Integer, default=0)  # 0-100
+    storyboard_message = Column(String(255), nullable=True)  # 진행 메시지
+    storyboard_error = Column(Text, nullable=True)    # 에러 메시지
+    storyboard_completed_at = Column(DateTime(timezone=True), nullable=True)
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -120,8 +140,8 @@ class Analysis(Base):
     analysis_type = Column(Enum(AnalysisType), nullable=False)
     status = Column(Enum(AnalysisStatus), default=AnalysisStatus.PENDING)
     
-    # 분석 결과 (JSON 형태로 저장)
-    result = Column(JSON, nullable=True)
+    # 분석 결과 (JSONB 형태로 저장하여 유연한 쿼리 지원)
+    result = Column(JSONB, nullable=True)
     
     # 에러 정보
     error_message = Column(Text, nullable=True)
@@ -154,7 +174,7 @@ class ChatHistory(Base):
     content = Column(Text, nullable=False)
     
     # 메타데이터
-    metadata = Column(JSON, nullable=True)
+    meta_data = Column(JSON, nullable=True)
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
@@ -166,21 +186,22 @@ class ChatHistory(Base):
 
 
 class VectorDocument(Base):
-    """벡터 문서 메타데이터 모델 (ChromaDB와 연동)"""
+    """벡터 문서 메타데이터 모델 (Pinecone과 연동)"""
     __tablename__ = "vector_documents"
     
     id = Column(Integer, primary_key=True, index=True)
     novel_id = Column(Integer, ForeignKey("novels.id"), nullable=False)
     chapter_id = Column(Integer, ForeignKey("chapters.id"), nullable=True)
     
-    # ChromaDB 문서 ID
-    chroma_id = Column(String(255), unique=True, index=True, nullable=False)
+    # Pinecone 벡터 ID
+    vector_id = Column(String(255), unique=True, index=True, nullable=False)
     
     # 문서 메타데이터
     chunk_index = Column(Integer, nullable=False)
     chunk_text = Column(Text, nullable=False)
+    metadata_json = Column(JSON, nullable=True)
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     def __repr__(self):
-        return f"<VectorDocument(id={self.id}, chroma_id={self.chroma_id})>"
+        return f"<VectorDocument(id={self.id}, vector_id={self.vector_id})>"

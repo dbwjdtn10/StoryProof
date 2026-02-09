@@ -68,3 +68,22 @@ class ChatFeedback(BaseModel):
     """채팅 피드백 스키마"""
     rating: int = Field(..., ge=1, le=5, description="평점 (1-5)")
     comment: Optional[str] = Field(None, max_length=500, description="코멘트")
+
+
+# ===== 챗봇 Q&A =====
+
+class ChatQuestionRequest(BaseModel):
+    """챗봇 질문 요청 스키마"""
+    question: str = Field(..., min_length=1, description="사용자 질문")
+    novel_filter: Optional[str] = Field(None, description="특정 소설로 필터링 (파일명)")
+    alpha: float = Field(0.297, ge=0.0, le=1.0, description="유사도 가중치")
+    similarity_threshold: float = Field(0.5, ge=0.0, le=1.0, description="유사도 임계값")
+
+
+class ChatAnswerResponse(BaseModel):
+    """챗봇 답변 응답 스키마"""
+    answer: str = Field(..., description="생성된 답변")
+    source: Optional[Dict[str, Any]] = Field(None, description="출처 정보")
+    similarity: float = Field(..., description="유사도 점수")
+    found_context: bool = Field(..., description="관련 컨텍스트 발견 여부")
+

@@ -10,12 +10,13 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-# from backend.db.session import get_db
-# from backend.core.security import get_current_user, hash_password, verify_password
-# from backend.core.security import create_access_token, create_refresh_token
-# from backend.schemas.auth_schema import (
-#     UserRegister, UserLogin, TokenResponse, UserProfile, UserUpdate
-# )
+from backend.db.session import get_db
+from backend.core.security import get_current_user, hash_password, verify_password
+from backend.core.security import create_access_token, create_refresh_token
+from backend.schemas.auth_schema import (
+    UserRegister, UserLogin, TokenResponse, UserProfile, UserUpdate
+)
+from backend.db.models import User
 
 
 router = APIRouter()
@@ -25,8 +26,8 @@ router = APIRouter()
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 async def register(
-    # user_data: UserRegister,
-    # db: Session = Depends(get_db)
+    user_data: UserRegister,
+    db: Session = Depends(get_db)
 ):
     """
     회원가입
@@ -41,20 +42,51 @@ async def register(
     Raises:
         HTTPException: 이메일 또는 사용자명이 이미 존재하는 경우
     """
-    # TODO: 이메일 중복 확인
-    # TODO: 사용자명 중복 확인
-    # TODO: 비밀번호 해싱
-    # TODO: 사용자 생성
-    # TODO: 이메일 인증 메일 발송 (선택)
-    pass
+    # 이메일 중복 확인
+    if db.query(User).filter(User.email == user_data.email).first():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already registered"
+        )
+    
+    # 사용자명 중복 확인
+    if db.query(User).filter(User.username == user_data.username).first():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username already taken"
+        )
+    
+    # 비밀번호 해싱
+    hashed_password = hash_password(user_data.password)
+    
+    # 사용자 생성
+    new_user = User(
+        email=user_data.email,
+        username=user_data.username,
+        hashed_password=hashed_password,
+        is_active=True,
+        is_verified=False
+    )
+    
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    
+    return {
+        "id": new_user.id,
+        "email": new_user.email,
+        "username": new_user.username,
+        "is_active": new_user.is_active,
+        "created_at": new_user.created_at
+    }
 
 
 # ===== 로그인 =====
 
 @router.post("/login")
 async def login(
-    # user_data: UserLogin,
-    # db: Session = Depends(get_db)
+    user_data: UserLogin,
+    db: Session = Depends(get_db)
 ):
     """
     로그인
@@ -69,11 +101,35 @@ async def login(
     Raises:
         HTTPException: 이메일 또는 비밀번호가 잘못된 경우
     """
-    # TODO: 사용자 조회
-    # TODO: 비밀번호 검증
-    # TODO: 토큰 생성
-    # TODO: 마지막 로그인 시간 업데이트
-    pass
+    # 1. 이메일로 사용자 조회
+    user = db.query(User).filter(User.email == user_data.email).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+        
+    # 2. 비밀번호 검증
+    if not verify_password(user_data.password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+        
+    # 3. 액세스 토큰 생성
+    access_token = create_access_token(data={"sub": str(user.id)})
+    
+    # 4. 리프레시 토큰 생성 (선택 사항, 여기서는 액세스 토큰과 동일한 방식/시간으로 생성하거나 별도 로직 적용)
+    # 현재 구조상 create_refresh_token이 있다고 가정 (imported)
+    refresh_token = create_refresh_token(data={"sub": str(user.id)})
+    
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "refresh_token": refresh_token
+    }
 
 
 # ===== 로그아웃 =====

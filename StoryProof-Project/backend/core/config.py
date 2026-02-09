@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     
     # ===== CORS 설정 =====
-    CORS_ORIGINS: list[str] = ["http://localhost:3000"]
+    CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:3001"]
     CORS_ALLOW_CREDENTIALS: bool = True
     CORS_ALLOW_METHODS: list[str] = ["*"]
     CORS_ALLOW_HEADERS: list[str] = ["*"]
@@ -55,6 +55,10 @@ class Settings(BaseSettings):
     OPENAI_TEMPERATURE: float = 0.7
     OPENAI_MAX_TOKENS: int = 2000
     
+    # ===== Google Gemini 설정 =====
+    GOOGLE_API_KEY: Optional[str] = None
+    GEMINI_MODEL: str = "gemini-2.5-flash"
+    
     # ===== LangChain 설정 =====
     LANGCHAIN_API_KEY: Optional[str] = None
     LANGCHAIN_TRACING: bool = False
@@ -62,6 +66,11 @@ class Settings(BaseSettings):
     # ===== ChromaDB 설정 =====
     CHROMA_PERSIST_DIRECTORY: str = "./data/chroma"
     CHROMA_COLLECTION_NAME: str = "storyproof_novels"
+    
+    # ===== Pinecone 설정 =====
+    PINECONE_API_KEY: Optional[str] = None
+    PINECONE_ENV: str = "your-pinecone-environment"
+    PINECONE_INDEX_NAME: str = "storyproof-index"
     
     # ===== Celery 설정 =====
     CELERY_BROKER_URL: str = "redis://localhost:6379/1"
@@ -81,6 +90,7 @@ class Settings(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = True
+        extra = "ignore"
     
     @property
     def database_url_async(self) -> str:
