@@ -12,3 +12,16 @@
 
 
 ## 비동기 작동순서
+
+
+## 스토리 예측 모델
+< 프론트 엔드 >
+"StoryProof-main\frontend\src\components\PredictionSidebar.tsx"
+FloatingMenu.tsx => 화면 하단에 나오는 버튼 
+chapterDetail.tsx  => 설정파괴 탐지기 
+
+<벡엔드>
+StoryProof-main\backend\api\v1\endpoints\chat.py
+
+
+## 설정파괴 탐지기
