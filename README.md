@@ -115,9 +115,19 @@ npm run dev
 
 `scripts/` 폴더 내의 도구들을 사용하여 데이터를 관리할 수 있습니다. (가상환경 활성화 후 실행)
 
-- **데이터 확인**: `python scripts/quick_check_data.py` - 현재 DB의 데이터 개수 확인.
-- **데이터 초기화**: `python scripts/clear_all_data.py` - DB의 모든 데이터를 삭제(테이블 유지).
-- **소설 데이터 전처리**: `python scripts/prepare_qa_data.py` - `novel_corpus_kr/` 폴더의 소설들을 분석하여 임베딩 데이터 생성.
+### 데이터베이스 관리
+- **DB 초기화**: `python scripts/init_db.py` - 데이터베이스 테이블 생성 및 초기화
+- **데이터 확인**: `python scripts/quick_check_data.py` - 현재 DB의 데이터 개수 확인
+- **상세 DB 확인**: `python scripts/check_db.py` - 데이터베이스 상세 정보 조회
+- **데이터 초기화**: `python scripts/clear_all_data.py` - DB의 모든 데이터를 삭제(테이블 유지)
+
+### 벡터 인덱스 관리
+- **Pinecone 인덱스 생성**: `python scripts/create_index.py` - Pinecone 벡터 인덱스 생성 (최초 1회)
+- **Pinecone 리셋**: `python scripts/reset_pinecone.py` - Pinecone 인덱스 초기화
+- **챕터 벡터화**: `python scripts/vectorize_chapters.py` - 챕터 임베딩 생성 및 저장
+
+### 배치 처리
+- **배치 프로세싱**: `python scripts/batch_process.py` - 여러 소설 일괄 처리
 
 ---
 

@@ -349,19 +349,31 @@ def cancel_task(task_id: str) -> bool:
 # backend/worker/tasks.py
 
 
-import asyncio
 from .celery_app import celery_app
-from backend.services.analysis.agent import StoryConsistencyAgent
 from backend.core.config import settings
 
 @celery_app.task(name="detect_inconsistency_task", bind=True, max_retries=2)
 def detect_inconsistency_task(self, novel_id: int, text_fragment: str, chapter_id: Optional[int] = None):
+    """
+    설정 일관성 검사 비동기 작업
+    
+    Args:
+        novel_id: 소설 ID
+        text_fragment: 검사할 텍스트
+        chapter_id: 챕터 ID (선택사항)
+    
+    Returns:
+        dict: 분석 결과
+    """
     try:
+        from backend.services.agent import StoryConsistencyAgent
+        
         agent = StoryConsistencyAgent(api_key=settings.GOOGLE_API_KEY)
-        # 동기 환경(Celery)에서 비동기 함수 실행
-        result = asyncio.run(agent.check_consistency(novel_id, text_fragment, chapter_id))
+        # 동기 메서드 직접 호출 (Celery는 동기 환경)
+        result = agent.check_consistency(novel_id, text_fragment)
         return result
     except Exception as exc:
+        print(f"[Error] 설정 일관성 검사 실패: {exc}")
         raise self.retry(exc=exc, countdown=30)
 
 # ===== Celery Beat 스케줄 (정기 작업) =====

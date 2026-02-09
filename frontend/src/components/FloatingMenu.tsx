@@ -1,4 +1,4 @@
-import { MessageCircle, MoreVertical, Settings, ShieldAlert, X } from 'lucide-react';
+import { MessageCircle, MoreVertical, Settings, ShieldAlert, X, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 import { ChatInterface } from './ChatBot';
 import '../chatbot.css';
@@ -6,11 +6,12 @@ import '../chatbot.css';
 interface FloatingMenuProps {
     onNavigateToScene?: (sceneIndex: number) => void;
     onCheckConsistency?: () => void;
+    onPredictStory?: () => void;
     novelId?: number;
     chapterId?: number;
 }
 
-export function FloatingMenu({ onNavigateToScene, onCheckConsistency, novelId, chapterId }: FloatingMenuProps) {
+export function FloatingMenu({ onNavigateToScene, onCheckConsistency, onPredictStory, novelId, chapterId }: FloatingMenuProps) {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [isChatOpen, setIsChatOpen] = useState(false);
 
@@ -42,6 +43,17 @@ export function FloatingMenu({ onNavigateToScene, onCheckConsistency, novelId, c
                     <div className="floating-menu-options">
                         <button className="menu-option" onClick={() => alert('환경설정')} title="환경설정">
                             <Settings size={20} />
+                        </button>
+                        <button
+                            className="menu-option highlight-btn-purple"
+                            onClick={() => {
+                                if (onPredictStory) onPredictStory();
+                                setIsMenuOpen(false);
+                            }}
+                            title="스토리 예측 (What-If)"
+                            style={{ backgroundColor: '#EDE9FE', color: '#7C3AED' }}
+                        >
+                            <Sparkles size={20} />
                         </button>
                         <button className="menu-option highlight-btn" onClick={handleConsistencyClick} title="설정파괴분석기">
                             <ShieldAlert size={20} color="#4F46E5" />

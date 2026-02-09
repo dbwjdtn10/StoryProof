@@ -138,56 +138,111 @@ class GeminiStructurer:
     def _detect_hard_anchors(self, text: str) -> List[str]:
         """
         정규표현식을 사용하여 명확한 장/절 구분(Hard Anchors)을 탐색합니다.
-        예: '제1장', 'Chapter 1' 등
+        목차(TOC)를 건너뛰고 본문의 챕터 헤더만 찾습니다.
         """
-        # 1. 챕터 패턴 정의
+        # 1. 챕터 패턴 정의 (모든 변형 포함)
         patterns = [
-            r'^제\s*\d+\s*장.*$',       # 제1장, 제 1 장 등 (줄 시작)
-            r'^\s*제\s*\d+\s*장.*$',     # 공백 후 제1장
-            r'^Chapter\s*\d+.*$',        # Chapter 1
-            r'^\s*Chapter\s*\d+.*$',      # 공백 후 Chapter 1
-            r'^#\s+.*$',                 # Markdown H1
-            r'^##\s+.*$'                 # Markdown H2
+            # 한글 숫자 패턴
+            r'^제\s*\d+\s*장',                # 제1장, 제 1 장
+            r'^\d+\s*장\.',                   # 1장. (숫자만)
+            # 영어 숫자 패턴
+            r'^Chapter\s+\d+',                # Chapter 1
+            r'^CHAPTER\s+\d+',                # CHAPTER 54 (대문자)
+            # 로마 숫자 패턴 (단독 라인) - 개츠비
+            r'^[IVX]{1,8}\s*$',               # I, II, III, IV, V, VI, VII, VIII, IX, X 등
+            r'^[IVXLCDM]{1,10}\s*$',          # 확장 로마 숫자 (최대 80까지)
+            # 유니코드 로마 숫자 (개츠비)
+            r'^[ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩ]+\s*$',           # Ⅰ, Ⅱ, Ⅲ, Ⅳ, Ⅴ, Ⅵ, Ⅶ, Ⅷ, Ⅸ, Ⅹ
+            # 로마 숫자 + 마침표 + 제목 - 셜록
+            r'^[IVX]{1,8}\.\s+',              # I. Title, II. Title
+            r'^[IVXLCDM]{1,10}\.\s+',         # 확장 로마 숫자 + 제목
+            # 한글 로마 숫자 (개츠비) - 단독
+            r'^나\s*$',                        # I (한글)
+            r'^다\s*$',                        # II (한글)
+            r'^라\s*$',                        # III (한글)
+            r'^뷔\s*$',                        # V (한글)
+            # 단일 아라비아 숫자 (개츠비)
+            r'^[1-9]\s*$',                     # 1, 2, 3, ..., 9
+            # 에필로그
+            r'^에필로그',
+            r'^Epilogue',
+            r'^EPILOGUE',
+            # Markdown
+            r'^#\s+',                         # Markdown H1
+            r'^##\s+',                        # Markdown H2
         ]
         
         found_anchors = []
         lines = text.split('\n')
         
-        # 2. 라인 단위 검색
-        for line in lines:
-            line = line.strip()
-            if not line:
+        # 2. 목차(TOC) 범위 찾기 - 목차 전체를 건너뛰기 위함
+        toc_start_idx = -1
+        toc_end_idx = 0
+        consecutive_chapters = 0
+        
+        # 스캔 범위 확대 (500 -> 2000): 모비딕처럼 서문/목차가 긴 경우 대응
+        scan_limit = 2000 
+        
+        for i, line in enumerate(lines[:scan_limit]):
+            line_stripped = line.strip()
+            if not line_stripped:
+                # 빈 줄이라도 목차 중간일 수 있으므로 카운트 리셋하지 않음 (단, 너무 길면 리셋)
                 continue
+            
+            # 목차 명시적 키워드 감지
+            if re.match(r'^(목차|차례|Contents|Table of Contents)', line_stripped, re.IGNORECASE):
+                toc_start_idx = i
+                consecutive_chapters = 3  # 즉시 목차 모드로 진입
+                continue
+
+            # 챕터 패턴 매칭
+            is_chapter = any(re.match(p, line_stripped, re.IGNORECASE) for p in patterns)
+            
+            if is_chapter:
+                if consecutive_chapters == 0:
+                    toc_start_idx = i
+                consecutive_chapters += 1
                 
+                # 3개 이상 연속이면 목차로 간주 (개츠비는 4개)
+                if consecutive_chapters >= 3:
+                    # 목차 끝 찾기: 본문 시작 패턴 감지
+                    # 검색 범위를 현재 위치에서 +1000줄까지로 확대
+                    for j in range(i + 1, min(i + 1000, len(lines))):
+                        check_line = lines[j].strip()
+                        if not check_line:
+                            continue
+                        
+                        # 챕터 패턴이 아니면서 긴 문장이면 본문 시작
+                        is_still_chapter = any(re.match(p, check_line, re.IGNORECASE) for p in patterns)
+                        
+                        if not is_still_chapter and len(check_line) > 30:
+                            toc_end_idx = j
+                            print(f"   [TOC] 목차 감지됨 (Line {toc_start_idx}-{j}). {toc_end_idx}번째 줄부터 본문으로 간주합니다.")
+                            break
+                    break
+            else:
+                consecutive_chapters = 0
+        
+        # 3. 본문에서만 챕터 헤더 검색 (목차 범위는 완전히 건너뛰기)
+        start_line = max(toc_end_idx, 0)
+        
+        for idx, line in enumerate(lines[start_line:], start=start_line):
+            line_stripped = line.strip()
+            if not line_stripped or len(line_stripped) > 100:  # 너무 긴 줄은 제목이 아님
+                continue
+            
             for p in patterns:
-                if re.match(p, line, re.IGNORECASE):
-                    # 너무 짧으면(5자 미만) 앵커로서 부적합할 수 있음
-                    if len(line) >= 4:
-                        # 중복 방지 및 목차 부분 제외 로직은 
-                        # 호출부에서 텍스트 상단을 무시하거나 하는 방식으로 처리 가능
-                        if line not in found_anchors:
-                            found_anchors.append(line)
+                if re.match(p, line_stripped, re.IGNORECASE):
+                    # 최소 길이 체크
+                    if len(line_stripped) >= 1:
+                        # 이제 목차를 완전히 건너뛰었으므로 단순 중복만 체크
+                        if line_stripped not in found_anchors:
+                            found_anchors.append(line_stripped)
                     break
         
-        # 3. 목차(Table of Contents) 필터링
-        # 본문 시작 전에 목차가 나오는 경우 동일한 패턴이 중복될 수 있음.
-        # 간단하게, 본문 뒤쪽(5000자 이후)에서 발견된 것 위주로 하거나, 
-        # 처음 발견된 것들이 너무 붙어있으면(목차) 건너뛰는 방식.
-        if len(found_anchors) > 1:
-            # 첫 번째 장이 나타나는 위치 확인
-            first_idx = text.find(found_anchors[0])
-            second_idx = text.find(found_anchors[1])
-            
-            # 만약 첫 번째와 두 번째 앵커 사이의 거리가 매우 짧다면(예: 300자 미만),
-            # 그것은 목차일 확률이 높음.
-            if second_idx != -1 and (second_idx - first_idx) < 300:
-                print(f"   [TOC] 목차(TOC)로 추정되는 패턴 감지됨. 필터링 후 본문 검색 시도...")
-                # 목차 이후의 텍스트에서 다시 검색하는 복잡도 대신, 
-                # split_scenes 매칭 시 'last_idx'를 활용하여 해결되도록 유도.
-        
         if found_anchors:
-             print(f"   [Anchors] 정규식으로 {len(found_anchors)}개의 후보 앵커 발견: {found_anchors[:3]}...")
-             
+            pass
+        
         return found_anchors
 
     def split_scenes(self, text: str) -> List[str]:
@@ -208,30 +263,37 @@ class GeminiStructurer:
         
         real_prompt = f"""Role: 당신은 전문 소설 편집자입니다.
 
-Task: 아래 소설 전체를 읽고, 이야기의 흐름이 크게 전환되는 "주요 장면(Major Scene)"들의 **시작 부분(첫 50자)**을 찾아주세요.
+Task: 아래 소설 전체를 읽고, **챕터/장(Chapter) 구분**의 시작 부분(첫 30-50자)을 찾아주세요.
 
 **CRITICAL RULES (매우 중요):**
-1. **EXACT MATCH ONLY (정확히 일치해야 함):**
-   - 반환하는 문자열은 원본 텍스트에 있는 문장과 **토씨 하나 틀리지 않고 100% 일치**해야 합니다.
-   - 단어 수정, 요약, 어미 변경, 문장 부호 변경을 **절대 금지**합니다.
-   - 원본 텍스트를 그대로 복사해서 붙여넣으세요.
+1. **CHAPTER HEADERS ONLY (챕터 헤더만):**
+   - **오직 챕터/장 제목만** 찾으세요 (예: "제1장", "Chapter 1", "에필로그" 등)
+   - 단순한 장면 전환, 장소 이동, 시간 경과는 **무시**하세요
+   - 대화 전환, 인물 등장도 **무시**하세요
    
-2. **Anchor Length (길이):**
-   - 씬이 시작되는 문장의 **앞부분 30~50자**만 발췌하세요. 너무 길면 안 됩니다.
-
-3. **Segmentation (분할 기준 - 중요):**
-   - **Chapter/Section 단위로만 나누세요.** (소설 목차 기준)
-   - 단순한 장소 이동, 시간 경과, 대화 전환으로는 쪼개지 마세요.
-   {hard_anchors_hint}
-   - **목표 갯수 (참고용):** 텍스트 길이를 고려할 때 약 **{expected_min}~{expected_max}개** 정도의 챕터가 있을 것으로 **추정**됩니다. 이 숫자는 **참고만 하세요.**
-   - **최우선 기준:** AI인 당신의 판단하에 **이야기의 흐름이 실제로 바뀌는 '챕터/장' 구분**을 최우선으로 따르세요.
-   - 추정치와 다르더라도, 실제 소설의 구조가 그렇다면 소설의 구조를 존중하세요. (단, 50개 이상으로 너무 잘게 쪼개는 것만 피하세요.)
+2. **USE DETECTED ANCHORS (감지된 앵커 우선 사용):**
+{hard_anchors_hint}
+   - 위 목록의 앵커들을 **반드시 포함**하세요
+   - 이것들은 정규식으로 확인된 **확실한 챕터 헤더**입니다
+   
+3. **EXACT MATCH ONLY (정확히 일치해야 함):**
+   - 반환하는 문자열은 원본 텍스트와 **100% 일치**해야 합니다
+   - 단어 수정, 요약, 어미 변경 **절대 금지**
+   - 원본을 그대로 복사하세요
+   
+4. **Anchor Length (길이):**
+   - 챕터 제목의 **전체 또는 앞부분 30-50자**만 발췌하세요
+   
+5. **Expected Count (예상 개수):**
+   - 정규식으로 {len(hard_anchors)}개의 챕터 헤더를 발견했습니다
+   - 이 숫자와 **거의 일치**해야 합니다 (±5개 이내)
+   - 만약 크게 다르다면, 챕터가 아닌 것을 포함했을 가능성이 높습니다
 
 Original Text:
 {text}
 
 Output Format (JSON List of Strings):
-["Scene 1 Start Text...", "Scene 2 Start Text..."]
+["제1장. ...", "제2장. ...", "에필로그", ...]
 """
         try:
             print(f"--- LLM 씬 분할(Anchor 방식) 시작... (텍스트 길이: {len(text)}자)")
@@ -259,7 +321,7 @@ Output Format (JSON List of Strings):
             text_len = len(text)
             
             for anchor in start_anchors:
-                if not anchor or len(anchor.strip()) < 5:
+                if not anchor or len(anchor.strip()) < 2:  # 최소 길이 2로 완화
                     continue
                     
                 # A. 정확히 일치 (Exact Match)
@@ -268,31 +330,71 @@ Output Format (JSON List of Strings):
                 # B. 공백 정규화 및 부분 일치 (Whitespace Normalized Match)
                 if idx == -1:
                     import re
-                    # 앵커의 앞 20자리만 추출하여 검색 (줄바꿈/공백 정규화)
-                    clean_seed = re.sub(r'\s+', ' ', anchor).strip()[:20]
+                    # 앵커의 앞 30자리만 추출하여 검색 (줄바꿈/공백 정규화)
+                    clean_seed = re.sub(r'\s+', ' ', anchor).strip()[:30]
                     # 특수문자 이스케이프
                     pattern_str = re.escape(clean_seed).replace(r'\ ', r'\s+')
                     logging_pattern = re.compile(pattern_str)
                     
-                    # 검색 범위 제한 (속도 최적화: 현재 위치 + 5000자)
-                    search_limit = min(last_idx + 5000, len(text))
+                    # 검색 범위 확대 (5000 -> 10000자)
+                    search_limit = min(last_idx + 10000, len(text))
                     search_region = text[last_idx+1:search_limit]
                     
                     match = logging_pattern.search(search_region)
                     if match:
                         idx = last_idx + 1 + match.start()
-                        print(f"    [Match] 부분/공백 정규화 매칭 성공: '{anchor[:10]}...'")
+                        print(f"    [Match] 부분/공백 정규화 매칭 성공: '{anchor[:15]}...'")
 
-                # C. 퍼지 매칭 (Fuzzy Match - difflib)
+                # C. 장 번호 패턴 직접 매칭 (개선됨)
+                if idx == -1:
+                    # 앵커에서 장 번호 추출
+                    chapter_patterns = [
+                        r'제\s*(\d+)\s*장',      # 제1장, 제 1 장
+                        r'^(\d+)\s*장',          # 1장, 5장
+                        r'Chapter\s*(\d+)',      # Chapter 1
+                        r'CHAPTER\s*(\d+)',      # CHAPTER 1
+                        r'^([IVX]{1,8})\s*$',    # I, II, III (로마 숫자)
+                        r'^([IVX]{1,8})\.',      # I., II.
+                    ]
+                    
+                    chapter_num = None
+                    for cp in chapter_patterns:
+                        m = re.search(cp, anchor, re.IGNORECASE)
+                        if m:
+                            chapter_num = m.group(1)
+                            break
+                    
+                    if chapter_num:
+                        # 텍스트에서 같은 장 번호 찾기 (더 넓은 범위)
+                        search_start = last_idx + 1
+                        search_end = min(search_start + 15000, len(text))  # 범위 확대
+                        search_region = text[search_start:search_end]
+                        
+                        # 여러 패턴으로 시도
+                        search_patterns = [
+                            rf'제\s*{chapter_num}\s*장',
+                            rf'^{chapter_num}\s*장',
+                            rf'Chapter\s*{chapter_num}',
+                            rf'CHAPTER\s*{chapter_num}',
+                        ]
+                        
+                        for sp in search_patterns:
+                            chap_match = re.search(sp, search_region, re.MULTILINE | re.IGNORECASE)
+                            if chap_match:
+                                idx = search_start + chap_match.start()
+                                print(f"    [Pattern Match] 장 번호 패턴 매칭 성공: '{chapter_num}장' at position {idx}")
+                                break
+
+                # D. 퍼지 매칭 (Fuzzy Match - difflib) - 개선됨
                 if idx == -1:
                     import difflib
-                    search_window = 3000  # 검색 범위 확대
+                    search_window = 5000  # 검색 범위 확대
                     search_start = last_idx + 1
                     search_end = min(search_start + search_window, len(text))
                     search_region = text[search_start:search_end]
                     
                     # 앵커가 '제N장' 이나 'Chapter' 로 시작하는지 확인
-                    is_chapter = re.search(r'(제\s*\d+\s*장|Chapter\s*\d+)', anchor, re.IGNORECASE)
+                    is_chapter = re.search(r'(제\s*\d+\s*장|Chapter\s*\d+|\d+\s*장)', anchor, re.IGNORECASE)
                     
                     if is_chapter:
                         # 장 번호 패턴으로 직접 검색 시도
@@ -300,25 +402,25 @@ Output Format (JSON List of Strings):
                         chap_match = re.search(chap_p, search_region, re.IGNORECASE)
                         if chap_match:
                             idx = search_start + chap_match.start()
-                            print(f"    [Pattern Match] 장 번호 패턴 매칭 성공: '{anchor[:15]}...'")
+                            print(f"    [Pattern Match] 장 번호 패턴 매칭 성공: '{anchor[:20]}...'")
                     
                     if idx == -1:
                         # difflib으로 유사한 부분 찾기
-                        # 앵커가 길면 앞부분 30자만 비교
-                        compare_anchor = anchor[:30]
+                        # 앵커가 길면 앞부분 40자만 비교 (30 -> 40으로 확대)
+                        compare_anchor = anchor[:40]
                         s = difflib.SequenceMatcher(None, search_region, compare_anchor)
                         match = s.find_longest_match(0, len(search_region), 0, len(compare_anchor))
                         
-                        # 매칭된 길이가 15자 이상이면 인정
-                        if match.size > 15:
+                        # 매칭된 길이가 10자 이상이면 인정 (15 -> 10으로 완화)
+                        if match.size >= 10:
                             idx = search_start + match.a
-                            print(f"    [Fuzzy Match] 퍼지 매칭 성공({match.size}자): '{search_region[match.a:match.a+10]}...'")
+                            print(f"    [Fuzzy Match] 퍼지 매칭 성공({match.size}자): '{search_region[match.a:match.a+15]}...'")
 
                 if idx != -1:
                     start_indices.append(idx)
                     last_idx = idx
                 else:
-                    clean_display = anchor.replace('\n', ' ')[:40]
+                    clean_display = anchor.replace('\n', ' ')[:50]
                     print(f"[Warning] 앵커 찾기 실패 (통합됨): '{clean_display}...'")
 
             # 2. 인덱스 기반으로 자르기
@@ -337,7 +439,7 @@ Output Format (JSON List of Strings):
                 if scene_content:
                     scenes.append(scene_content)
             
-            print(f"✅ LLM 씬 분할 완료: {len(scenes)}개 씬 생성")
+            print(f"[OK] LLM 씬 분할 완료: {len(scenes)}개 씬 생성")
             return scenes
 
         except Exception as e:
@@ -518,10 +620,10 @@ Output Format (JSON List of Strings):
                 
                 all_key_events.extend(batch_result.get('key_events', []))
                 
-                print(f"    ✓ 배치 {batch_idx + 1} 완료")
+                print(f"    [Done] 배치 {batch_idx + 1} 완료")
                 
             except Exception as e:
-                print(f"    ⚠️ 배치 {batch_idx + 1} 처리 실패: {e}")
+                print(f"    [Warning] 배치 {batch_idx + 1} 처리 실패: {e}")
                 continue
         
         # 최종 결과 구성
@@ -533,7 +635,7 @@ Output Format (JSON List of Strings):
             "scenes": full_scenes_data
         }
         
-        print(f"✅ 배치 처리 완료: {len(result['characters'])}명, {len(result['items'])}개 아이템, {len(result['locations'])}개 장소")
+        print(f"[OK] 배치 처리 완료: {len(result['characters'])}명, {len(result['items'])}개 아이템, {len(result['locations'])}개 장소")
         
         return result
             

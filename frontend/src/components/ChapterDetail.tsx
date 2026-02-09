@@ -3,7 +3,8 @@ import { useState, useEffect } from 'react';
 import { FloatingMenu } from './FloatingMenu';
 import { ThemeToggle } from './ThemeToggle';
 import { getChapter, updateChapter, getChapterBible, reanalyzeChapter, BibleData } from '../api/novel';
-import { AnalysisResultModal, AnalysisResult } from './AnalysisResultModal';
+import { AnalysisSidebar, AnalysisResult } from './AnalysisSidebar';
+import { PredictionModal } from './PredictionModal';
 
 interface ChapterDetailProps {
     fileName: string;
@@ -194,9 +195,12 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId }: ChapterD
     const [selectedExtraItem, setSelectedExtraItem] = useState<{ title: string, item: any } | null>(null);
 
     // 설정 파괴 분석 상태
-    const [isAnalysisModalOpen, setIsAnalysisModalOpen] = useState(false);
+    const [isAnalysisSidebarOpen, setIsAnalysisSidebarOpen] = useState(false);
     const [isAnalysisLoading, setIsAnalysisLoading] = useState(false);
     const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
+
+    // 스토리 예측 상태
+    const [isPredictionModalOpen, setIsPredictionModalOpen] = useState(false);
 
     const [selectedLocation, setSelectedLocation] = useState<any | null>(null);
     const [extraSectionStates, setExtraSectionStates] = useState<Record<string, boolean>>({});
@@ -241,7 +245,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId }: ChapterD
 
     // 설정 파괴 분석 실행
     const handleCheckConsistency = async () => {
-        setIsAnalysisModalOpen(true);
+        setIsAnalysisSidebarOpen(true);
         setIsAnalysisLoading(true);
         setAnalysisResult(null);
 
@@ -771,10 +775,18 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId }: ChapterD
                                             ) : (
                                                 <textarea
                                                     value={text}
-                                                    autoFocus
+
                                                     onBlur={() => setEditingSceneIndex(null)}
                                                     ref={(el) => {
-                                                        if (el) adjustTextareaHeight(el);
+                                                        if (el) {
+                                                            adjustTextareaHeight(el);
+                                                            // Focus and move cursor to end instead of beginning
+                                                            if (document.activeElement !== el) {
+                                                                el.focus();
+                                                                const length = el.value.length;
+                                                                el.setSelectionRange(length, length);
+                                                            }
+                                                        }
                                                     }}
                                                     onInput={(e) => adjustTextareaHeight(e.currentTarget)}
                                                     onChange={(e) => {
@@ -1403,19 +1415,42 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId }: ChapterD
             {/* Theme Toggle */}
             <ThemeToggle />
 
-            {/* 설정 파괴 분석 결과 모달 */}
-            <AnalysisResultModal
-                isOpen={isAnalysisModalOpen}
-                onClose={() => setIsAnalysisModalOpen(false)}
+            {/* 설정 파괴 분석 결과 사이드바 */}
+            <AnalysisSidebar
+                isOpen={isAnalysisSidebarOpen}
+                onClose={() => setIsAnalysisSidebarOpen(false)}
                 result={analysisResult}
                 isLoading={isAnalysisLoading}
-                onNavigate={handleNavigateToQuote}
+                onNavigateToQuote={handleNavigateToQuote}
             />
 
-            {/* Floating Menu - Settings, Analysis, Chatbot */}
+            {/* 스토리 예측 모달 */}
+            <PredictionModal
+                isOpen={isPredictionModalOpen}
+                onClose={() => setIsPredictionModalOpen(false)}
+                onPredict={async (scenario: string) => {
+                    if (!novelId) return null;
+                    try {
+                        const response = await fetch('http://localhost:8000/api/v1/analysis/prediction', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ novel_id: novelId, text: scenario })
+                        });
+                        if (!response.ok) throw new Error('Prediction failed');
+                        const data = await response.json();
+                        return data.result?.prediction || data.result || '예측 결과를 가져올 수 없습니다.';
+                    } catch (error) {
+                        console.error('Prediction error:', error);
+                        return null;
+                    }
+                }}
+            />
+
+            {/* Floating Menu - Settings, Analysis, Prediction, Chatbot */}
             <FloatingMenu
                 onNavigateToScene={scrollToScene}
                 onCheckConsistency={handleCheckConsistency}
+                onPredictStory={() => setIsPredictionModalOpen(true)}
                 novelId={novelId}
                 chapterId={chapterId}
             />

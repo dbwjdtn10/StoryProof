@@ -1,15 +1,27 @@
+"""
+소설 서비스 모듈
+
+소설 및 챕터의 CRUD 작업, 파일 업로드, 분석 요청 등을 처리하는 서비스입니다.
+"""
+
 from typing import List, Optional, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from fastapi import HTTPException, status, UploadFile
 import chardet
 from datetime import datetime
+import logging
 
 from backend.db.models import Novel, Chapter, VectorDocument
 from backend.schemas.novel_schema import NovelCreate, NovelUpdate, ChapterUpdate
 from backend.core.config import settings
 
+# 로거 설정
+logger = logging.getLogger(__name__)
+
+
 class NovelService:
+    """소설 및 챕터 관리 서비스"""
     @staticmethod
     def get_novels(
         db: Session, 
@@ -19,7 +31,20 @@ class NovelService:
         search: Optional[str] = None,
         genre: Optional[str] = None
     ) -> Tuple[List[Novel], int]:
-        """소설 목록 조회 및 총 개수 반환"""
+        """
+        사용자의 소설 목록 조회 (페이지네이션 및 필터링 지원)
+        
+        Args:
+            db: 데이터베이스 세션
+            user_id: 사용자 ID
+            skip: 건너뛸 레코드 수 (페이지네이션)
+            limit: 조회할 최대 레코드 수
+            search: 검색어 (제목 또는 설명에서 검색)
+            genre: 장르 필터
+            
+        Returns:
+            Tuple[List[Novel], int]: (소설 목록, 전체 개수)
+        """
         query = db.query(Novel).filter(Novel.author_id == user_id)
         
         if search:
@@ -37,7 +62,20 @@ class NovelService:
 
     @staticmethod
     def get_novel(db: Session, novel_id: int, user_id: int) -> Novel:
-        """소설 상세 조회 (권한 확인 포함)"""
+        """
+        소설 상세 정보 조회
+        
+        Args:
+            db: 데이터베이스 세션
+            novel_id: 소설 ID
+            user_id: 사용자 ID
+            
+        Returns:
+            Novel: 소설 객체
+            
+        Raises:
+            HTTPException: 소설을 찾을 수 없는 경우
+        """
         novel = db.query(Novel).filter(Novel.id == novel_id).first()
         if not novel:
             raise HTTPException(
@@ -55,7 +93,17 @@ class NovelService:
 
     @staticmethod
     def create_novel(db: Session, novel_data: NovelCreate, user_id: int) -> Novel:
-        """소설 생성"""
+        """
+        새로운 소설 생성
+        
+        Args:
+            db: 데이터베이스 세션
+            novel_data: 소설 생성 데이터
+            user_id: 작성자 ID
+            
+        Returns:
+            Novel: 생성된 소설 객체
+        """
         novel = Novel(
             title=novel_data.title,
             description=novel_data.description,
@@ -111,7 +159,22 @@ class NovelService:
 
     @staticmethod
     def analyze_chapter(db: Session, novel_id: int, chapter_id: int, user_id: int, is_admin: bool = False) -> None:
-        """회차 분석 요청 (Celery Task 트리거)"""
+        """
+        챕터 분석 요청 (백그라운드 작업 트리거)
+        
+        Celery 워커를 통해 비동기로 챕터 분석을 수행합니다.
+        인물, 장소, 아이템 등의 스토리보드 요소를 추출합니다.
+        
+        Args:
+            db: 데이터베이스 세션
+            novel_id: 소설 ID
+            chapter_id: 챕터 ID
+            user_id: 사용자 ID
+            is_admin: 관리자 권한 여부
+            
+        Returns:
+            Dict: 분석 시작 상태 정보
+        """
         # 1. 권한 확인
         chapter = NovelService.get_chapter(db, novel_id, chapter_id, user_id, is_admin)
         
@@ -169,7 +232,27 @@ class NovelService:
         title: str,
         is_admin: bool = False
     ) -> Chapter:
-        """파일 업로드로 회차 생성 및 분석 트리거"""
+        """
+        파일 업로드를 통한 챕터 생성 및 자동 분석 트리거
+        
+        TXT 파일을 업로드하여 새로운 챕터를 생성하고,
+        자동으로 백그라운드 분석 작업을 시작합니다.
+        
+        Args:
+            db: 데이터베이스 세션
+            novel_id: 소설 ID
+            user_id: 사용자 ID
+            file: 업로드된 파일 객체
+            chapter_number: 챕터 번호
+            title: 챕터 제목
+            is_admin: 관리자 권한 여부
+            
+        Returns:
+            Chapter: 생성된 챕터 객체
+            
+        Raises:
+            HTTPException: 파일이 비어있거나, 중복 챕터 번호인 경우
+        """
         # 1. 소설 조회 및 권한 확인
         novel = db.query(Novel).filter(Novel.id == novel_id).first()
         if not novel:
@@ -221,7 +304,21 @@ class NovelService:
 
     @staticmethod
     async def _load_txt_content(file: UploadFile) -> str:
-        """TXT 파일 내용 읽기 (인코딩 자동 감지)"""
+        """
+        TXT 파일 내용 읽기 (인코딩 자동 감지)
+        
+        chardet 라이브러리를 사용하여 파일 인코딩을 자동으로 감지하고,
+        실패 시 일반적인 인코딩들을 순차적으로 시도합니다.
+        
+        Args:
+            file: 업로드된 파일 객체
+            
+        Returns:
+            str: 디코딩된 파일 내용
+            
+        Raises:
+            HTTPException: 지원하지 않는 인코딩인 경우
+        """
         raw_data = await file.read()
         
         # 1. chardet으로 감지

@@ -52,6 +52,30 @@ async def get_task_result(task_id: str):
     return {"status": "PROCESSING"}
 
 
+class PredictionRequest(BaseModel):
+    novel_id: int
+    text: str
+
+
+@router.post("/prediction", status_code=status.HTTP_200_OK)
+def request_prediction(request: PredictionRequest):
+    """
+    스토리 예측 요청 (동기 처리)
+    
+    사용자의 What-If 가정을 바탕으로 스토리 전개를 예측합니다.
+    """
+    from backend.services.agent import StoryConsistencyAgent
+    from backend.core.config import settings
+    
+    try:
+        agent = StoryConsistencyAgent(api_key=settings.GOOGLE_API_KEY)
+        # 동기 메서드 직접 호출 (FastAPI가 자동으로 threadpool에서 실행)
+        result = agent.predict_story(request.novel_id, request.text)
+        return {"result": result, "status": "COMPLETED"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ===== 소설 전체 분석 요청 =====
 
 @router.post("/novels/{novel_id}", status_code=status.HTTP_202_ACCEPTED)
