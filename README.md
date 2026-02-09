@@ -41,6 +41,7 @@ StoryProof-main\backend\api\v1\endpoints\chat.py
 ## 설정파괴 탐지기
 
 < 프론트 엔드 >
+
 chapterDetail.tsx  => 설정파괴 탐지기 
 
 < 벡엔드 >
