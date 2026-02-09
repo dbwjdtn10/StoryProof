@@ -37,7 +37,7 @@ StoryProof-main\backend\schemas\chat_schema.py ==> 요청과 응답
 
 2. 검색 (Retrieval): 사용자가 "다음 내용은 어떻게 될까?"라고 물으면, 백엔드는 그 질문과 가장 유사하거나 맥락이 이어지는 일부 장면들만 Pinecone에서 찾아냅니다.
 
-3. 답변 생성 (Generation): 찾아낸*특정 장면들(Context)과 사용자의 질문을 Gemini AI에게 전달하여 "이 내용을 바탕으로 예측해줘"라고 요청합니다.
+3. 답변 생성 (Generation): 찾아낸 특정 장면들(Context)과 사용자의 질문을 Gemini AI에게 전달하여 "이 내용을 바탕으로 예측해줘"라고 요청합니다.
 
 
 
