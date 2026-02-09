@@ -50,5 +50,12 @@ chapterDetail.tsx  => 설정파괴 탐지기
 
 < 벡엔드 >
 
+backend/worker/celery_app.py => 비동기 처리 작업실행
 
+backend\worker\tasks.py => Celery 비동기 작업 정의
 
+backend/services/agent.py  => agent 정의 및 실행
+
+backend/services/chatbot_service.py => 챗봇 실행
+
+backend/services/analysis/ => 분석 엔진 
