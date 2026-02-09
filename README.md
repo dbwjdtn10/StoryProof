@@ -17,11 +17,15 @@
 ## 스토리 예측 모델 : 질문과 관련된 부분만 찾아내서 읽는 방식(rag)
 
 < 프론트 엔드 >
+
 "StoryProof-main\frontend\src\components\PredictionSidebar.tsx"
 
 FloatingMenu.tsx => 화면 하단에 나오는 버튼 
 
-chapterDetail.tsx  => 설정파괴 탐지기 
+
+<벡엔드>
+
+StoryProof-main\backend\api\v1\endpoints\chat.py
 
 
 ## 스토리 예측 모델 동작원리
@@ -31,9 +35,15 @@ chapterDetail.tsx  => 설정파괴 탐지기
 
 3. 답변 생성 (Generation): 찾아낸 **특정 장면들(Context)**과 사용자의 질문을 Gemini AI에게 전달하여 "이 내용을 바탕으로 예측해줘"라고 요청합니다.
 
-<벡엔드>
 
-StoryProof-main\backend\api\v1\endpoints\chat.py
 
 
 ## 설정파괴 탐지기
+
+< 프론트 엔드 >
+chapterDetail.tsx  => 설정파괴 탐지기 
+
+< 벡엔드 >
+
+
+
