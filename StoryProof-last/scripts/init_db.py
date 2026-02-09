@@ -85,6 +85,7 @@ def create_seed_data(engine):
             email="test@example.com",
             username="testuser",
             hashed_password=hash_password("testpassword123"),
+            mode="writer",
             is_active=True,
             is_verified=True
         )
@@ -143,11 +144,28 @@ def main():
         print("✅ 데이터베이스 연결 성공!")
         
     except Exception as e:
-        print(f"❌ 데이터베이스 연결 실패: {e}")
-        print("\n💡 해결 방법:")
-        print("   1. PostgreSQL이 실행 중인지 확인하세요")
-        print("   2. .env 파일의 DATABASE_URL이 올바른지 확인하세요")
-        print("   3. 데이터베이스가 생성되어 있는지 확인하세요")
+        # 인코딩 오류 처리 (Windows 한글 메시지 이슈)
+        error_msg = str(e)
+        is_decode_error = False
+        try:
+             str(e)
+        except UnicodeDecodeError:
+            is_decode_error = True
+
+        print(f"❌ 데이터베이스 연결 실패!")
+        
+        if is_decode_error or "utf-8" in error_msg.lower():
+            print("\n⚠️ 인코딩 오류(UnicodeDecodeError)가 감지되었습니다.")
+            print("이것은 보통 '데이터베이스가 존재하지 않거나' '비밀번호가 틀렸을 때'")
+            print("PostgreSQL이 보내는 한글 오류 메시지를 파이썬이 읽지 못해 발생합니다.")
+            print("\n🚀 해결 방법:")
+            print("   1. DB 관리 도구(DBeaver 등)에서 'CREATE DATABASE storyproof;' 명령어를 실행하세요.")
+            print("   2. .env 파일의 비밀번호(postgres)가 맞는지 확인하세요.")
+        else:
+            print(f"   에러 내용: {e}")
+            print("\n💡 일반적인 해결 방법:")
+            print("   1. PostgreSQL이 실행 중인지 확인하세요 (Docker Desktop 확인)")
+            print("   2. .env 파일의 DATABASE_URL이 올바른지 확인하세요")
         return 1
     
     # 리셋 모드

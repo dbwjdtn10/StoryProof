@@ -1,4 +1,4 @@
-import { ArrowLeft, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Users, Package, Clock, Save, MapPin } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Users, Package, Clock, Save, MapPin, Search, MessageCircle } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { FloatingMenu } from './FloatingMenu';
 import { ThemeToggle } from './ThemeToggle';
@@ -10,9 +10,10 @@ interface ChapterDetailProps {
     onBack: () => void;
     novelId?: number;
     chapterId?: number;
+    mode?: 'reader' | 'writer';
 }
 
-export function ChapterDetail({ fileName, onBack, novelId, chapterId }: ChapterDetailProps) {
+export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode }: ChapterDetailProps) {
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const [isCharactersOpen, setIsCharactersOpen] = useState(true);
     const [isItemsOpen, setIsItemsOpen] = useState(false);
@@ -37,6 +38,36 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId }: ChapterD
         text: string;
         timestamp: number;
     } | null>(null);
+
+    // AI Dictionary Selection State
+    const [selectedText, setSelectedText] = useState("");
+    const [selectionCoords, setSelectionCoords] = useState<{ x: number, y: number } | null>(null);
+
+    const handleTextSelection = () => {
+        if (mode !== 'reader') return;
+
+        const selection = window.getSelection();
+        const text = selection?.toString().trim();
+
+        if (text && text.length > 0 && text.length < 50) {
+            const range = selection?.getRangeAt(0);
+            const rect = range?.getBoundingClientRect();
+            if (rect) {
+                setSelectedText(text);
+                setSelectionCoords({
+                    x: rect.left + (rect.width / 2),
+                    y: rect.top + window.scrollY - 40
+                });
+            }
+        } else {
+            setSelectionCoords(null);
+        }
+    };
+
+    const handleOpenAIdictionary = () => {
+        alert(`'${selectedText}'에 대한 AI 어휘 사전 설명을 생성합니다...`);
+        setSelectionCoords(null);
+    };
 
     // Track which scene is currently being edited
     const [editingSceneIndex, setEditingSceneIndex] = useState<number | null>(null);
@@ -458,13 +489,24 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId }: ChapterD
                 }}>
                     <ArrowLeft size={24} color="#4B5563" />
                 </button>
-                <div style={{ flex: 1 }}>
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '12px' }}>
                     <h1 className="chapter-detail-title" style={{
                         fontSize: '1.25rem',
                         fontWeight: 600,
                         color: '#1F2937',
                         margin: 0
                     }}>{fileName}</h1>
+                    <span style={{
+                        padding: '4px 10px',
+                        borderRadius: '12px',
+                        backgroundColor: mode === 'reader' ? '#E0F2FE' : '#EEF2FF',
+                        color: mode === 'reader' ? '#0369A1' : '#4F46E5',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        border: mode === 'reader' ? '1px solid #BAE6FD' : '1px solid #C7D2FE'
+                    }}>
+                        {mode === 'reader' ? '📖 독자 모드' : '✍️ 작가 모드'}
+                    </span>
                 </div>
                 {novelId && chapterId && (
                     <div style={{ display: 'flex', gap: '8px' }}>
@@ -472,7 +514,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId }: ChapterD
                             className="reanalyze-button"
                             onClick={handleReanalyze}
                             disabled={chapterStatus === 'PROCESSING' || chapterStatus === 'PENDING' || isAnalyzing}
-                            title={(chapterStatus === 'PROCESSING' || chapterStatus === 'PENDING') ? "분석 진행 중..." : "AI 재분석"}
+                            title={(chapterStatus === 'PROCESSING' || chapterStatus === 'PENDING') ? "분석 진행 중..." : (mode === 'reader' ? "AI 심층 해설 생성" : "AI 설정 분석")}
                             style={{
                                 display: 'flex',
                                 alignItems: 'center',
@@ -488,29 +530,53 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId }: ChapterD
                             }}
                         >
                             <Clock size={16} className={(chapterStatus === 'PROCESSING' || chapterStatus === 'PENDING' || isAnalyzing) ? "spin-animation" : ""} />
-                            {(chapterStatus === 'PROCESSING' || chapterStatus === 'PENDING' || isAnalyzing) ? '분석 중...' : '재분석'}
+                            {(chapterStatus === 'PROCESSING' || chapterStatus === 'PENDING' || isAnalyzing) ? '처리 중...' : (mode === 'reader' ? '심층 해설' : '설정 분석')}
                         </button>
-                        <button
-                            className="save-button"
-                            onClick={handleSave}
-                            disabled={isSaving}
-                            style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '8px',
-                                padding: '8px 16px',
-                                backgroundColor: '#4F46E5',
-                                color: 'white',
-                                border: 'none',
-                                borderRadius: '6px',
-                                cursor: isSaving ? 'wait' : 'pointer',
-                                fontSize: '0.9rem',
-                                fontWeight: 500
-                            }}
-                        >
-                            <Save size={18} />
-                            {isSaving ? '저장 중...' : '저장'}
-                        </button>
+                        {mode === 'reader' && (
+                            <button
+                                className="reader-tool-btn"
+                                onClick={() => alert("나머지 장면 코멘트들을 불러옵니다.")}
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                    padding: '8px 16px',
+                                    backgroundColor: 'white',
+                                    color: '#0369A1',
+                                    border: '1px solid #0369A1',
+                                    borderRadius: '6px',
+                                    cursor: 'pointer',
+                                    fontSize: '0.9rem',
+                                    fontWeight: 500
+                                }}
+                            >
+                                <MessageCircle size={16} />
+                                독자 코멘트
+                            </button>
+                        )}
+                        {mode !== 'reader' && (
+                            <button
+                                className="save-button"
+                                onClick={handleSave}
+                                disabled={isSaving}
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                    padding: '8px 16px',
+                                    backgroundColor: '#4F46E5',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '6px',
+                                    cursor: isSaving ? 'wait' : 'pointer',
+                                    fontSize: '0.9rem',
+                                    fontWeight: 500
+                                }}
+                            >
+                                <Save size={18} />
+                                {isSaving ? '저장 중...' : '저장'}
+                            </button>
+                        )}
                     </div>
                 )}
             </div>
@@ -723,8 +789,11 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId }: ChapterD
                     {isSidebarOpen ? <ChevronLeft size={20} /> : <ChevronRight size={20} />}
                 </button>
 
-                {/* Main Text Area */}
-                <div className="text-area" style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                <div
+                    className="text-area"
+                    style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
+                    onMouseUp={handleTextSelection}
+                >
                     <div className="text-content" style={{ flex: 1, padding: 0, height: '100%' }}>
                         {isLoading ? (
                             <div style={{ padding: '20px', textAlign: 'center' }}>로딩 중...</div>
@@ -823,6 +892,33 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId }: ChapterD
                                 }}
                                 spellCheck={false}
                             />
+                        )}
+                        {selectionCoords && (
+                            <button
+                                onClick={handleOpenAIdictionary}
+                                style={{
+                                    position: 'fixed',
+                                    top: selectionCoords.y,
+                                    left: selectionCoords.x,
+                                    transform: 'translateX(-50%)',
+                                    padding: '8px 12px',
+                                    backgroundColor: '#0369A1',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '20px',
+                                    fontSize: '12px',
+                                    fontWeight: 600,
+                                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                                    zIndex: 1000,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                <Search size={14} />
+                                AI 어휘 사전
+                            </button>
                         )}
                     </div>
                 </div>
@@ -1416,8 +1512,11 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId }: ChapterD
             <FloatingMenu
                 onNavigateToScene={scrollToScene}
                 onCheckConsistency={handleCheckConsistency}
+                onCheckPlotHoles={() => alert("스토리의 개연성과 플롯홀을 분석합니다...")}
+                onOpenDictionary={() => alert("AI 어휘 사전 기능을 활성화합니다. 본문의 단어를 드래그해보세요.")}
                 novelId={novelId}
                 chapterId={chapterId}
+                mode={mode}
             />
         </div >
     );

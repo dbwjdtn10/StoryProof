@@ -36,6 +36,7 @@ class AuthService:
             email=user_data.email,
             username=user_data.username,
             hashed_password=hashed_password,
+            mode=user_data.mode,
             is_active=True,
             is_verified=False
         )
@@ -45,6 +46,17 @@ class AuthService:
         db.refresh(new_user)
         
         return new_user
+
+    @staticmethod
+    def get_user_by_id(db: Session, user_id: int) -> User:
+        """ID로 사용자 조회"""
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+        return user
 
     @staticmethod
     def login_user(db: Session, user_data: UserLogin) -> Dict[str, Any]:
@@ -74,5 +86,6 @@ class AuthService:
             "access_token": access_token,
             "token_type": "bearer",
             "refresh_token": refresh_token,
+            "mode": user.mode,
             "expires_in": settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
         }

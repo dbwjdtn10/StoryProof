@@ -57,8 +57,11 @@ class EmbeddingSearchEngine:
             self.pc = Pinecone(api_key=self.pinecone_api_key)
             
             # 인덱스 확인
-            if self.index_name not in [idx.name for idx in self.pc.list_indexes()]:
+            existing_indexes = [idx.name for idx in self.pc.list_indexes()]
+            if self.index_name not in existing_indexes:
                 print(f"⚠️ Pinecone 인덱스 '{self.index_name}'가 존재하지 않습니다.")
+                print(f"   현재 인덱스 목록: {existing_indexes}")
+                # 인덱스가 없으면 None 상태를 유지하거나 명시적으로 에러를 던질 수 있음
             else:
                 self.index = self.pc.Index(self.index_name)
                 print(f"✅ Pinecone 인덱스 연결: {self.index_name}")
@@ -194,6 +197,8 @@ class EmbeddingSearchEngine:
                 
                 for i in range(0, len(vectors_to_upsert), batch_size):
                     batch = vectors_to_upsert[i:i + batch_size]
+                    if self.index is None:
+                        raise RuntimeError(f"Pinecone 인덱스 '{self.index_name}'에 연결되지 않았습니다. 인덱스가 생성되어 있는지 확인하세요.")
                     self.index.upsert(vectors=batch)
             
             db.commit()
