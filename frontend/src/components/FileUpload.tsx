@@ -5,14 +5,13 @@ import { getChapters, uploadChapter, deleteChapter, getStoryboardStatus, Chapter
 
 interface FileUploadProps {
     onFileClick: (chapter: Chapter) => void;
-    novelId?: number;
 }
 
 interface ChapterWithProgress extends Chapter {
     storyboardProgress?: StoryboardProgress;
 }
 
-export function FileUpload({ onFileClick, novelId }: FileUploadProps) {
+export function FileUpload({ onFileClick }: FileUploadProps) {
     const [uploadedFiles, setUploadedFiles] = useState<ChapterWithProgress[]>([]);
     const [dragActive, setDragActive] = useState(false);
     const [progressMap, setProgressMap] = useState<{ [key: number]: StoryboardProgress }>({});
@@ -20,8 +19,7 @@ export function FileUpload({ onFileClick, novelId }: FileUploadProps) {
     const progressIntervalRef = useRef<{ [key: number]: NodeJS.Timeout }>({});
 
     // 진행 상황 조회 함수
-    const fetchStoryboardStatus = async (chapterId: number) => {
-        if (!novelId) return;
+    const fetchStoryboardStatus = async (novelId: number, chapterId: number) => {
         try {
             const status = await getStoryboardStatus(novelId, chapterId);
             setProgressMap(prev => ({ ...prev, [chapterId]: status }));
@@ -40,7 +38,7 @@ export function FileUpload({ onFileClick, novelId }: FileUploadProps) {
     };
 
     // 진행 상황 폴링 시작
-    const startProgressPolling = (chapterId: number) => {
+    const startProgressPolling = (novelId: number, chapterId: number) => {
         // 기존 폴링이 있으면 중지
         if (progressIntervalRef.current[chapterId]) {
             clearInterval(progressIntervalRef.current[chapterId]);
@@ -48,25 +46,31 @@ export function FileUpload({ onFileClick, novelId }: FileUploadProps) {
 
         // 1초마다 상태 조회 (더 빠른 실시간 업데이트)
         progressIntervalRef.current[chapterId] = setInterval(() => {
-            fetchStoryboardStatus(chapterId);
+            fetchStoryboardStatus(novelId, chapterId);
         }, 1000);
 
         // 초기 조회
-        fetchStoryboardStatus(chapterId);
+        fetchStoryboardStatus(novelId, chapterId);
     };
 
-    // Fetch existing chapters
+    // Load all chapters from all novels
     useEffect(() => {
-        if (novelId) {
-            loadChapters();
-        }
-    }, [novelId]);
+        loadAllChapters();
+    }, []);
 
-    const loadChapters = async () => {
-        if (!novelId) return;
+    const loadAllChapters = async () => {
         try {
-            const chapters = await getChapters(novelId);
-            setUploadedFiles(chapters);
+            // Get all novels
+            const { getNovels } = await import('../api/novel');
+            const novelsResponse = await getNovels(0, 100);
+
+            // Collect all chapters from all novels
+            const allChapters: ChapterWithProgress[] = [];
+            for (const novel of novelsResponse.novels) {
+                const chapters = await getChapters(novel.id);
+                allChapters.push(...chapters);
+            }
+            setUploadedFiles(allChapters);
         } catch (error) {
             // 조용히 무시
         }
@@ -100,47 +104,41 @@ export function FileUpload({ onFileClick, novelId }: FileUploadProps) {
     };
 
     const handleFiles = async (files: FileList) => {
-        if (!novelId) {
-            alert("소설 정보가 없습니다. 다시 로그인해주세요.");
-            return;
-        }
-
         const fileArray = Array.from(files);
-
-        // Calculate max chapter number from existing files
-        let maxChapterNum = uploadedFiles.reduce((max, file) => Math.max(max, file.chapter_number || 0), 0);
+        const { createNovel } = await import('../api/novel');
 
         for (const file of fileArray) {
             try {
-                // Determine next chapter number based on current max
-                maxChapterNum++;
-                const nextChapterNum = maxChapterNum;
-                const title = file.name; // Use filename as title by default
+                // Create a new Novel for each file
+                const title = file.name.replace(/\.[^/.]+$/, ''); // Remove file extension
+                const newNovel = await createNovel({
+                    title: title,
+                    description: `Uploaded from ${file.name}`,
+                    genre: "General"
+                });
 
-                const newChapter = await uploadChapter(novelId, file, nextChapterNum, title);
+                // Upload the file as Chapter #1 of this novel
+                const newChapter = await uploadChapter(newNovel.id, file, 1, title);
 
                 // 진행 상황 폴링 시작
-                startProgressPolling(newChapter.id);
+                startProgressPolling(newNovel.id, newChapter.id);
             } catch (error) {
                 alert(`${file.name} 업로드 실패: ${(error as any).message || '알 수 없는 오류'}`);
-                // Decrease maxChapterNum back if failed, so we don't skip numbers unnecessarily? 
-                // Actually if it failed due to conflict, we might want to skip or retry, but for now just let it be.
-                // But if we continue the loop for next file, we should arguably keep incrementing to avoid same conflict 
-                // if the conflict was the cause. 
-                // Ideally we should probably fetch the latest list again if we suspect sync issues, but local max is safer.
             }
         }
 
         // Refresh list
-        loadChapters();
+        loadAllChapters();
     };
 
     const removeFile = async (id: number) => {
-        if (!novelId) return;
-
         try {
+            // Find the chapter to get its novel_id
+            const chapter = uploadedFiles.find(f => f.id === id);
+            if (!chapter) return;
+
             if (confirm("이 파일을 정말 삭제하시겠습니까?")) {
-                await deleteChapter(novelId, id);
+                await deleteChapter(chapter.novel_id, id);
                 setUploadedFiles((prev) => prev.filter((file) => file.id !== id));
             }
         } catch (error) {

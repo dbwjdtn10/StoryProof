@@ -5,7 +5,6 @@ import { FileUpload } from './components/FileUpload';
 import { ThemeToggle } from './components/ThemeToggle';
 // import { ChatBot } from './components/ChatBot';
 import { register, login } from './api/auth';
-import { getNovels, createNovel, Novel } from './api/novel';
 
 type Screen = 'login' | 'signup' | 'upload' | 'chapterDetail';
 
@@ -13,7 +12,7 @@ export default function App() {
   const [currentScreen, setCurrentScreen] = useState<Screen>('login');
   const [selectedFile, setSelectedFile] = useState<string>('');
   const [selectedChapterId, setSelectedChapterId] = useState<number | undefined>(undefined);
-  const [currentNovel, setCurrentNovel] = useState<Novel | null>(null);
+  const [selectedNovelId, setSelectedNovelId] = useState<number | undefined>(undefined);
 
   // Login/Signup form states
   const [email, setEmail] = useState('');
@@ -30,27 +29,9 @@ export default function App() {
     console.log('Login attempt:', { email, rememberMe });
 
     try {
-      // 1. Login
+      // Login
       const tokenResponse = await login({ email, password });
       localStorage.setItem('token', tokenResponse.access_token);
-
-      // 2. Fetch or Create Novel
-      try {
-        const novelsResponse = await getNovels();
-        if (novelsResponse.novels.length > 0) {
-          setCurrentNovel(novelsResponse.novels[0]);
-        } else {
-          const newNovel = await createNovel({
-            title: "My First Novel",
-            description: "Default created novel",
-            genre: "General"
-          });
-          setCurrentNovel(newNovel);
-        }
-      } catch (error) {
-        console.error("Failed to fetch novels:", error);
-        alert("로그인은 성공했으나 소설 정보를 가져오는데 실패했습니다.");
-      }
 
       setCurrentScreen('upload');
     } catch (error) {
@@ -102,9 +83,9 @@ export default function App() {
           console.log("Chapter selected:", chapter);
           setSelectedFile(chapter.title);
           setSelectedChapterId(chapter.id);
+          setSelectedNovelId(chapter.novel_id);
           setCurrentScreen('chapterDetail');
         }}
-        novelId={currentNovel?.id}
       />
     );
   }
@@ -115,7 +96,7 @@ export default function App() {
       <ChapterDetail
         fileName={selectedFile}
         onBack={() => setCurrentScreen('upload')}
-        novelId={currentNovel?.id}
+        novelId={selectedNovelId}
         chapterId={selectedChapterId}
       />
     );

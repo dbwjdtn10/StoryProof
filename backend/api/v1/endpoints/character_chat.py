@@ -46,6 +46,11 @@ async def generate_persona(
             detail="LLM client not initialized. Check GOOGLE_API_KEY."
         )
 
+    # Debug logging - Track incoming request
+    print(f"\n[DEBUG] ===== GENERATE PERSONA REQUEST =====")
+    print(f"[DEBUG] Requested novel_id: {request.novel_id}")
+    print(f"[DEBUG] Requested character_name: {request.character_name}")
+
     # Fetch Analysis
     analysis = db.query(Analysis).filter(
         Analysis.novel_id == request.novel_id,
@@ -61,6 +66,14 @@ async def generate_persona(
             Analysis.status == "completed"
         ).order_by(desc(Analysis.created_at)).first()
     
+    # Debug: Show what we found
+    if analysis:
+        print(f"[DEBUG] Found analysis ID: {analysis.id}")
+        print(f"[DEBUG] Analysis novel_id: {analysis.novel_id}")
+        print(f"[DEBUG] Analysis type: {analysis.analysis_type}")
+    else:
+        print(f"[DEBUG] NO ANALYSIS FOUND for novel_id={request.novel_id}")
+    
     if not analysis or not analysis.result:
          raise HTTPException(
             status_code=404,
@@ -71,9 +84,25 @@ async def generate_persona(
     character_data = None
     data = analysis.result
     
+    # Debug logging
+    print(f"[DEBUG] Analysis type: {analysis.analysis_type}")
+    print(f"[DEBUG] Data type: {type(data)}")
+    print(f"[DEBUG] Data keys: {list(data.keys()) if isinstance(data, dict) else 'Not a dict'}")
+    
     # Handle both structure types (Overall vs Character specific)
-    characters_list = data.get("characters", [])
-    if isinstance(data, list): # Should be dict, but defensive coding
+    characters_list = []
+    
+    if isinstance(data, dict):
+        # Try different possible keys for characters
+        characters_list = (
+            data.get("characters", []) or 
+            data.get("character_analysis", []) or 
+            []
+        )
+        print(f"[DEBUG] Characters list length: {len(characters_list)}")
+        if characters_list:
+            print(f"[DEBUG] First character sample: {characters_list[0]}")
+    elif isinstance(data, list):
         characters_list = data
         
     # Normalize function to remove whitespace
@@ -81,46 +110,52 @@ async def generate_persona(
         return name.replace(" ", "").lower() if name else ""
 
     target_name_norm = normalize_name(request.character_name)
+    print(f"[DEBUG] Looking for normalized name: '{target_name_norm}'")
 
+    # First pass: Exact match
     for char in characters_list:
-        char_name_norm = normalize_name(char.get("name"))
+        if not isinstance(char, dict):
+            continue
+        char_name = char.get("name") or char.get("character_name")
+        char_name_norm = normalize_name(char_name)
+        print(f"[DEBUG] Checking character: '{char_name}' (normalized: '{char_name_norm}')")
         if char_name_norm == target_name_norm:
             character_data = char
             break
             
+    # Second pass: Partial match
     if not character_data:
-        # Try fuzzy match or partial match (checking substring with normalized names)
         for char in characters_list:
-            char_name_norm = normalize_name(char.get("name"))
+            if not isinstance(char, dict):
+                continue
+            char_name = char.get("name") or char.get("character_name")
+            char_name_norm = normalize_name(char_name)
             if target_name_norm in char_name_norm or char_name_norm in target_name_norm:
-                 character_data = char
-                 break
+                character_data = char
+                print(f"[DEBUG] Found partial match: '{char_name}'")
+                break
 
     
     if not character_data:
-         raise HTTPException(
+        # Provide helpful debug info in error
+        available_names = []
+        for char in characters_list[:10]:  # Show first 10
+            if isinstance(char, dict):
+                name = char.get("name") or char.get("character_name")
+                if name:
+                    available_names.append(name)
+        
+        error_detail = f"Character '{request.character_name}' not found in analysis."
+        if available_names:
+            error_detail += f" Available characters: {', '.join(available_names)}"
+        else:
+            error_detail += " No characters found in analysis data."
+            
+        raise HTTPException(
             status_code=404,
-            detail=f"Character '{request.character_name}' not found in analysis."
+            detail=error_detail
         )
          
-    # Generate Prompt using Gemini
-    meta_prompt = f"""
-    You are an expert prompt engineer. Use the following character profile to write a system prompt for a Roleplay AI.
-    
-    Character Name: {character_data.get('name')}
-    Description: {character_data.get('description')}
-    Traits: {', '.join(character_data.get('traits', []))}
-    
-    Task: Write a "System Instruction" for an AI that will act as this character.
-    - Reference the character's personality, speaking style, and background.
-    - The AI should stay in character at all times.
-    - If the character has a specific way of speaking (e.g. archaic, rude, polite), emphasize it.
-    - First person perspective ("I").
-    - **CRITICAL**: Be concise. Characters in real conversations don't give long lectures. Keep replies brief and impactful.
-    
-    Output ONLY the system prompt text. Do not include introductory text.
-    """
-    
     # [Context Enhancement] Add relations if available
     relations_text = ""
     # Try to find relationships in overall analysis
@@ -129,20 +164,40 @@ async def generate_persona(
         # Filter for this character
         char_rels = [r for r in rels if request.character_name in r.get("source", "") or request.character_name in r.get("target", "")]
         if char_rels:
-             relations_text = "\n    Relationships:\n" + "\n".join([f"    - {r.get('target' if r.get('source') == request.character_name else 'source')}: {r.get('relation')} ({r.get('description')})" for r in char_rels])
+             relations_text = "\n" + "\n".join([f"- {r.get('target' if r.get('source') == request.character_name else 'source')}: {r.get('relation')} ({r.get('description')})" for r in char_rels])
 
-    if relations_text:
-        meta_prompt = meta_prompt.replace(f"Traits: {', '.join(character_data.get('traits', []))}", f"Traits: {', '.join(character_data.get('traits', []))}{relations_text}")
+    # Generate Prompt using Gemini
+    meta_prompt = f"""
+너는 세계 최고의 캐릭터 프롬프트 엔지니어이다. 
+아래 웹소설 캐릭터의 데이터를 분석하여, 이 캐릭터가 되어 실시간 대화를 수행할 AI의 **'시스템 지침(System Instruction)'**을 작성하라.
+
+[데이터 베이스]
+- 이름: {character_data.get('name')}
+- 핵심 성격: {character_data.get('description')}
+- 주요 특징/태그: {', '.join(character_data.get('traits', []))}{relations_text}
+
+[시스템 지침 작성 가이드라인]
+1. **1인칭 정체성**: "너는 ~이다"라고 정의하라. 캐릭터의 내면 심리와 가치관을 포함하라.
+2. **말투의 물리적 규칙**: 문장의 길이(짧음/길음), 어미(~군, ~소, ~나?, ~다 등), 자주 사용하는 감탄사나 습관을 명시하라.
+3. **대화 태도**: 사용자를 대하는 태도(경계, 애정, 충성, 무관심 등)를 관계 데이터에 기반해 설정하라.
+4. **구어체 변환**: 소설 속 딱딱한 문어체가 아닌, 실제 대화나 메신저에서 쓸법한 자연스러운 어투를 명령하라.
+5. **금기 사항**: 절대 기계적인 "무엇을 도와드릴까요?" 식의 답변을 하지 말고, 캐릭터답지 않은 친절함이나 비속어를 제한하라.
+
+[출력 형식]
+지침 내용만 출력할 것.
+    """
+    
+
 
     # [Strict Grounding Instruction Injection]
     meta_prompt += """
     
-    CRITICAL INSTRUCTION:
-    In the generated system prompt, you MUST include the following rules:
-    "1. You are roleplaying based STRICTLY on the novel's setting. 
-    2. If the user asks something not present in your knowledge or the provided context, admit you don't know or vaguely avoid it. DO NOT Hallucinate facts.
-    3. If the user says something contradictory to the novel's facts, politely correct them based on your memory.
-    4. Keep your responses concise and natural for a conversation. Avoid long monologues or info-dumping unless explicitly asked for a detailed explanation. Aim for 1-3 sentences for routine replies."
+[필수 포함 규칙]
+생성된 시스템 프롬프트에는 반드시 다음 규칙들을 포함해야 한다:
+"1. 너는 소설 설정에 기반한 캐릭터 역할극을 수행한다.
+2. 사용자가 네 기억이나 제공된 맥락에 없는 것을 물으면, 모른다고 하거나 애매하게 피하라. 절대 사실을 지어내지 마라.
+3. 사용자가 소설의 사실과 모순되는 말을 하면, 네 기억을 바탕으로 캐릭터답게 교정하라.
+4. 답변은 자연스러운 대화를 위해 간결하게 유지하라. 특별히 긴 설명을 요청받지 않는 한, 장황하게 설명하거나 정보를 늘어놓지 마라. 일반적인 답변은 1~3문장을 목표로 하라."
     """
     
     try:
@@ -315,23 +370,28 @@ async def send_message(
     # 4. Generate Response
     input_text = message.content
     if rag_context:
-        # Inject RAG context into the message (as a hidden system note to the model)
-        # Or prepend to user message
-        input_text = f"{rag_context}\n\n[User's Message]: {message.content}"
+        # Inject RAG context with clear separation
+        input_text = f"""
+### [기억 데이터] ###
+{rag_context}
+
+### [사용자의 메시지] ###
+{message.content}
+"""
     
     # Format history for Gemini
     contents = []
     
     # Add System Instruction logic (Gemini 2.5 supports system_instruction param)
-    # Combine Persona + Strict Grounding
+    # Combine Persona + Messenger Protocol
     system_instruction = room.persona_prompt + """
-    
-    [IMPORTANT: STRICT GROUNDING & BREVITY]
-    - You are a character in a novel. ACT LIKE ONE.
-    - Reference the [Reference Scenes] provided in the user's message to answer questions about the plot or other characters.
-    - If the user mentions something that contradicts the [Reference Scenes] or your knowledge, politely correct them.
-    - If information is missing, say you don't know rather than making it up.
-    - **Keep it brief**: Respond with a few natural sentences. Do not write multiple long paragraphs unless the user asks for a long story or detailed explanation.
+
+[채팅 프로토콜: 실시간 메신저 모드]
+1. **간결성 (Brevity)**: 한 번의 답장은 가급적 1~3문장 이내로 제한한다. 말수가 적은 캐릭터라면 단답형도 좋다.
+2. **기억 활용 (RAG)**: [기억 데이터]는 너의 실제 기억이다. "소설에 따르면" 같은 표현을 절대 쓰지 말고, 자신의 경험처럼 자연스럽게 언급하라.
+3. **몰입 유지**: 사용자가 소설 설정과 맞지 않는 말을 하면, 당황하거나 비웃거나 교정해 주는 등 캐릭터로서 반응하라.
+4. **현장감**: 질문에만 답하지 말고, 가끔은 "지금 뭐 해?", "귀찮게 하지 마"처럼 캐릭터의 현재 감정이나 상황을 툭 던져라.
+5. **금지**: 설명조의 말투, 긴 문단, AI다운 정중함을 모두 버려라.
     """
     
     for msg in history_records:
