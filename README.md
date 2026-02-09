@@ -26,7 +26,9 @@ FloatingMenu.tsx => 화면 하단에 나오는 버튼
 <벡엔드>
 
 StoryProof-main\backend\api\v1\endpoints\chat.py
+
 StoryProof-main\backend\services\chatbot_service.py ==> 함수정의
+
 StoryProof-main\backend\schemas\chat_schema.py ==> 요청과 응답 
 
 
