@@ -14,7 +14,8 @@
 ## 비동기 작동순서
 
 
-## 스토리 예측 모델
+## 스토리 예측 모델 : 질문과 관련된 부분만 찾아내서 읽는 방식(rag)
+
 < 프론트 엔드 >
 "StoryProof-main\frontend\src\components\PredictionSidebar.tsx"
 FloatingMenu.tsx => 화면 하단에 나오는 버튼 
