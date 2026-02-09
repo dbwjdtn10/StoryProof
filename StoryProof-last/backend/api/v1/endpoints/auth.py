@@ -12,8 +12,9 @@ from sqlalchemy.orm import Session
 
 from backend.db.session import get_db
 from backend.services.auth_service import AuthService
+from backend.core.security import get_current_user_id
 from backend.schemas.auth_schema import (
-    UserRegister, UserLogin, TokenResponse
+    UserRegister, UserLogin, TokenResponse, UserProfile
 )
 # User 모델이나 security 유틸리티 직접 import 제거 (Service로 이관됨)
 
@@ -32,6 +33,7 @@ async def register(
         "id": new_user.id,
         "email": new_user.email,
         "username": new_user.username,
+        "mode": new_user.mode,
         "is_active": new_user.is_active,
         "created_at": new_user.created_at
     }
@@ -64,9 +66,13 @@ async def refresh_token():
 
 # ===== 현재 사용자 조회 =====
 
-@router.get("/me")
-async def get_current_user_profile():
-    pass
+@router.get("/me", response_model=UserProfile)
+async def get_current_user_profile(
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db)
+):
+    """현재 사용자 프로필 조회"""
+    return AuthService.get_user_by_id(db, user_id)
 
 
 # ===== 사용자 프로필 수정 =====

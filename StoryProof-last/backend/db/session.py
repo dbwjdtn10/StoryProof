@@ -17,15 +17,21 @@ from backend.db.models import Base
 def create_db_engine():
     """
     데이터베이스 엔진 생성
-    
-    Returns:
-        Engine: SQLAlchemy 엔진
     """
+    db_url = settings.DATABASE_URL.strip()
+    # localhost 대신 127.0.0.1 사용 (Windows 인코딩 이슈 완화)
+    if "localhost" in db_url:
+        db_url = db_url.replace("localhost", "127.0.0.1")
+    
     engine = create_engine(
-        settings.DATABASE_URL,
+        db_url,
         echo=settings.DB_ECHO,
         pool_size=settings.DB_POOL_SIZE,
         max_overflow=settings.DB_MAX_OVERFLOW,
+        connect_args={
+            "client_encoding": "utf8",
+            "application_name": "StoryProof"
+        }
     )
     return engine
 

@@ -14,6 +14,9 @@ export default function App() {
   const [selectedFile, setSelectedFile] = useState<string>('');
   const [selectedChapterId, setSelectedChapterId] = useState<number | undefined>(undefined);
   const [currentNovel, setCurrentNovel] = useState<Novel | null>(null);
+  const [userMode, setUserMode] = useState<'reader' | 'writer'>(
+    (localStorage.getItem('userMode') as 'reader' | 'writer') || 'writer'
+  );
 
   // Login/Signup form states
   const [email, setEmail] = useState('');
@@ -24,6 +27,7 @@ export default function App() {
   const [agreeToTerms, setAgreeToTerms] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [signupMode, setSignupMode] = useState<'reader' | 'writer'>('writer');
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,6 +37,8 @@ export default function App() {
       // 1. Login
       const tokenResponse = await login({ email, password });
       localStorage.setItem('token', tokenResponse.access_token);
+      localStorage.setItem('userMode', tokenResponse.mode);
+      setUserMode(tokenResponse.mode);
 
       // 2. Fetch or Create Novel
       try {
@@ -74,7 +80,8 @@ export default function App() {
       await register({
         username: name,
         email: email,
-        password: password
+        password: password,
+        mode: signupMode
       });
       alert('회원가입이 완료되었습니다. 로그인해주세요.');
       setCurrentScreen('login');
@@ -105,6 +112,7 @@ export default function App() {
           setCurrentScreen('chapterDetail');
         }}
         novelId={currentNovel?.id}
+        mode={userMode}
       />
     );
   }
@@ -117,6 +125,7 @@ export default function App() {
         onBack={() => setCurrentScreen('upload')}
         novelId={currentNovel?.id}
         chapterId={selectedChapterId}
+        mode={userMode}
       />
     );
   }
@@ -229,6 +238,49 @@ export default function App() {
                     aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
                   >
                     {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Mode Selection */}
+              <div className="form-group">
+                <label className="form-label">모드 선택</label>
+                <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setSignupMode('writer')}
+                    className={`mode-toggle-btn ${signupMode === 'writer' ? 'active' : ''}`}
+                    style={{
+                      flex: 1,
+                      padding: '10px',
+                      borderRadius: '8px',
+                      border: signupMode === 'writer' ? '2px solid #4F46E5' : '1px solid #E5E7EB',
+                      backgroundColor: signupMode === 'writer' ? '#EEF2FF' : 'white',
+                      color: signupMode === 'writer' ? '#4F46E5' : '#6B7280',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    작가 모드
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSignupMode('reader')}
+                    className={`mode-toggle-btn ${signupMode === 'reader' ? 'active' : ''}`}
+                    style={{
+                      flex: 1,
+                      padding: '10px',
+                      borderRadius: '8px',
+                      border: signupMode === 'reader' ? '2px solid #4F46E5' : '1px solid #E5E7EB',
+                      backgroundColor: signupMode === 'reader' ? '#EEF2FF' : 'white',
+                      color: signupMode === 'reader' ? '#4F46E5' : '#6B7280',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    독자 모드
                   </button>
                 </div>
               </div>

@@ -73,13 +73,17 @@ def process_chapter_storyboard(novel_id: int, chapter_id: int):
         
         # 1. 데이터베이스에서 회차 정보 조회
         db = SessionLocal()
+        print(f"🔍 [Task Start] novel_id: {novel_id}, chapter_id: {chapter_id}")
+        
         chapter = db.query(Chapter).filter(Chapter.id == chapter_id).first()
         novel = db.query(Novel).filter(Novel.id == novel_id).first()
         
         if not chapter or not novel:
-            error_msg = f"회차를 찾을 수 없습니다: {novel_id}/{chapter_id} (이미 삭제되었을 수 있습니다.)"
+            error_msg = f"회차를 찾을 수 없습니다: novel_id={novel_id}, chapter_id={chapter_id}"
+            if not chapter: print(f"⚠️ Chapter {chapter_id} is missing in DB")
+            if not novel: print(f"⚠️ Novel {novel_id} is missing in DB")
             print(f"⚠️ {error_msg}")
-            # 이미 삭제된 경우 상태 업데이트가 무의미하므로 즉시 종료
+            update_chapter_progress(chapter_id, 0, "FAILED", error_msg)
             return
         
         update_chapter_progress(chapter_id, 5, "PROCESSING", f"{chapter.title} 로드 완료")

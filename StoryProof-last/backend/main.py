@@ -5,6 +5,12 @@ FastAPI 메인 애플리케이션 진입점
 - CORS, 미들웨어 설정
 """
 
+import os
+# Windows에서 psycopg2 인코딩 이슈 해결을 위한 강제 설정
+os.environ["PGCLIENTENCODING"] = "utf-8"
+# 시스템에 설정된 다른 PG 관련 변수가 방해하지 않도록 처리 (선택 사항)
+if "PGPASSWORD" in os.environ: del os.environ["PGPASSWORD"]
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -93,13 +99,7 @@ async def root():
     }
 
 
-@app.options("/{full_path:path}")
-async def preflight_handler(full_path: str):
-    """
-    CORS preflight 요청 처리
-    브라우저가 실제 요청 전에 OPTIONS 요청을 보낼 때 처리
-    """
-    return {"status": "ok"}
+# CORS 미들웨어가 자동으로 OPTIONS 요청을 처리하므로 별도의 핸들러는 필요 없습니다.
 
 
 @app.exception_handler(Exception)

@@ -99,7 +99,75 @@ const cardData = [
   },
 ];
 
-export function Dashboard() {
+export function Dashboard({ mode = 'writer' }: { mode?: 'reader' | 'writer' }) {
+  const isReader = mode === 'reader';
+  const displayTitle = isReader ? "독자용 작품 요약 및 해설" : "이상한 나라의 앨리스";
+  const displaySubtitle = isReader ? "작품의 이해를 돕는 AI 가이드" : "StoryProof 작가 분석 도구";
+
+  const writerCards = [
+    {
+      id: 101,
+      title: '플롯홀 탐지',
+      description: 'AI가 스토리의 설정 모순이나 전개상 흐트러진 부분을 자동으로 찾아냅니다.',
+      image: 'https://images.unsplash.com/photo-1455390582262-044cdead277a?auto=format&fit=crop&q=80&w=1080',
+      imageType: 'round' as const,
+      category: 'WRITER_TOOL',
+      tag: 'Plot Hole'
+    },
+    {
+      id: 102,
+      title: '일관성 리포트',
+      description: '캐릭터의 말투, 외모, 하차 시점 등 설정이 끝까지 유지되는지 검사합니다.',
+      image: 'https://images.unsplash.com/photo-1517842645767-c639042777db?auto=format&fit=crop&q=80&w=1080',
+      imageType: 'badge' as const,
+      category: 'WRITER_TOOL',
+      tag: 'Character'
+    },
+    {
+      id: 103,
+      title: '설정 파괴 경고',
+      description: '새로 쓴 내용이 기존 세계관(지명, 역사 등)과 충돌할 경우 실시간 알림을 줍니다.',
+      image: 'https://images.unsplash.com/photo-1505664194779-8beaceb93744?auto=format&fit=crop&q=80&w=1080',
+      imageType: 'badge' as const,
+      category: 'WRITER_TOOL',
+      tag: 'World'
+    }
+  ];
+
+  const readerCards = [
+    {
+      id: 201,
+      title: 'AI 어휘 사전',
+      description: '작품 속 어려운 단어나 고어, 전문 용어를 AI가 바로 풀이해 드립니다.',
+      image: 'https://images.unsplash.com/photo-1491841573634-28140fc7ced7?auto=format&fit=crop&q=80&w=1080',
+      imageType: 'round' as const,
+      category: 'READER_TOOL',
+      tag: 'Dictionary'
+    },
+    {
+      id: 202,
+      title: '장면 코멘트',
+      description: '특정 장면에 대한 다른 독자들의 생각과 반응을 실시간으로 확인하세요.',
+      image: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&q=80&w=1080',
+      imageType: 'badge' as const,
+      category: 'READER_TOOL',
+      tag: 'Social'
+    },
+    {
+      id: 203,
+      title: '인물 관계도',
+      description: '현재까지 읽은 내용을 바탕으로 복잡한 등장인물 지도를 보여줍니다.',
+      image: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&q=80&w=1080',
+      imageType: 'badge' as const,
+      category: 'READER_TOOL',
+      tag: 'Map'
+    }
+  ];
+
+  // 작가 모드일 때는 기본 소설 목록 + 작가 도구
+  // 독자 모드일 때는 독자 전용 도구만 표시 (또는 별도 구성)
+  const cardsToDisplay = isReader ? readerCards : [...writerCards, ...cardData];
+
   return (
     <div className="dashboard-container">
       {/* Main Content */}
@@ -112,8 +180,8 @@ export function Dashboard() {
                 <Lock size={28} strokeWidth={2.5} />
               </div>
               <div>
-                <h1 className="dashboard-title">이상한 나라의 앨리스</h1>
-                <p className="dashboard-subtitle">StoryProof</p>
+                <h1 className="dashboard-title">{displayTitle}</h1>
+                <p className="dashboard-subtitle">{displaySubtitle}</p>
               </div>
             </div>
             <button className="dashboard-back-button">
@@ -122,9 +190,24 @@ export function Dashboard() {
             </button>
           </div>
 
+          {/* Mode Badge */}
+          <div style={{ marginBottom: '20px' }}>
+            <span style={{
+              padding: '6px 12px',
+              borderRadius: '20px',
+              backgroundColor: isReader ? '#E0F2FE' : '#EEF2FF',
+              color: isReader ? '#0369A1' : '#4F46E5',
+              fontSize: '14px',
+              fontWeight: 600,
+              border: isReader ? '1px solid #BAE6FD' : '1px solid #C7D2FE'
+            }}>
+              {isReader ? '📖 독자 모드 활성화됨' : '✍️ 작가 모드 활성화됨'}
+            </span>
+          </div>
+
           {/* Cards Grid */}
           <div className="dashboard-grid">
-            {cardData.map((card) => (
+            {cardsToDisplay.map((card) => (
               <Card key={card.id} {...card} />
             ))}
           </div>

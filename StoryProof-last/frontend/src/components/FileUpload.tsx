@@ -6,13 +6,14 @@ import { getChapters, uploadChapter, deleteChapter, getStoryboardStatus, Chapter
 interface FileUploadProps {
     onFileClick: (chapter: Chapter) => void;
     novelId?: number;
+    mode?: 'reader' | 'writer';
 }
 
 interface ChapterWithProgress extends Chapter {
     storyboardProgress?: StoryboardProgress;
 }
 
-export function FileUpload({ onFileClick, novelId }: FileUploadProps) {
+export function FileUpload({ onFileClick, novelId, mode }: FileUploadProps) {
     const [uploadedFiles, setUploadedFiles] = useState<ChapterWithProgress[]>([]);
     const [dragActive, setDragActive] = useState(false);
     const [progressMap, setProgressMap] = useState<{ [key: number]: StoryboardProgress }>({});
@@ -200,8 +201,8 @@ export function FileUpload({ onFileClick, novelId }: FileUploadProps) {
                 <div className="upload-content">
                     {/* Header */}
                     <div className="upload-header">
-                        <h1 className="upload-title">파일 업로드</h1>
-                        <p className="upload-subtitle">StoryProof</p>
+                        <h1 className="upload-title">{mode === 'reader' ? '작품 라이브러리' : '파일 업로드'}</h1>
+                        <p className="upload-subtitle">{mode === 'reader' ? '가이드를 얻고 싶은 작품을 선택하세요' : '분석할 소설 파일을 업로드하세요'}</p>
                     </div>
 
                     {/* Show upload area only if no files uploaded */}
@@ -209,8 +210,8 @@ export function FileUpload({ onFileClick, novelId }: FileUploadProps) {
                         <div className="upload-area" onClick={openFileDialog} style={{ cursor: 'pointer' }}>
                             <label htmlFor="file-upload-input" className="upload-label" style={{ cursor: 'pointer' }}>
                                 <Upload size={48} className="upload-icon" />
-                                <p className="upload-text-main">파일을 드래그하거나 클릭하여 업로드</p>
-                                <p className="upload-text-sub">PDF, HWP, TXT 파일 지원</p>
+                                <p className="upload-text-main">{mode === 'reader' ? '작품 파일을 추가하여 읽기 시작하기' : '파일을 드래그하거나 클릭하여 업로드'}</p>
+                                <p className="upload-text-sub">PDF, DOCX, TXT 지원</p>
                             </label>
                         </div>
                     )}
