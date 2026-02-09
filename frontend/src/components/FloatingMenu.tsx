@@ -1,12 +1,17 @@
-import { MessageCircle, MoreVertical, Settings, FileText, X } from 'lucide-react';
+import { MessageCircle, MoreVertical, Settings, ShieldAlert, X, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 import { ChatInterface } from './ChatBot';
+import '../chatbot.css';
 
 interface FloatingMenuProps {
     onNavigateToScene?: (sceneIndex: number) => void;
+    onCheckConsistency?: () => void;
+    onPredictStory?: () => void;
+    novelId?: number;
+    chapterId?: number;
 }
 
-export function FloatingMenu({ onNavigateToScene }: FloatingMenuProps) {
+export function FloatingMenu({ onNavigateToScene, onCheckConsistency, onPredictStory, novelId, chapterId }: FloatingMenuProps) {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [isChatOpen, setIsChatOpen] = useState(false);
 
@@ -23,6 +28,13 @@ export function FloatingMenu({ onNavigateToScene }: FloatingMenuProps) {
         setIsChatOpen(false);
     };
 
+    const handleConsistencyClick = () => {
+        if (onCheckConsistency) {
+            onCheckConsistency();
+        }
+        setIsMenuOpen(false);
+    };
+
     return (
         <>
             {/* Floating Menu Button */}
@@ -32,8 +44,19 @@ export function FloatingMenu({ onNavigateToScene }: FloatingMenuProps) {
                         <button className="menu-option" onClick={() => alert('환경설정')} title="환경설정">
                             <Settings size={20} />
                         </button>
-                        <button className="menu-option" onClick={() => alert('설정파괴분석기')} title="설정파괴분석기">
-                            <FileText size={20} />
+                        <button
+                            className="menu-option highlight-btn-purple"
+                            onClick={() => {
+                                if (onPredictStory) onPredictStory();
+                                setIsMenuOpen(false);
+                            }}
+                            title="스토리 예측 (What-If)"
+                            style={{ backgroundColor: '#EDE9FE', color: '#7C3AED' }}
+                        >
+                            <Sparkles size={20} />
+                        </button>
+                        <button className="menu-option highlight-btn" onClick={handleConsistencyClick} title="설정파괴분석기">
+                            <ShieldAlert size={20} color="#4F46E5" />
                         </button>
                         <button className="menu-option" onClick={openChat} title="챗봇">
                             <MessageCircle size={20} />
@@ -49,12 +72,11 @@ export function FloatingMenu({ onNavigateToScene }: FloatingMenuProps) {
             {isChatOpen && (
                 <div className="chatbot-modal" style={{
                     position: 'fixed',
-                    bottom: '80px',
-                    right: '20px',
-                    width: '600px',
-                    height: '900px',
-                    backgroundColor: 'white',
-                    borderRadius: '12px',
+                    bottom: '15px',
+                    right: '25px',
+                    width: '650px',
+                    height: '850px',
+                    borderRadius: '1rem',
                     boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
                     display: 'flex',
                     flexDirection: 'column',
@@ -65,18 +87,18 @@ export function FloatingMenu({ onNavigateToScene }: FloatingMenuProps) {
                         padding: '16px',
                         borderBottom: '1px solid #eee',
                         display: 'flex',
-                        justifyContent: 'space-between',
+                        justifyContent: 'flex-end',
                         alignItems: 'center',
                         backgroundColor: 'black',
                         color: 'white'
                     }}>
-                        <h3 style={{ margin: 0, fontSize: '1.2rem' }}>챗봇</h3>
+
                         <button className="chatbot-close" onClick={closeChat} style={{ color: 'white', background: 'none', border: 'none', cursor: 'pointer' }}>
                             <X size={20} />
                         </button>
                     </div>
                     <div className="chatbot-content" style={{ flex: 1, overflow: 'hidden' }}>
-                        <ChatInterface onNavigateToScene={onNavigateToScene} />
+                        <ChatInterface onNavigateToScene={onNavigateToScene} novelId={novelId} chapterId={chapterId} />
                     </div>
                 </div>
             )}

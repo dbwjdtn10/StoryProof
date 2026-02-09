@@ -9,6 +9,8 @@ from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List, Optional
 
+from pydantic import BaseModel
+from celery.result import AsyncResult
 # from backend.db.session import get_db
 # from backend.core.security import get_current_user
 # from backend.schemas.analysis_schema import (
@@ -18,6 +20,60 @@ from typing import List, Optional
 
 
 router = APIRouter()
+
+
+class ConsistencyRequest(BaseModel):
+    novel_id: int
+    chapter_id: Optional[int] = None
+    text: str
+
+
+@router.post("/consistency", status_code=status.HTTP_202_ACCEPTED)
+async def request_consistency(request: ConsistencyRequest):
+    """
+    설정 파괴 분석 비동기 요청
+    """
+    from backend.worker.tasks import detect_inconsistency_task
+    task = detect_inconsistency_task.delay(request.novel_id, request.text, request.chapter_id)
+    return {"task_id": task.id, "status": "PENDING"}
+
+
+@router.get("/task/{task_id}")
+async def get_task_result(task_id: str):
+    """
+    분석 작업 결과 조회
+    """
+    from backend.worker.celery_app import celery_app
+    result = AsyncResult(task_id, app=celery_app)
+    if result.state == 'SUCCESS':
+        return {"status": "COMPLETED", "result": result.result}
+    elif result.state == 'FAILURE':
+        return {"status": "FAILED", "error": str(result.info)}
+    return {"status": "PROCESSING"}
+
+
+class PredictionRequest(BaseModel):
+    novel_id: int
+    text: str
+
+
+@router.post("/prediction", status_code=status.HTTP_200_OK)
+def request_prediction(request: PredictionRequest):
+    """
+    스토리 예측 요청 (동기 처리)
+    
+    사용자의 What-If 가정을 바탕으로 스토리 전개를 예측합니다.
+    """
+    from backend.services.agent import StoryConsistencyAgent
+    from backend.core.config import settings
+    
+    try:
+        agent = StoryConsistencyAgent(api_key=settings.GOOGLE_API_KEY)
+        # 동기 메서드 직접 호출 (FastAPI가 자동으로 threadpool에서 실행)
+        result = agent.predict_story(request.novel_id, request.text)
+        return {"result": result, "status": "COMPLETED"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ===== 소설 전체 분석 요청 =====

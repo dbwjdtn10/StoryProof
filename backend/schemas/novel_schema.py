@@ -78,6 +78,11 @@ class ChapterResponse(ChapterBase):
     id: int
     novel_id: int
     word_count: int
+    storyboard_status: Optional[str] = "PENDING"
+    storyboard_progress: Optional[int] = 0
+    storyboard_message: Optional[str] = None
+    storyboard_error: Optional[str] = None
+    storyboard_completed_at: Optional[datetime] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
     
