@@ -24,6 +24,7 @@ FloatingMenu.tsx => 화면 하단에 나오는 버튼
 chapterDetail.tsx  => 설정파괴 탐지기 
 
 <벡엔드>
+
 StoryProof-main\backend\api\v1\endpoints\chat.py
 
 
