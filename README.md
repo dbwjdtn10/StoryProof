@@ -18,7 +18,9 @@
 
 < 프론트 엔드 >
 "StoryProof-main\frontend\src\components\PredictionSidebar.tsx"
+
 FloatingMenu.tsx => 화면 하단에 나오는 버튼 
+
 chapterDetail.tsx  => 설정파괴 탐지기 
 
 <벡엔드>
