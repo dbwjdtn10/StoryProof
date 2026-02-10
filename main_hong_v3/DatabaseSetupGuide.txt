@@ -1,0 +1,117 @@
+데이터베이스 설정 가이드 (팀원용)
+이 가이드는 StoryProof 프로젝트를 처음 설정하는 팀원을 위한 데이터베이스 설정 가이드입니다.
+
+🎯 목표
+다른 로컬 환경에서 README를 따라 실행할 때 발생하는 데이터베이스 스키마 불일치 문제를 해결합니다.
+
+📋 문제 상황
+기존에는 Alembic 마이그레이션 파일이 테이블을 변경하는 명령만 포함하고 있어, 새로운 환경에서 alembic upgrade head 실행 시 다음과 같은 오류가 발생했습니다:
+
+sqlalchemy.exc.ProgrammingError: (psycopg2.errors.UndefinedTable) 
+relation "analyses" does not exist
+✅ 해결 방법
+방법 1: 초기화 스크립트 사용 (권장)
+가장 간단하고 안전한 방법입니다.
+
+# 1. 데이터베이스 상태 확인
+python scripts/check_db.py
+# 2. 데이터베이스 초기화
+python scripts/init_db.py
+# 3. Alembic 마이그레이션 히스토리 설정
+alembic stamp head
+# 4. 백엔드 서버 실행
+uvicorn backend.main:app --reload
+방법 2: Alembic 마이그레이션 사용
+# 1. 마이그레이션 실행
+alembic upgrade head
+# 2. 백엔드 서버 실행
+uvicorn backend.main:app --reload
+방법 3: 완전 리셋 (문제 발생 시)
+데이터베이스에 이미 테이블이 있지만 스키마가 맞지 않는 경우:
+
+# ⚠️ 주의: 모든 데이터가 삭제됩니다!
+python scripts/init_db.py --reset
+# Alembic 히스토리 재설정
+alembic stamp head
+# 상태 확인
+python scripts/check_db.py
+🔧 새로 추가된 도구
+1. 
+scripts/init_db.py
+ - 데이터베이스 초기화 스크립트
+기능:
+
+데이터베이스 테이블을 처음부터 생성
+기존 테이블 삭제 및 재생성 (--reset 옵션)
+테스트 데이터 생성 (--with-seed-data 옵션)
+사용법:
+
+# 기본 초기화
+python scripts/init_db.py
+# 완전 리셋
+python scripts/init_db.py --reset
+# 테스트 데이터 포함
+python scripts/init_db.py --with-seed-data
+2. 
+scripts/check_db.py
+ - 데이터베이스 상태 확인 스크립트
+기능:
+
+데이터베이스 연결 테스트
+필요한 테이블 존재 여부 확인
+스키마 검증
+Alembic 마이그레이션 상태 확인
+사용법:
+
+python scripts/check_db.py
+3. 
+alembic/versions/0001_initial_schema.py
+ - 초기 마이그레이션
+변경 사항:
+
+모든 테이블을 처음부터 생성하는 초기 마이그레이션 파일 추가
+기존 마이그레이션 파일의 의존성 체인 수정
+🚨 일반적인 오류 및 해결 방법
+오류 1: "relation does not exist"
+python scripts/init_db.py --reset
+alembic stamp head
+오류 2: "column does not exist"
+python scripts/check_db.py  # 문제 확인
+python scripts/init_db.py --reset  # 리셋
+alembic stamp head
+오류 3: "could not connect to server"
+# Docker 사용 시
+docker-compose up -d
+# 연결 확인
+python scripts/check_db.py
+오류 4: "database does not exist"
+# Docker 사용 시
+docker exec -it storyproof-postgres psql -U postgres
+CREATE DATABASE "StoryProof";
+\q
+📝 팀원 온보딩 체크리스트
+새로운 팀원이 프로젝트를 설정할 때 다음 순서를 따르세요:
+
+ Git 저장소 클론
+ .env 파일 생성 및 설정
+ PostgreSQL 실행 (Docker 또는 로컬)
+ Python 가상환경 생성 및 활성화
+ 패키지 설치 (pip install -r requirements.txt)
+ 데이터베이스 상태 확인 (python scripts/check_db.py)
+ 데이터베이스 초기화 (python scripts/init_db.py)
+ Alembic 히스토리 설정 (alembic stamp head)
+ 백엔드 서버 실행
+ 프론트엔드 설정 및 실행
+💡 추가 팁
+데이터베이스 문제가 발생하면 항상 먼저 확인:
+
+python scripts/check_db.py
+개발 중 스키마를 변경한 경우:
+
+# models.py 수정 후
+alembic revision --autogenerate -m "설명"
+alembic upgrade head
+프로덕션 환경에서는 절대 --reset 사용 금지!
+
+개발 환경에서만 사용하세요
+모든 데이터가 삭제됩니다
