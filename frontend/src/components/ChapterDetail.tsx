@@ -4,16 +4,20 @@ import { FloatingMenu } from './FloatingMenu';
 import { ThemeToggle } from './ThemeToggle';
 import { getChapter, updateChapter, getChapterBible, reanalyzeChapter, BibleData } from '../api/novel';
 import { AnalysisSidebar, AnalysisResult } from './AnalysisSidebar';
-import { PredictionModal } from './PredictionModal';
+import { PredictionSidebar, Message } from './predictions/PredictionSidebar';
+import { requestPrediction, getPredictionTaskStatus } from '../api/prediction';
+import { toast } from 'sonner';
 
 interface ChapterDetailProps {
     fileName: string;
     onBack: () => void;
     novelId?: number;
     chapterId?: number;
+    mode?: 'reader' | 'writer';
+    onOpenCharacterChat?: () => void;
 }
 
-export function ChapterDetail({ fileName, onBack, novelId, chapterId }: ChapterDetailProps) {
+export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'writer', onOpenCharacterChat }: ChapterDetailProps) {
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const [isCharactersOpen, setIsCharactersOpen] = useState(true);
     const [isItemsOpen, setIsItemsOpen] = useState(false);
@@ -30,7 +34,13 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId }: ChapterD
     const [sceneTexts, setSceneTexts] = useState<string[]>([]);
 
     const [chapterStatus, setChapterStatus] = useState<'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | undefined>(undefined);
+
     const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+    // Story Prediction State
+    const [isPredictionSidebarOpen, setIsPredictionSidebarOpen] = useState(false);
+    const [chatMessages, setChatMessages] = useState<Message[]>([]);
+    const [isPredictionLoading, setIsPredictionLoading] = useState(false);
 
     // Highlight State
     const [highlightData, setHighlightData] = useState<{
@@ -199,8 +209,6 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId }: ChapterD
     const [isAnalysisLoading, setIsAnalysisLoading] = useState(false);
     const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
 
-    // 스토리 예측 상태
-    const [isPredictionModalOpen, setIsPredictionModalOpen] = useState(false);
 
     const [selectedLocation, setSelectedLocation] = useState<any | null>(null);
     const [extraSectionStates, setExtraSectionStates] = useState<Record<string, boolean>>({});
@@ -246,6 +254,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId }: ChapterD
     // 설정 파괴 분석 실행
     const handleCheckConsistency = async () => {
         setIsAnalysisSidebarOpen(true);
+        setIsPredictionSidebarOpen(false); // Mutual exclusion
         setIsAnalysisLoading(true);
         setAnalysisResult(null);
 
@@ -270,22 +279,22 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId }: ChapterD
             const { task_id } = await response.json();
 
             // 폴링 시작
-            const pollInterval = setInterval(async () => {
+            const intervalId = setInterval(async () => {
                 try {
                     const statusRes = await fetch(`http://localhost:8000/api/v1/analysis/task/${task_id}`);
                     const data = await statusRes.json();
 
                     if (data.status === "COMPLETED") {
-                        clearInterval(pollInterval);
-                        setAnalysisResult(data.result);
+                        clearInterval(intervalId);
                         setIsAnalysisLoading(false);
                     } else if (data.status === "FAILED") {
-                        clearInterval(pollInterval);
-                        setAnalysisResult({ status: "분석 실패", message: data.error });
+                        clearInterval(intervalId);
                         setIsAnalysisLoading(false);
+                        setAnalysisResult({ status: "실패", message: data.error || "분석 작업이 실패했습니다." });
                     }
                 } catch (err) {
                     console.error("Polling error:", err);
+                    clearInterval(intervalId);
                 }
             }, 2000);
 
@@ -295,6 +304,72 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId }: ChapterD
             setAnalysisResult({ status: "오류 발생", message: "서버와 통신 중 오류가 발생했습니다." });
             setIsAnalysisLoading(false);
         }
+    };
+
+    const handlePredictionSidebarOpen = () => {
+        setIsPredictionSidebarOpen(true);
+        setIsAnalysisSidebarOpen(false); // Mutual exclusion
+    };
+
+    const handleSendMessage = async (inputMessage: string) => {
+        if (!novelId || !inputMessage.trim()) return;
+
+        const newUserMsg: Message = {
+            id: Date.now().toString(),
+            role: 'user',
+            content: inputMessage
+        };
+
+        setChatMessages(prev => [...prev, newUserMsg]);
+        setIsPredictionLoading(true);
+
+        try {
+            const { task_id } = await requestPrediction(novelId, inputMessage);
+
+            // Poll for result
+            const pollInterval = setInterval(async () => {
+                try {
+                    const data = await getPredictionTaskStatus(task_id);
+
+                    if (data.status === "COMPLETED") {
+                        clearInterval(pollInterval);
+                        // @ts-ignore
+                        const resultText = data.result.prediction || data.result.text || (typeof data.result === 'string' ? data.result : JSON.stringify(data.result));
+
+                        const newBotMsg: Message = {
+                            id: (Date.now() + 1).toString(),
+                            role: 'assistant',
+                            content: resultText
+                        };
+
+                        setChatMessages(prev => [...prev, newBotMsg]);
+                        setIsPredictionLoading(false);
+
+                        if (Notification.permission === "granted" && document.hidden) {
+                            new Notification("StoryProof 답변 도착", {
+                                body: "챗봇이 응답했습니다.",
+                                icon: "/favicon.ico"
+                            });
+                        }
+
+                    } else if (data.status === "FAILED") {
+                        clearInterval(pollInterval);
+                        setIsPredictionLoading(false);
+                        toast.error("답변 생성 중 오류가 발생했습니다.");
+                    }
+                } catch (e) {
+                    // Continue polling
+                }
+            }, 2000);
+
+        } catch (error) {
+            setIsPredictionLoading(false);
+            toast.error("서버 요청에 실패했습니다.");
+        }
+    };
+
+    const handlePredictStoryTrigger = () => {
+        handlePredictionSidebarOpen();
     };
 
     const handleNavigateToQuote = (quote: string) => {
@@ -310,11 +385,6 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId }: ChapterD
             const sceneIndex = sceneTexts.findIndex((s: string) => normalize(s).includes(targetQ));
 
             if (sceneIndex !== -1) {
-                // Determine the exact substring to highlight within the original text
-                // This is a best-effort match since we normalized both
-                const originalText = sceneTexts[sceneIndex];
-                // Simple heuristic: try to find the quote roughly
-                // If exact match fails, we still scroll to the scene but might not highlight perfectly
                 scrollToScene(sceneIndex, quote);
             } else {
                 alert('해당 문장을 본문에서 찾을 수 없습니다.');
@@ -462,15 +532,27 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId }: ChapterD
                 }}>
                     <ArrowLeft size={24} color="#4B5563" />
                 </button>
-                <div style={{ flex: 1 }}>
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center' }}>
                     <h1 className="chapter-detail-title" style={{
                         fontSize: '1.25rem',
                         fontWeight: 600,
                         color: '#1F2937',
                         margin: 0
                     }}>{fileName}</h1>
+                    <span style={{
+                        marginLeft: '12px',
+                        padding: '4px 12px',
+                        borderRadius: '9999px',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        backgroundColor: mode === 'reader' ? '#E0F2FE' : '#EEF2FF',
+                        color: mode === 'reader' ? '#0369A1' : '#4F46E5',
+                        whiteSpace: 'nowrap'
+                    }}>
+                        {mode === 'reader' ? '📖 독자 모드' : '✍️ 작가 모드'}
+                    </span>
                 </div>
-                {novelId && chapterId && (
+                {novelId && chapterId && mode !== 'reader' && (
                     <div style={{ display: 'flex', gap: '8px' }}>
                         <button
                             className="reanalyze-button"
@@ -518,6 +600,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId }: ChapterD
                     </div>
                 )}
             </div>
+
 
             {/* Main Layout */}
             <div className="chapter-detail-layout">
@@ -758,15 +841,15 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId }: ChapterD
                                         </div>
 
                                         <div className="scene-content-wrapper">
-                                            {editingSceneIndex !== index ? (
+                                            {editingSceneIndex !== index || mode === 'reader' ? (
                                                 <div
                                                     className="scene-read-mode exact-text-match"
-                                                    onClick={() => setEditingSceneIndex(index)}
+                                                    onClick={() => mode !== 'reader' && setEditingSceneIndex(index)}
                                                     style={{
                                                         minHeight: '150px',
-                                                        border: '1px solid #e2e8f0',
+                                                        border: mode === 'reader' ? 'none' : '1px solid #e2e8f0',
                                                         borderRadius: '8px',
-                                                        cursor: 'text',
+                                                        cursor: mode === 'reader' ? 'default' : 'text',
                                                         backgroundColor: 'transparent'
                                                     }}
                                                 >
@@ -1424,36 +1507,26 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId }: ChapterD
                 onNavigateToQuote={handleNavigateToQuote}
             />
 
-            {/* 스토리 예측 모달 */}
-            <PredictionModal
-                isOpen={isPredictionModalOpen}
-                onClose={() => setIsPredictionModalOpen(false)}
-                onPredict={async (scenario: string) => {
-                    if (!novelId) return null;
-                    try {
-                        const response = await fetch('http://localhost:8000/api/v1/analysis/prediction', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ novel_id: novelId, text: scenario })
-                        });
-                        if (!response.ok) throw new Error('Prediction failed');
-                        const data = await response.json();
-                        return data.result?.prediction || data.result || '예측 결과를 가져올 수 없습니다.';
-                    } catch (error) {
-                        console.error('Prediction error:', error);
-                        return null;
-                    }
-                }}
+            {/* 스토리 예측 사이드바 */}
+            <PredictionSidebar
+                isOpen={isPredictionSidebarOpen}
+                onClose={() => setIsPredictionSidebarOpen(false)}
+                messages={chatMessages}
+                onSendMessage={handleSendMessage}
+                isLoading={isPredictionLoading}
+                onClearChat={() => setChatMessages([])}
             />
 
             {/* Floating Menu - Settings, Analysis, Prediction, Chatbot */}
             <FloatingMenu
                 onNavigateToScene={scrollToScene}
                 onCheckConsistency={handleCheckConsistency}
-                onPredictStory={() => setIsPredictionModalOpen(true)}
+                onPredictStory={handlePredictStoryTrigger}
+                onOpenCharacterChat={onOpenCharacterChat}
                 novelId={novelId}
                 chapterId={chapterId}
+                mode={mode}
             />
-        </div >
+        </div>
     );
 }

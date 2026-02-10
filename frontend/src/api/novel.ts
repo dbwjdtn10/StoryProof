@@ -228,8 +228,19 @@ export const getChapterBible = async (novelId: number, chapterId: number): Promi
 };
 
 export const reanalyzeChapter = async (novelId: number, chapterId: number): Promise<void> => {
-    const response = await request<{ status: string }>(`/novels/${novelId}/chapters/${chapterId}/analyze`, {
+    await request<{ status: string }>(`/novels/${novelId}/chapters/${chapterId}/analyze`, {
         method: 'POST',
         headers: getHeaders(),
+    });
+};
+
+export const mergeChapters = async (novelId: number, targetId: number, sourceIds: number[]): Promise<Chapter> => {
+    return request<Chapter>(`/novels/${novelId}/merge-contents`, {
+        method: 'PATCH',
+        headers: getHeaders(),
+        body: JSON.stringify({
+            target_id: targetId,
+            source_ids: sourceIds
+        })
     });
 };

@@ -9,8 +9,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
-import traceback
-from backend.api.v1.endpoints import auth, novel, chat, analysis
+from backend.api.v1.endpoints import auth, novel, chat, analysis, prediction, character_chat
 from backend.core.config import settings
 from backend.db.session import engine, init_db
 
@@ -54,11 +53,11 @@ def configure_cors() -> None:
         CORSMiddleware,
         allow_origins=settings.CORS_ORIGINS,
         allow_credentials=True,
-        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
         allow_headers=["*"],
         max_age=3600,
     )
-    print(f"✓ CORS configured for origins: {settings.CORS_ORIGINS}")
+    print(f"[OK] CORS configured for origins: {settings.CORS_ORIGINS}")
 
 
 def register_routers() -> None:
@@ -70,7 +69,9 @@ def register_routers() -> None:
     app.include_router(novel.router, prefix="/api/v1/novels", tags=["Novel"])
     app.include_router(analysis.router, prefix="/api/v1/analysis", tags=["분석"])
     app.include_router(chat.router, prefix="/api/v1/chat", tags=["Chat"])
-    print("✓ Routers registered")
+    app.include_router(prediction.router, prefix="/api/v1/prediction", tags=["Prediction"])
+    app.include_router(character_chat.router, prefix="/api/v1/character-chat", tags=["CharacterChat"])
+    print("[OK] Routers registered")
 
 
 # 설정 적용 (순서 중요: CORS를 마지막에 - 역순으로 실행되므로 먼저 처리됨)

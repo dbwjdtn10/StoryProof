@@ -12,7 +12,7 @@ from backend.core.security import get_current_user
 from backend.services.novel_service import NovelService
 from backend.schemas.novel_schema import (
     NovelCreate, NovelUpdate, NovelResponse, NovelListResponse,
-    ChapterResponse, ChapterUpdate
+    ChapterResponse, ChapterUpdate, ChapterMergeRequest
 )
 
 router = APIRouter()
@@ -63,6 +63,23 @@ async def delete_novel(
     db: Session = Depends(get_db)
 ):
     NovelService.delete_novel(db, novel_id, current_user.id)
+
+@router.patch("/{novel_id}/merge-contents", response_model=ChapterResponse)
+async def merge_chapters(
+    novel_id: int,
+    merge_data: ChapterMergeRequest,
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    회차 병합 API
+    - 여러 회차 내용을 하나로 합칩니다. (target_id로 병합)
+    - 병합된 소스 회차들은 삭제됩니다.
+    """
+    is_admin = getattr(current_user, "is_admin", False)
+    return NovelService.merge_chapters(
+        db, novel_id, merge_data.target_id, merge_data.source_ids, current_user.id, is_admin
+    )
 
 # ===== 회차 관리 =====
 
@@ -126,6 +143,9 @@ async def update_chapter(
     current_user = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    """
+    회차 수정
+    """
     is_admin = getattr(current_user, "is_admin", False)
     return NovelService.update_chapter(db, novel_id, chapter_id, chapter_update, current_user.id, is_admin)
 

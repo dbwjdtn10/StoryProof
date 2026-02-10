@@ -404,3 +404,88 @@ class NovelService:
             
         db.delete(chapter)
         db.commit()
+
+    @staticmethod
+    def merge_chapters(
+        db: Session, 
+        novel_id: int, 
+        target_id: int, 
+        source_ids: List[int], 
+        user_id: int, 
+        is_admin: bool = False
+    ) -> Chapter:
+        """
+        여러 회차를 하나로 병합
+        
+        Args:
+            db: 데이터베이스 세션
+            novel_id: 소설 ID
+            target_id: 병합된 내용이 저장될 대상 회차 ID
+            source_ids: 병합할 소스 회차 ID 목록 (대상 회차 포함 가능)
+            user_id: 사용자 ID
+            is_admin: 관리자 권한 여부
+            
+        Returns:
+            Chapter: 병합된 대상 회차 객체
+        """
+        # 1. 권한 및 소설 확인
+        novel = db.query(Novel).filter(Novel.id == novel_id).first()
+        if not novel:
+            raise HTTPException(status_code=404, detail="소설을 찾을 수 없습니다.")
+            
+        if novel.author_id != user_id and not is_admin:
+            raise HTTPException(status_code=403, detail="권한이 없습니다.")
+
+        # 2. 관련 모든 회차 조회
+        all_ids = set(source_ids) | {target_id}
+        chapters = db.query(Chapter).filter(
+            Chapter.novel_id == novel_id,
+            Chapter.id.in_(all_ids)
+        ).all()
+        
+        if len(chapters) != len(all_ids):
+            raise HTTPException(status_code=404, detail="일부 회차를 찾을 수 없습니다.")
+            
+        # 3. 회차 번호 순으로 정렬
+        sorted_chapters = sorted(chapters, key=lambda c: c.chapter_number)
+        
+        # 4. 내용 병합
+        merged_content_parts = []
+        for ch in sorted_chapters:
+            # 제목을 포함하여 구분할 수도 있지만, 여기서는 내용만 단순 병합하거나 구분자 추가
+            # 요구사항에 따라 다르지만, 파일 병합 스크립트 참고: "\n\n--- {title} 시작 ---\n"
+            header = f"\n\n--- {ch.title} ---\n"
+            merged_content_parts.append(header + ch.content)
+            
+        final_content = "".join(merged_content_parts).strip()
+        
+        # 5. 대상 회차 업데이트 및 나머지 삭제
+        target_chapter = next((c for c in chapters if c.id == target_id), None)
+        if not target_chapter:
+             raise HTTPException(status_code=404, detail="대상 회차를 찾을 수 없습니다.") # Should not happen
+             
+        target_chapter.content = final_content
+        target_chapter.word_count = len(final_content.split())
+        
+        # 삭제 대상 (target 제외)
+        for ch in chapters:
+            if ch.id != target_id:
+                db.delete(ch)
+                
+        db.commit()
+        db.refresh(target_chapter)
+        
+        # TODO: 병합 후 재분석 트리거? 
+        # 일단 내용이 바뀌었으므로 상태 초기화
+        target_chapter.storyboard_status = "PENDING"
+        target_chapter.storyboard_progress = 0
+        db.commit()
+        
+        # 백그라운드 분석 트리거 (선택 사항)
+        try:
+            from backend.worker.tasks import process_chapter_storyboard
+            process_chapter_storyboard.delay(novel_id, target_chapter.id)
+        except:
+            pass
+            
+        return target_chapter

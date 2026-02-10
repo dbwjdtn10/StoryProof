@@ -6,7 +6,7 @@ celery_app = Celery(
     "storyproof_worker",
     broker=settings.CELERY_BROKER_URL,
     backend=settings.CELERY_RESULT_BACKEND,
-    include=["backend.worker.tasks"]
+    include=["backend.worker.tasks", "backend.worker.prediction_tasks"]
 )
 
 # 기본 설정 업데이트

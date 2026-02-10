@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import { Mail, Lock, Eye, EyeOff, User, BookOpen } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, User, BookOpen, MessageSquare } from 'lucide-react';
 import { ChapterDetail } from './components/ChapterDetail';
 import { FileUpload } from './components/FileUpload';
 import { ThemeToggle } from './components/ThemeToggle';
-// import { ChatBot } from './components/ChatBot';
+import { CharacterChatBot } from './components/CharacterChatBot';
 import { register, login } from './api/auth';
 import { getNovels, createNovel, Novel } from './api/novel';
 
@@ -14,8 +14,14 @@ export default function App() {
   const [selectedFile, setSelectedFile] = useState<string>('');
   const [selectedChapterId, setSelectedChapterId] = useState<number | undefined>(undefined);
   const [currentNovel, setCurrentNovel] = useState<Novel | null>(null);
+  const [showChatBot, setShowChatBot] = useState(false);
 
   // Login/Signup form states
+  const [userMode, setUserMode] = useState<'reader' | 'writer'>(
+    (localStorage.getItem('userMode') as 'reader' | 'writer') || 'writer'
+  );
+  const [signupMode, setSignupMode] = useState<'reader' | 'writer'>('writer');
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -33,6 +39,8 @@ export default function App() {
       // 1. Login
       const tokenResponse = await login({ email, password });
       localStorage.setItem('token', tokenResponse.access_token);
+      localStorage.setItem('userMode', tokenResponse.mode);
+      setUserMode(tokenResponse.mode);
 
       // 2. Fetch or Create Novel
       try {
@@ -74,7 +82,8 @@ export default function App() {
       await register({
         username: name,
         email: email,
-        password: password
+        password: password,
+        mode: signupMode
       });
       alert('회원가입이 완료되었습니다. 로그인해주세요.');
       setCurrentScreen('login');
@@ -97,27 +106,70 @@ export default function App() {
   // Upload Screen
   if (currentScreen === 'upload') {
     return (
-      <FileUpload
-        onFileClick={(chapter) => {
-          console.log("Chapter selected:", chapter);
-          setSelectedFile(chapter.title);
-          setSelectedChapterId(chapter.id);
-          setCurrentScreen('chapterDetail');
-        }}
-        novelId={currentNovel?.id}
-      />
+      <>
+        <FileUpload
+          onFileClick={(chapter) => {
+            setSelectedFile(chapter.title);
+            setSelectedChapterId(chapter.id);
+            setCurrentScreen('chapterDetail');
+          }}
+          novelId={currentNovel?.id}
+          mode={userMode}
+        />
+        {currentNovel && (
+          <>
+            <button
+              onClick={() => setShowChatBot(prev => !prev)}
+              style={{
+                position: 'fixed',
+                bottom: '20px',
+                right: '20px',
+                zIndex: 1000,
+                padding: '12px',
+                borderRadius: '50%',
+                backgroundColor: '#fee500',
+                color: '#3b1e1e',
+                border: 'none',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              <MessageSquare size={24} />
+            </button>
+            {showChatBot && (
+              <CharacterChatBot
+                novelId={currentNovel.id}
+                onClose={() => setShowChatBot(false)}
+              />
+            )}
+          </>
+        )}
+      </>
     );
   }
 
   // Chapter Detail Screen
   if (currentScreen === 'chapterDetail') {
     return (
-      <ChapterDetail
-        fileName={selectedFile}
-        onBack={() => setCurrentScreen('upload')}
-        novelId={currentNovel?.id}
-        chapterId={selectedChapterId}
-      />
+      <>
+        <ChapterDetail
+          fileName={selectedFile}
+          onBack={() => setCurrentScreen('upload')}
+          novelId={currentNovel?.id}
+          chapterId={selectedChapterId}
+          mode={userMode}
+          onOpenCharacterChat={() => setShowChatBot(true)}
+        />
+        {currentNovel && showChatBot && (
+          <CharacterChatBot
+            novelId={currentNovel.id}
+            onClose={() => setShowChatBot(false)}
+          />
+        )}
+      </>
     );
   }
 
@@ -139,6 +191,47 @@ export default function App() {
             <p className="login-subtitle">새 계정을 만들어 시작하세요</p>
 
             <form onSubmit={handleSignupSubmit} className="login-form">
+              {/* Mode Selection */}
+              <div className="form-group">
+                <label className="form-label">사용자 모드</label>
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setSignupMode('writer')}
+                    className="mode-button"
+                    style={{
+                      flex: 1,
+                      padding: '10px',
+                      borderRadius: '8px',
+                      border: `1px solid ${signupMode === 'writer' ? '#4F46E5' : '#E5E7EB'}`, // indigo-600 : gray-200
+                      backgroundColor: signupMode === 'writer' ? '#EEF2FF' : 'white', // indigo-50
+                      color: signupMode === 'writer' ? '#4F46E5' : '#374151',
+                      cursor: 'pointer',
+                      fontWeight: 500
+                    }}
+                  >
+                    ✍️ 작가 모드
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSignupMode('reader')}
+                    className="mode-button"
+                    style={{
+                      flex: 1,
+                      padding: '10px',
+                      borderRadius: '8px',
+                      border: `1px solid ${signupMode === 'reader' ? '#0284C7' : '#E5E7EB'}`, // sky-600 : gray-200
+                      backgroundColor: signupMode === 'reader' ? '#E0F2FE' : 'white', // sky-50
+                      color: signupMode === 'reader' ? '#0284C7' : '#374151',
+                      cursor: 'pointer',
+                      fontWeight: 500
+                    }}
+                  >
+                    📖 독자 모드
+                  </button>
+                </div>
+              </div>
+
               {/* Name Input */}
               <div className="form-group">
                 <label htmlFor="name" className="form-label">

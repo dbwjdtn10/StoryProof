@@ -2,6 +2,7 @@ export interface User {
     id: number;
     email: string;
     username: string;
+    mode: 'reader' | 'writer';
     is_active: boolean;
     created_at: string;
 }
@@ -10,6 +11,7 @@ export interface SignupRequest {
     email: string;
     username: string;
     password: string;
+    mode: 'reader' | 'writer';
 }
 
 export interface LoginRequest {
@@ -21,6 +23,7 @@ export interface TokenResponse {
     access_token: string;
     token_type: string;
     refresh_token: string;
+    mode: 'reader' | 'writer';
 }
 
 export interface UserResponse extends User { }

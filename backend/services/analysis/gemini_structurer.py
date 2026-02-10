@@ -189,8 +189,8 @@ class GeminiStructurer:
                 # 빈 줄이라도 목차 중간일 수 있으므로 카운트 리셋하지 않음 (단, 너무 길면 리셋)
                 continue
             
-            # 목차 명시적 키워드 감지
-            if re.match(r'^(목차|차례|Contents|Table of Contents)', line_stripped, re.IGNORECASE):
+            # 목차 명시적 키워드 감지 (공백 포함 및 다양한 변형)
+            if re.match(r'^\s*(목\s*차|차\s*례|Contents|Table\s+of\s+Contents)', line_stripped, re.IGNORECASE):
                 toc_start_idx = i
                 consecutive_chapters = 3  # 즉시 목차 모드로 진입
                 continue
@@ -206,6 +206,12 @@ class GeminiStructurer:
                 # 3개 이상 연속이면 목차로 간주 (개츠비는 4개)
                 if consecutive_chapters >= 3:
                     # 목차 끝 찾기: 본문 시작 패턴 감지
+                    last_chap_num = -1
+                    # 현재 줄에서 번호 추출 시도
+                    nm = re.search(r'\d+', line_stripped)
+                    if nm:
+                        last_chap_num = int(nm.group())
+
                     # 검색 범위를 현재 위치에서 +1000줄까지로 확대
                     for j in range(i + 1, min(i + 1000, len(lines))):
                         check_line = lines[j].strip()
@@ -215,7 +221,19 @@ class GeminiStructurer:
                         # 챕터 패턴이 아니면서 긴 문장이면 본문 시작
                         is_still_chapter = any(re.match(p, check_line, re.IGNORECASE) for p in patterns)
                         
-                        if not is_still_chapter and len(check_line) > 30:
+                        if is_still_chapter:
+                            # 번호 리셋 체크 (10장 -> 1장)
+                            cur_nm = re.search(r'\d+', check_line)
+                            if cur_nm and last_chap_num > 0:
+                                cur_num = int(cur_nm.group())
+                                # 번호가 갑자기 줄어들면 (예: 10 -> 1, 5 -> 1) 본문 시작으로 간주
+                                if cur_num < last_chap_num:
+                                     toc_end_idx = j
+                                     print(f"   [TOC] 챕터 번호 리셋 감지 ({last_chap_num} -> {cur_num}). {toc_end_idx}번째 줄부터 본문으로 간주합니다.")
+                                     break
+                                last_chap_num = cur_num
+                        
+                        if not is_still_chapter and len(check_line) > 60:
                             toc_end_idx = j
                             print(f"   [TOC] 목차 감지됨 (Line {toc_start_idx}-{j}). {toc_end_idx}번째 줄부터 본문으로 간주합니다.")
                             break
@@ -324,12 +342,19 @@ Output Format (JSON List of Strings):
                 if not anchor or len(anchor.strip()) < 2:  # 최소 길이 2로 완화
                     continue
                     
+                # A. 정확히 일치 (Exact Match) - TOC 중복 방지 로직 추가
+                first_idx = text.find(anchor, last_idx + 1)
+                
                 # A. 정확히 일치 (Exact Match)
-                idx = text.find(anchor, last_idx + 1)
+                first_idx = text.find(anchor, last_idx + 1)
+                
+                if first_idx != -1:
+                    idx = first_idx
+                else:
+                    idx = -1
                 
                 # B. 공백 정규화 및 부분 일치 (Whitespace Normalized Match)
                 if idx == -1:
-                    import re
                     # 앵커의 앞 30자리만 추출하여 검색 (줄바꿈/공백 정규화)
                     clean_seed = re.sub(r'\s+', ' ', anchor).strip()[:30]
                     # 특수문자 이스케이프
@@ -416,6 +441,51 @@ Output Format (JSON List of Strings):
                             idx = search_start + match.a
                             print(f"    [Fuzzy Match] 퍼지 매칭 성공({match.size}자): '{search_region[match.a:match.a+15]}...'")
 
+                # ---------------------------------------------------------
+                # E. 공통 중복 체크 (Common Duplicate Check)
+                # 어떤 방식(A,B,C,D)으로든 앵커(idx)를 찾았을 때,
+                # 그것이 TOC(목차)이고 뒤에 본문이 따로 있는지 확인
+                # ---------------------------------------------------------
+                if idx != -1 and idx < 8000:
+                    # Duplicate Check Logic (Moved from Block A)
+                    
+                    # 검색 시작 위치: 현재 찾은 idx + 앵커길이(혹은 20자)
+                    # 앵커가 정확하지 않을 수 있으므로 대략적으로 잡음
+                    check_start = idx + 20 
+                    check_limit = min(check_start + 25000, len(text))
+                    search_region = text[check_start : check_limit]
+                    
+                    # Seed 변형 생성
+                    raw_seed = anchor[:10]
+                    clean_seed = re.sub(r'[^\w\s]', '', raw_seed).strip()
+                    seeds = [raw_seed, clean_seed]
+                    
+                    found_dup = False
+                    for seed in seeds:
+                        if len(seed) < 2: continue
+                        
+                        try:
+                            # 모든 공백을 유연하게 처리 (\s+)
+                            parts = seed.split()
+                            if not parts: continue
+                            
+                            seed_p = r'\s+'.join(re.escape(p) for p in parts)
+                            
+                            seed_re = re.compile(seed_p, re.IGNORECASE)
+                            seed_match = seed_re.search(search_region)
+                            
+                            if seed_match:
+                                # 재등장 확인됨 -> 현재 idx는 TOC일 확률 높음
+                                seed_pos = seed_match.start()
+                                real_second_idx = check_start + seed_pos
+                                print(f"    [Merge/Global] 중복 앵커 감지 (Regex): {idx} vs ~{real_second_idx}. 본문(후방) 앵커 선택.")
+                                idx = real_second_idx 
+                                found_dup = True
+                                break
+                        except Exception as re_err:
+                            print(f"    [Warning] 중복 체크 Regex 오류: {re_err}")
+                            continue
+
                 if idx != -1:
                     start_indices.append(idx)
                     last_idx = idx
@@ -440,7 +510,54 @@ Output Format (JSON List of Strings):
                     scenes.append(scene_content)
             
             print(f"[OK] LLM 씬 분할 완료: {len(scenes)}개 씬 생성")
-            return scenes
+            
+            # 3. 후처리: 너무 짧은 씬(TOC 항목 등)을 이전 씬에 병합
+            merged_scenes = []
+            if not scenes:
+                return [text]
+
+            current_chunk = scenes[0]
+            
+            # 챕터 패턴 (재사용)
+            check_patterns = [
+                r'^제\s*\d+\s*장', r'^\d+\s*장\.', r'^Chapter\s+\d+', r'^CHAPTER\s+\d+',
+                r'^[IVX]{1,8}\s*$', r'^[IVXLCDM]{1,10}\s*$', r'^[ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩ]+\s*$',
+                r'^[IVX]{1,8}\.\s+', r'^[IVXLCDM]{1,10}\.\s+',
+                r'^나\s*$', r'^다\s*$', r'^라\s*$', r'^뷔\s*$', r'^[1-9]\s*$',
+                r'^에필로그', r'^Epilogue', r'^EPILOGUE', r'^#\s+', r'^##\s+'
+            ]
+            
+            for i in range(1, len(scenes)):
+                next_scene = scenes[i]
+                
+                # 병합 조건 검사
+                # 1. 길이가 너무 짧음 (< 300자)
+                is_short = len(next_scene) < 300
+                
+                # 2. 챕터 헤더만 있는 경우 체크 (< 500자 이면서 헤더 패턴 매칭)
+                is_header_only = False
+                if len(next_scene) < 500:
+                    first_line = next_scene.strip().split('\n')[0]
+                    is_header_only = any(re.match(p, first_line, re.IGNORECASE) for p in check_patterns)
+                
+                # 3. 줄 수가 너무 적음 (< 5줄)
+                lines_count = len(next_scene.strip().split('\n'))
+                is_few_lines = lines_count <= 5
+                
+                should_merge = (is_short and is_few_lines) or is_header_only
+                
+                if should_merge:
+                    print(f"    [Post-Merge] 씬 {i+1}이 너무 짧음({len(next_scene)}자). 이전 씬에 병합합니다.")
+                    current_chunk += "\n\n" + next_scene
+                else:
+                    merged_scenes.append(current_chunk)
+                    current_chunk = next_scene
+            
+            # 마지막 청크 추가
+            merged_scenes.append(current_chunk)
+            
+            print(f"[OK] 씬 병합 완료: {len(scenes)} -> {len(merged_scenes)}개")
+            return merged_scenes
 
         except Exception as e:
             print(f"[Error] LLM 씬 분할 실패: {e}")
