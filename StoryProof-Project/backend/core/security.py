@@ -203,7 +203,6 @@ async def get_current_user(
     try:
         user = db.query(User).filter(User.id == int(user_id)).first()
         if user is None:
-            print(f"ERROR >>> 토큰의 ID({user_id})에 해당하는 유저가 DB에 없습니다.")
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found",
@@ -212,7 +211,6 @@ async def get_current_user(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"ERROR >>> 유저 조회 중 예외 발생: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="User lookup failed",

@@ -86,9 +86,10 @@
 
 .chatbot-header {
     padding: 1.25rem 1.5rem;
-    background: #000000;
-    color: white;
+    background: #f8f9fa;
+    color: #212529;
     border-radius: 1rem 1rem 0 0;
+    border-bottom: 1px solid #dee2e6;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -109,7 +110,7 @@
 .chatbot-close {
     background: none;
     border: none;
-    color: white;
+    color: #212529;
     cursor: pointer;
     padding: 0.25rem;
     display: flex;
@@ -120,7 +121,7 @@
 }
 
 .chatbot-close:hover {
-    background: rgba(255, 255, 255, 0.2);
+    background: rgba(0, 0, 0, 0.1);
 }
 
 .chatbot-messages {
@@ -144,8 +145,7 @@
 }
 
 .chatbot-message.user {
-    background: #000000;
-    color: white;
+    /* Styles moved to inline in ChatBot.tsx to prevent conflicts */
     margin-left: auto;
 }
 

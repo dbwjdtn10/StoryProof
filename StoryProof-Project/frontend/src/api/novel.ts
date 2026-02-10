@@ -26,6 +26,9 @@ export interface Chapter {
     content: string;
     word_count: number;
     created_at: string;
+    storyboard_status?: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+    storyboard_progress?: number;
+    storyboard_message?: string;
 }
 
 export interface StoryboardProgress {
@@ -98,7 +101,7 @@ export const uploadChapter = async (
 
     if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || 'Upload failed');
+        throw new Error(errorData.detail || 'Failed to upload chapter');
     }
 
     const uploadedChapter = await response.json();
@@ -224,21 +227,20 @@ export const getChapterBible = async (novelId: number, chapterId: number): Promi
     }
 };
 
-export interface ConsistencyResponse {
-    report: string;
-    metadata: {
-        context_count: number;
-        has_bible: boolean;
-    };
-}
-
-export const checkConsistency = async (novelId: number, currentText: string): Promise<ConsistencyResponse> => {
-    return request<ConsistencyResponse>('/consistency/check', {
+export const reanalyzeChapter = async (novelId: number, chapterId: number): Promise<void> => {
+    await request<{ status: string }>(`/novels/${novelId}/chapters/${chapterId}/analyze`, {
         method: 'POST',
         headers: getHeaders(),
+    });
+};
+
+export const mergeChapters = async (novelId: number, targetId: number, sourceIds: number[]): Promise<Chapter> => {
+    return request<Chapter>(`/novels/${novelId}/merge-contents`, {
+        method: 'PATCH',
+        headers: getHeaders(),
         body: JSON.stringify({
-            novel_id: novelId,
-            current_text: currentText,
-        }),
+            target_id: targetId,
+            source_ids: sourceIds
+        })
     });
 };

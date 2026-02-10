@@ -1,39 +1,50 @@
-import { Upload, X, FileText } from 'lucide-react';
+import { Upload, X, FileText, Merge, CheckSquare, Square } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { ThemeToggle } from './ThemeToggle';
 import { getChapters, uploadChapter, deleteChapter, getStoryboardStatus, Chapter, StoryboardProgress } from '../api/novel';
+import { useFileMerge } from '../hooks/useFileMerge';
 
 interface FileUploadProps {
     onFileClick: (chapter: Chapter) => void;
     novelId?: number;
+    mode?: 'reader' | 'writer';
 }
 
 interface ChapterWithProgress extends Chapter {
     storyboardProgress?: StoryboardProgress;
-    storyboard_status?: string; 
-    storyboard_progress?: number;
-    storyboard_message?: string;
 }
 
-export function FileUpload({ onFileClick, novelId }: FileUploadProps) {
+export function FileUpload({ onFileClick, novelId, mode = 'writer' }: FileUploadProps) {
     const [uploadedFiles, setUploadedFiles] = useState<ChapterWithProgress[]>([]);
     const [dragActive, setDragActive] = useState(false);
     const [progressMap, setProgressMap] = useState<{ [key: number]: StoryboardProgress }>({});
     const fileInputRef = useRef<HTMLInputElement>(null);
     const progressIntervalRef = useRef<{ [key: number]: NodeJS.Timeout }>({});
-    const [copyTargetId, setCopyTargetId] = useState<number | null>(null);
 
-    const [isMergeMode, setIsMergeMode] = useState(false);
-    const [selectedSourceIds, setSelectedSourceIds] = useState<number[]>([]);
+    const {
+        isMergeMode,
+        selectedSourceIds,
+        isMerging,
+        toggleMergeMode,
+        handleFileSelect,
+        executeMerge,
+        cancelMerge
+    } = useFileMerge({
+        novelId,
+        onSuccess: () => {
+            loadChapters(); // Refresh UI after merge
+        }
+    });
 
     // 진행 상황 조회 함수
     const fetchStoryboardStatus = async (chapterId: number) => {
         if (!novelId) return;
         try {
             const status = await getStoryboardStatus(novelId, chapterId);
+            // console.log(`[Status] Chapter ${chapterId}:`, status); // 디버깅용
             setProgressMap(prev => ({ ...prev, [chapterId]: status }));
 
-            // COMPLETED 또는 FAILED 상태면 폴링 중지 (대문자 지원)
+            // COMPLETED 또는 FAILED 상태면 폴링 중지
             const statusUpper = status.status?.toUpperCase();
             if (statusUpper === 'COMPLETED' || statusUpper === 'FAILED') {
                 if (progressIntervalRef.current[chapterId]) {
@@ -42,7 +53,7 @@ export function FileUpload({ onFileClick, novelId }: FileUploadProps) {
                 }
             }
         } catch (error) {
-            // 조용히 무시
+            // console.error(`[Error] Failed to fetch status for ${chapterId}:`, error);
         }
     };
 
@@ -75,14 +86,12 @@ export function FileUpload({ onFileClick, novelId }: FileUploadProps) {
             const chapters = await getChapters(novelId);
             setUploadedFiles(chapters);
 
-            // [추가] 분석 중인 파일이 있다면 자동으로 폴링 재개
-            chapters.forEach((chapter: ChapterWithProgress) => {
-                const status = (chapter.storyboard_status || '').toUpperCase();
+            // 기존 파일 중 처리 중인 파일이 있으면 폴링 시작
+            chapters.forEach(chapter => {
+                // chapter 객체에 storyboard_status가 없는 경우를 대비해 초기화
+                const status = (chapter as any).storyboard_status?.toUpperCase();
                 if (status === 'PROCESSING' || status === 'PENDING') {
-                    // 이미 폴링 중이지 않은 경우에만 시작
-                    if (!progressIntervalRef.current[chapter.id]) {
-                        startProgressPolling(chapter.id);
-                    }
+                    startProgressPolling(chapter.id);
                 }
             });
         } catch (error) {
@@ -100,58 +109,6 @@ export function FileUpload({ onFileClick, novelId }: FileUploadProps) {
         }
     };
 
-    const handleMerge = async () => {
-        if (!novelId || selectedSourceIds.length < 2) {
-            alert("합칠 파일을 2개 이상 선택해 주세요.");
-            return;
-        }
-
-        const token = localStorage.getItem('token');
-        if (!token) {
-            alert("로그인이 필요합니다.");
-            return;
-        }
-
-        const targetId = selectedSourceIds[0];
-        const sourceIds = selectedSourceIds.slice(1);
-
-        try {
-            const res = await fetch(`http://localhost:8000/api/v1/novels/${novelId}/merge-contents`, { 
-                method: 'PATCH', 
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}` 
-                },
-                body: JSON.stringify({ 
-                    source_ids: sourceIds, 
-                    target_id: targetId 
-                })
-            });
-        
-            if (res.ok) {
-                const data = await res.json();
-                alert("파일이 합쳐졌습니다. 통합 분석을 시작합니다.");
-
-                setIsMergeMode(false);
-                setSelectedSourceIds([]);
-
-                if (data.new_id) {
-                    startProgressPolling(data.new_id);
-                }
-
-                await loadChapters(); 
-            } else {
-                // FastAPI의 에러 메시지 구조(detail)에 맞춰 처리
-                const errorData = await res.json().catch(() => ({}));
-                alert(`합치기 실패: ${errorData.detail || '서버 오류가 발생했습니다.'}`);
-            }
-        } catch (error) {
-            // fetch 자체가 실패한 경우(네트워크 오프라인 등) 실행됨
-            console.error("Network Error:", error);
-            alert("네트워크 연결을 확인해 주세요.");
-        }
-    };
-    
     const handleDrop = (e: React.DragEvent) => {
         e.preventDefault();
         e.stopPropagation();
@@ -243,6 +200,7 @@ export function FileUpload({ onFileClick, novelId }: FileUploadProps) {
             {/* Hidden File Input */}
             <input
                 ref={fileInputRef}
+                id="file-upload-input"
                 type="file"
                 className="upload-input"
                 onChange={handleChange}
@@ -251,24 +209,32 @@ export function FileUpload({ onFileClick, novelId }: FileUploadProps) {
             />
 
             {/* Floating Upload Button */}
-            <button className="floating-upload-btn" onClick={openFileDialog} title="파일 업로드">
-                <Upload size={24} />
-            </button>
+            {!isMergeMode && (
+                <button className="floating-upload-btn" onClick={openFileDialog} title="파일 업로드">
+                    <Upload size={24} />
+                </button>
+            )}
 
             <div className="upload-main">
                 <div className="upload-content">
                     {/* Header */}
-                    <div className="upload-header">
-                        <h1 className="upload-title">파일 업로드</h1>
-                        <p className="upload-subtitle">StoryProof</p>
+                    <div className="upload-header" style={{ textAlign: 'center', justifyContent: 'center' }}>
+                        <div>
+                            <h1 className="upload-title">{mode === 'reader' ? '작품 라이브러리' : '파일 업로드'}</h1>
+                            <p className="upload-subtitle">StoryProof</p>
+                        </div>
                     </div>
 
                     {/* Show upload area only if no files uploaded */}
                     {uploadedFiles.length === 0 && (
-                        <div className="upload-area">
-                            <label htmlFor="file-upload-input" className="upload-label">
+                        <div className="upload-area" onClick={openFileDialog} style={{ cursor: 'pointer' }}>
+                            <label htmlFor="file-upload-input" className="upload-label" style={{ cursor: 'pointer' }}>
                                 <Upload size={48} className="upload-icon" />
-                                <p className="upload-text-main">파일을 드래그하거나 클릭하여 업로드</p>
+                                <p className="upload-text-main">
+                                    {mode === 'reader'
+                                        ? '자품 파일을 추가하여 읽기 시작하기'
+                                        : '파일을 드래그하거나 클릭하여 업로드'}
+                                </p>
                                 <p className="upload-text-sub">PDF, HWP, TXT 파일 지원</p>
                             </label>
                         </div>
@@ -277,124 +243,149 @@ export function FileUpload({ onFileClick, novelId }: FileUploadProps) {
                     {/* Uploaded Files Grid */}
                     {uploadedFiles.length > 0 && (
                         <div className="uploaded-files-section">
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                                <h2 className="uploaded-files-title" style={{ margin: 0 }}>업로드된 파일</h2>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                                <h2 className="uploaded-files-title" style={{ marginBottom: 0 }}>
+                                    {isMergeMode ? '병합할 파일 선택' : '업로드된 파일'}
+                                </h2>
 
-                                <div style={{ display: 'flex', gap: '8px' }}>
-                                    {!isMergeMode ? (
-                                        <button 
-                                            onClick={() => setIsMergeMode(true)}
-                                            style={{ padding: '6px 12px', background: '#000', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold' }}
-                                        >
-                                            파일 합치기
-                                        </button>
-                                    ) : (
-                                        <>
-                                            <button 
-                                                onClick={(e) => { e.preventDefault(); handleMerge(); }}
-                                                style={{ padding: '6px 12px', background: '#4CAF50', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold' }}
+                                {/* Merge Controls */}
+                                {mode === 'writer' && uploadedFiles.length > 1 && (
+                                    <div>
+                                        {!isMergeMode ? (
+                                            <button
+                                                onClick={toggleMergeMode}
+                                                className="merge-toggle-btn"
+                                                style={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '8px',
+                                                    padding: '8px 16px',
+                                                    borderRadius: '8px',
+                                                    border: '1px solid #e5e7eb',
+                                                    backgroundColor: 'white',
+                                                    cursor: 'pointer',
+                                                    fontWeight: 500,
+                                                    color: '#374151',
+                                                    fontSize: '14px'
+                                                }}
                                             >
-                                                완료 ({selectedSourceIds.length})
+                                                <Merge size={16} />
+                                                파일 병합
                                             </button>
-                                            <button 
-                                                onClick={() => { setIsMergeMode(false); setSelectedSourceIds([]); }}
-                                                style={{ padding: '6px 12px', background: '#eee', color: '#000', border: '1px solid #ccc', borderRadius: '6px', cursor: 'pointer', fontSize: '13px' }}
-                                            >
-                                                취소
-                                            </button>
-                                        </>
-                                    )}
-                                </div>
+                                        ) : (
+                                            <div style={{ display: 'flex', gap: '8px' }}>
+                                                <button
+                                                    onClick={cancelMerge}
+                                                    style={{
+                                                        padding: '8px 16px',
+                                                        borderRadius: '8px',
+                                                        border: '1px solid #e5e7eb',
+                                                        backgroundColor: 'white',
+                                                        cursor: 'pointer',
+                                                        color: '#6b7280',
+                                                        fontSize: '14px'
+                                                    }}
+                                                >
+                                                    취소
+                                                </button>
+                                                <button
+                                                    onClick={executeMerge}
+                                                    disabled={selectedSourceIds.length < 2 || isMerging}
+                                                    style={{
+                                                        padding: '8px 16px',
+                                                        borderRadius: '8px',
+                                                        border: 'none',
+                                                        backgroundColor: selectedSourceIds.length < 2 ? '#e5e7eb' : '#4F46E5',
+                                                        cursor: selectedSourceIds.length < 2 ? 'not-allowed' : 'pointer',
+                                                        color: selectedSourceIds.length < 2 ? '#9ca3af' : 'white',
+                                                        fontSize: '14px',
+                                                        fontWeight: 600
+                                                    }}
+                                                >
+                                                    {isMerging ? '병합 중...' : `${selectedSourceIds.length}개 병합`}
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
-
                             <div className="uploaded-files-grid">
                                 {uploadedFiles.map((file) => {
                                     const progress = progressMap[file.id];
                                     const statusUpper = progress?.status?.toUpperCase();
-                                    const currentStatus = (progress?.status || file.storyboard_status || '').toUpperCase();
-                                    const isProcessing = currentStatus === 'PROCESSING' || currentStatus === 'PENDING';
+                                    const isProcessing = statusUpper === 'PROCESSING';
                                     const isCompleted = statusUpper === 'COMPLETED';
                                     const isFailed = statusUpper === 'FAILED';
+
                                     const isSelected = selectedSourceIds.includes(file.id);
 
                                     return (
                                         <div
                                             key={file.id}
-                                            className={`uploaded-file-card group ${isProcessing ? 'is-analyzing' : ''}`}
+                                            className={`uploaded-file-card ${isSelected ? 'selected' : ''}`}
                                             onClick={() => {
                                                 if (isMergeMode) {
-                                                    setSelectedSourceIds(prev => 
-                                                        prev.includes(file.id) ? prev.filter(id => id !== file.id) : [...prev, file.id]
-                                                    );
-                                                } else if (isProcessing) {
-                                                    alert("현재 통합 분석 중입니다. 잠시만 기다려 주세요.");
-                                                } else {
+                                                    handleFileSelect(file.id);
+                                                } else if (!isProcessing) {
                                                     onFileClick(file);
                                                 }
                                             }}
-                                            style={{ 
-                                                cursor: isProcessing ? 'wait' : 'pointer', // 분석 중이면 커서를 로딩 모양으로
-                                                position: 'relative',
-                                                border: isSelected ? '2px solid #4CAF50' : (isProcessing ? '1px solid #4c6ef5' : 'none'),
-                                                opacity: isProcessing ? 0.8 : 1 // 분석 중인 파일은 약간 흐리게 표시하여 '처리 중'임을 암시
+                                            style={{
+                                                cursor: isMergeMode ? 'pointer' : (isProcessing ? 'wait' : 'pointer'),
+                                                border: isSelected ? '2px solid #4F46E5' : '1px solid #e5e7eb',
+                                                position: 'relative'
                                             }}
                                         >
-                                            {/* [추가] 클릭 순서 배지 표시 */}
-                                            {isMergeMode && isSelected && (
-                                                <div style={{
-                                                    position: 'absolute',
-                                                    top: '10px',
-                                                    left: '10px',
-                                                    width: '24px',
-                                                    height: '24px',
-                                                    backgroundColor: '#4CAF50',
-                                                    color: 'white',
-                                                    borderRadius: '50%',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    justifyContent: 'center',
-                                                    fontSize: '14px',
-                                                    fontWeight: 'bold',
-                                                    zIndex: 30,
-                                                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-                                                }}>
-                                                    {selectedSourceIds.indexOf(file.id) + 1}
-                                                </div>
-                                            )}
-                                            {/* 합치기 모드일 때는 삭제 버튼 영역을 렌더링하지 않아 충돌 방지 */}
-                                            {!isMergeMode && (
-                                                <div 
-                                                    className="file-card-buttons" 
-                                                    style={{ 
-                                                        position: 'absolute', 
-                                                        top: '0.75rem', 
-                                                        right: '0.75rem', 
-                                                        display: 'flex',
-                                                        gap: '5px', 
-                                                        alignItems: 'center', 
-                                                        zIndex: 20 
+                                            {/* Selection Checkbox (Merge Mode) */}
+                                            {isMergeMode && (
+                                                <div
+                                                    style={{
+                                                        position: 'absolute',
+                                                        top: '12px',
+                                                        left: '12px',
+                                                        color: isSelected ? '#4F46E5' : '#9ca3af'
                                                     }}
-                                                >                        
-                                                    <button
-                                                        className="file-remove-btn"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            removeFile(file.id);
-                                                        }}
-                                                        disabled={isProcessing}
-                                                        // style 속성에서 opacity를 제거하여 css 설정이 먹히게 함
-                                                        style={{ position: 'static' }} 
-                                                    >
-                                                        <X size={16} />
-                                                    </button>
+                                                >
+                                                    {isSelected ? <CheckSquare size={20} /> : <Square size={20} />}
                                                 </div>
                                             )}
 
-                                            <FileText size={40} className={`file-icon ${isProcessing ? 'animate-pulse' : ''}`} />
+                                            {!isMergeMode && (
+                                                <button
+                                                    className="file-remove-btn"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        removeFile(file.id);
+                                                    }}
+                                                    disabled={isProcessing}
+                                                >
+                                                    <X size={16} />
+                                                </button>
+                                            )}
+
+                                            <FileText
+                                                size={40}
+                                                className="file-icon"
+                                                style={{ color: isSelected ? '#4F46E5' : undefined }}
+                                            />
                                             <p className="file-name">{file.title}</p>
 
-                                            {/* 스토리보드 처리 진행 상황 표시 */}
-                                            {progress && (
+                                            {/* Badge or indicator for target */}
+                                            {isMergeMode && isSelected && selectedSourceIds[0] === file.id && (
+                                                <span style={{
+                                                    fontSize: '10px',
+                                                    backgroundColor: '#EEF2FF',
+                                                    color: '#4F46E5',
+                                                    padding: '2px 6px',
+                                                    borderRadius: '4px',
+                                                    marginTop: '4px'
+                                                }}>
+                                                    대표(저장) 파일
+                                                </span>
+                                            )}
+
+                                            {/* 스토리보드 처리 진행 상황 표시 (Not in merge mode or simplified) */}
+                                            {!isMergeMode && progress && (
                                                 <div style={{ marginTop: '8px', width: '100%' }}>
                                                     {/* 상태 뱃지 */}
                                                     <div style={{ textAlign: 'center', marginBottom: '8px' }}>

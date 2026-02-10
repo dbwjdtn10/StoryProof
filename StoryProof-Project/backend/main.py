@@ -9,29 +9,9 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
-import traceback
-
-from backend.api.v1.endpoints import auth, novel, chat, consistency
+from backend.api.v1.endpoints import auth, novel, chat, analysis, prediction, character_chat
 from backend.core.config import settings
 from backend.db.session import engine, init_db
-
-#################################
-import pinecone
-from backend.core.config import settings
-
-pc = pinecone.Pinecone(api_key=settings.PINECONE_API_KEY)
-
-# 인덱스가 없을 경우 생성
-index_name = "storyproof-index"
-if index_name not in pc.list_indexes().names():
-    pc.create_index(
-        name=index_name,
-        dimension=1536, 
-        metric='cosine',
-        spec=pinecone.ServerlessSpec(cloud='aws', region='us-east-1')
-    )
-    print(f"Index '{index_name}' created successfully.")
-#################################
 
 
 @asynccontextmanager
@@ -45,29 +25,6 @@ async def lifespan(app: FastAPI):
     # 시작 시 실행할 코드
     print("StoryProof API Server Started")
     init_db()  # DB 초기화 (테이블 생성)
-    
-    ####################
-    try:
-        from pinecone import Pinecone, ServerlessSpec
-        pc = Pinecone(api_key=settings.PINECONE_API_KEY)
-        index_name = "storyproof-index"
-        
-        # 차원이 1536인 기존 인덱스가 있다면 1024로 재생성
-        if index_name in [idx.name for idx in pc.list_indexes()]:
-            desc = pc.describe_index(index_name)
-            if desc.dimension != 1024:
-                pc.delete_index(index_name)
-        
-        if index_name not in [idx.name for idx in pc.list_indexes()]:
-            pc.create_index(
-                name=index_name,
-                dimension=1024, # 에러 메시지에 맞춤
-                metric='cosine',
-                spec=ServerlessSpec(cloud='aws', region='us-east-1')
-            )
-    except Exception as e:
-        print(f"Pinecone Setup Error: {e}")
-    ##############################
     
     yield
     
@@ -100,7 +57,7 @@ def configure_cors() -> None:
         allow_headers=["*"],
         max_age=3600,
     )
-    print(f"v CORS configured for origins: {settings.CORS_ORIGINS}")
+    print(f"[OK] CORS configured for origins: {settings.CORS_ORIGINS}")
 
 
 def register_routers() -> None:
@@ -110,10 +67,11 @@ def register_routers() -> None:
     """
     app.include_router(auth.router, prefix="/api/v1/auth", tags=["Auth"])
     app.include_router(novel.router, prefix="/api/v1/novels", tags=["Novel"])
-    # app.include_router(analysis.router, prefix="/api/v1/analysis", tags=["분석"])
+    app.include_router(analysis.router, prefix="/api/v1/analysis", tags=["분석"])
     app.include_router(chat.router, prefix="/api/v1/chat", tags=["Chat"])
-    app.include_router(consistency.router, prefix="/api/v1/consistency", tags=["Consistency"])
-    print("v Routers registered")
+    app.include_router(prediction.router, prefix="/api/v1/prediction", tags=["Prediction"])
+    app.include_router(character_chat.router, prefix="/api/v1/character-chat", tags=["CharacterChat"])
+    print("[OK] Routers registered")
 
 
 # 설정 적용 (순서 중요: CORS를 마지막에 - 역순으로 실행되므로 먼저 처리됨)
@@ -136,13 +94,13 @@ async def root():
     }
 
 
-#@app.options("/{full_path:path}")
-#async def preflight_handler(full_path: str):
-#    """
-#    CORS preflight 요청 처리
-#    브라우저가 실제 요청 전에 OPTIONS 요청을 보낼 때 처리
-#    """
-#    return {"status": "ok"}
+@app.options("/{full_path:path}")
+async def preflight_handler(full_path: str):
+    """
+    CORS preflight 요청 처리
+    브라우저가 실제 요청 전에 OPTIONS 요청을 보낼 때 처리
+    """
+    return {"status": "ok"}
 
 
 @app.exception_handler(Exception)
@@ -187,5 +145,5 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=8000,
         reload=True,  # 개발 모드에서만 사용
-        log_level="info"  # critical 레벨만 출력 (에러만)
+        log_level="critical"  # critical 레벨만 출력 (에러만)
     )
