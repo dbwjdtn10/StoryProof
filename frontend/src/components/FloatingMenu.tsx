@@ -1,4 +1,4 @@
-import { MessageCircle, MoreVertical, Settings, FileText, X, User } from 'lucide-react';//HJE
+import { MessageCircle, MoreVertical, Settings, FileText, X } from 'lucide-react';//HJE
 import { useState } from 'react';
 import { ChatInterface } from './ChatBot';
 //HJE
@@ -51,7 +51,7 @@ export function FloatingMenu({ onNavigateToScene, novelId }: FloatingMenuProps) 
                             <FileText size={20} />
                         </button>
                         <button className="menu-option" onClick={openCharacterChat} title="캐릭터 챗봇">
-                            <User size={20} />
+                            <span style={{ fontSize: '20px' }}>🎭</span>
                         </button>
                         <button className="menu-option" onClick={openChat} title="AI 보조">
                             <MessageCircle size={20} />

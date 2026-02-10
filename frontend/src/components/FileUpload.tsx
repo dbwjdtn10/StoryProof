@@ -72,7 +72,8 @@ export function FileUpload({ onFileClick }: FileUploadProps) {
             }
             setUploadedFiles(allChapters);
         } catch (error) {
-            // 조용히 무시
+            console.error("Failed to load files:", error);
+            alert("업로드된 파일 목록을 불러오는데 실패했습니다. 페이지를 새로고침해주세요.");
         }
     };
 
