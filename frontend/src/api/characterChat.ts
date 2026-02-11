@@ -4,6 +4,7 @@ export interface CharacterChatRoom {
     id: number;
     user_id: number;
     novel_id: number;
+    chapter_id?: number;
     character_name: string;
     persona_prompt: string;
     created_at: string;
@@ -23,26 +24,31 @@ export interface PersonaResponse {
     persona_prompt: string;
 }
 
-export const generatePersona = async (novelId: number, characterName: string): Promise<PersonaResponse> => {
+export const generatePersona = async (novelId: number, characterName: string, chapterId?: number): Promise<PersonaResponse> => {
     return request<PersonaResponse>('/character-chat/generate-persona', {
         method: 'POST',
-        body: JSON.stringify({ novel_id: novelId, character_name: characterName }),
+        body: JSON.stringify({ novel_id: novelId, chapter_id: chapterId, character_name: characterName }),
     });
 };
 
-export const createRoom = async (novelId: number, characterName: string, personaPrompt: string): Promise<CharacterChatRoom> => {
+export const createRoom = async (novelId: number, characterName: string, personaPrompt: string, chapterId?: number): Promise<CharacterChatRoom> => {
     return request<CharacterChatRoom>('/character-chat/rooms', {
         method: 'POST',
         body: JSON.stringify({
             novel_id: novelId,
+            chapter_id: chapterId,
             character_name: characterName,
             persona_prompt: personaPrompt
         }),
     });
 };
 
-export const getRooms = async (novelId: number): Promise<CharacterChatRoom[]> => {
-    return request<CharacterChatRoom[]>(`/character-chat/rooms?novel_id=${novelId}`, {
+export const getRooms = async (novelId: number, chapterId?: number): Promise<CharacterChatRoom[]> => {
+    let url = `/character-chat/rooms?novel_id=${novelId}`;
+    if (chapterId) {
+        url += `&chapter_id=${chapterId}`;
+    }
+    return request<CharacterChatRoom[]>(url, {
         method: 'GET',
     });
 };

@@ -66,7 +66,7 @@ export function FloatingMenu({ onNavigateToScene, onCheckConsistency, onPredictS
                             if (onOpenCharacterChat) onOpenCharacterChat();
                             setIsMenuOpen(false);
                         }} title="캐릭터 챗봇">
-                            <MessageSquare size={20} />
+                            <span style={{ fontSize: '25px' }}>🎭</span>
                         </button>
                     </div>
                 )}

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Mail, Lock, Eye, EyeOff, User, BookOpen, MessageSquare } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, User, BookOpen } from 'lucide-react';
 import { ChapterDetail } from './components/ChapterDetail';
 import { FileUpload } from './components/FileUpload';
 import { ThemeToggle } from './components/ThemeToggle';
@@ -39,8 +39,8 @@ export default function App() {
       // 1. Login
       const tokenResponse = await login({ email, password });
       localStorage.setItem('token', tokenResponse.access_token);
-      localStorage.setItem('userMode', tokenResponse.mode);
-      setUserMode(tokenResponse.mode);
+      localStorage.setItem('userMode', tokenResponse.user_mode);
+      setUserMode(tokenResponse.user_mode);
 
       // 2. Fetch or Create Novel
       try {
@@ -83,7 +83,7 @@ export default function App() {
         username: name,
         email: email,
         password: password,
-        mode: signupMode
+        user_mode: signupMode
       });
       alert('회원가입이 완료되었습니다. 로그인해주세요.');
       setCurrentScreen('login');
@@ -116,37 +116,7 @@ export default function App() {
           novelId={currentNovel?.id}
           mode={userMode}
         />
-        {currentNovel && (
-          <>
-            <button
-              onClick={() => setShowChatBot(prev => !prev)}
-              style={{
-                position: 'fixed',
-                bottom: '20px',
-                right: '20px',
-                zIndex: 1000,
-                padding: '12px',
-                borderRadius: '50%',
-                backgroundColor: '#fee500',
-                color: '#3b1e1e',
-                border: 'none',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}
-            >
-              <MessageSquare size={24} />
-            </button>
-            {showChatBot && (
-              <CharacterChatBot
-                novelId={currentNovel.id}
-                onClose={() => setShowChatBot(false)}
-              />
-            )}
-          </>
-        )}
+
       </>
     );
   }
@@ -166,6 +136,7 @@ export default function App() {
         {currentNovel && showChatBot && (
           <CharacterChatBot
             novelId={currentNovel.id}
+            chapterId={selectedChapterId}
             onClose={() => setShowChatBot(false)}
           />
         )}

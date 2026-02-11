@@ -36,7 +36,7 @@ class AuthService:
             email=user_data.email,
             username=user_data.username,
             hashed_password=hashed_password,
-            mode=user_data.mode,
+            user_mode=user_data.user_mode,
             is_active=True,
             is_verified=False
         )
@@ -75,7 +75,7 @@ class AuthService:
             "access_token": access_token,
             "token_type": "bearer",
             "refresh_token": refresh_token,
-            "mode": user.mode,
+            "user_mode": user.user_mode,
             "expires_in": settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
         }
 

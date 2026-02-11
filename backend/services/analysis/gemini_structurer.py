@@ -803,9 +803,9 @@ Output Format (JSON List of Strings):
                     name = char
                     desc = ""
                 else:
-                    name = char.get('name', 'Unknown')
-                    desc = char.get('description', '')
-                    traits = char.get('traits', [])
+                    name = char.get('name') or 'Unknown'
+                    desc = char.get('description') or ''
+                    traits = char.get('traits') or []
 
                 if name not in all_characters:
                     all_characters[name] = {
@@ -834,8 +834,8 @@ Output Format (JSON List of Strings):
                     name = item
                     desc = ""
                 else:
-                    name = item.get('name', 'Unknown')
-                    desc = item.get('description', '')
+                    name = item.get('name') or 'Unknown'
+                    desc = item.get('description') or ''
 
                 if name not in all_items:
                     all_items[name] = {
@@ -858,8 +858,8 @@ Output Format (JSON List of Strings):
                     name = loc
                     desc = ""
                 else:
-                    name = loc.get('name', 'Unknown')
-                    desc = loc.get('description', '')
+                    name = loc.get('name') or 'Unknown'
+                    desc = loc.get('description') or ''
 
                 if name not in all_locations:
                     all_locations[name] = {
@@ -880,8 +880,8 @@ Output Format (JSON List of Strings):
                     summary = event
                     importance = "중"
                 else:
-                    summary = event.get('summary', '')
-                    importance = event.get('importance', '중')
+                    summary = event.get('summary') or ''
+                    importance = event.get('importance') or '중'
                 
                 all_key_events.append({
                     "summary": summary,

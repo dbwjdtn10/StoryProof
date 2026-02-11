@@ -30,6 +30,7 @@ logger.setLevel(logging.INFO)
 # --- Schemas ---
 class CharacterChatRoomCreate(BaseModel):
     novel_id: int
+    chapter_id: Optional[int] = None
     character_name: str
     persona_prompt: str
 
@@ -40,6 +41,7 @@ class CharacterChatRoomResponse(BaseModel):
     id: int
     user_id: int
     novel_id: int
+    chapter_id: Optional[int]
     character_name: str
     persona_prompt: str
     created_at: datetime
@@ -63,6 +65,7 @@ class CharacterChatMessageResponse(BaseModel):
 
 class PersonaGenerationRequest(BaseModel):
     novel_id: int
+    chapter_id: Optional[int] = None
     character_name: str
 
 class PersonaGenerationResponse(BaseModel):
@@ -147,14 +150,116 @@ async def generate_persona(
     print(f"[DEBUG] Requested character_name: {request.character_name}")
 
     # Fetch Analysis
-    analysis = db.query(Analysis).filter(
+    # Prioritize Chapter-specific analysis if chapter_id is provided
+    query = db.query(Analysis).filter(
         Analysis.novel_id == request.novel_id,
-        Analysis.analysis_type == AnalysisType.OVERALL,  # Assuming overall contains aggregated character info
         Analysis.status == "completed"
-    ).order_by(desc(Analysis.created_at)).first()
+    )
+    
+    if request.chapter_id:
+        # Try to find analysis specifically for this chapter (Character or Overall)
+        # We might need to be careful if AnalysisType.CHARACTER is used for single chapter
+        # For now, let's filter by chapter_id if it exists in the Analysis table
+        query = query.filter(Analysis.chapter_id == request.chapter_id)
+    else:
+        # Fallback to Global Analysis (Chapter ID is NULL)
+        # query = query.filter(Analysis.chapter_id.is_(None)) 
+        # But maybe we want ANY analysis if global is missing?
+        # Let's stick to novel_id filter for now if no chapter_id providing "Global" context
+        pass 
+        
+    analysis = query.order_by(desc(Analysis.created_at)).first()
+    
+    # If no specific analysis found for chapter, fall back to global?
+    # User requested strict isolation: "Make it readable from current novel/file only"
+    # So if chapter analysis is missing, we might NOT want global.
+    # However, if the user just uploaded, maybe there is NO analysis yet?
+    # In that case, we should probably return a default or error, or try to use VectorDocument metadata.
+    
+    if not analysis and request.chapter_id:
+        print(f"[Persona] No Analysis found for chapter {request.chapter_id}. Aggregating from VectorDocument metadata...")
+        # Fallback: Aggregate character data from VectorDocument metadata for this chapter
+        # This is useful when the file is uploaded and processed (vectors exist) but explicit "Analysis" step hasn't run or failed.
+        # This ensures we still have valid character options from the file itself.
+        
+        from backend.db.models import VectorDocument
+        
+        # Fetch parent vectors (chunk_index is what we need, but metadata contains character info)
+        # We need to scan metadata_json of parent documents in this chapter.
+        vectors = db.query(VectorDocument).filter(
+            VectorDocument.novel_id == request.novel_id,
+            VectorDocument.chapter_id == request.chapter_id
+        ).all()
+        
+        if vectors:
+            from backend.services.analysis.gemini_structurer import GeminiStructurer
+            # We can use the aggregation logic from GeminiStructurer!
+            # It expects StructuredScene objects, but we can construct dicts or mock objects?
+            # Actually extract_global_entities expects list of StructuredScene.
+            # Let's manually aggregate simple traits here to check if the requested character exists.
+            
+            aggregated_char = None
+            
+            for vec in vectors:
+                meta = vec.metadata_json or {}
+                chars = meta.get('characters', [])
+                for char in chars:
+                    c_name = char.get('name') if isinstance(char, dict) else char
+                    if c_name == request.character_name:
+                        # Found match!
+                        if not aggregated_char:
+                             aggregated_char = {
+                                 "name": c_name,
+                                 "description": char.get('description', '') if isinstance(char, dict) else '',
+                                 "traits": char.get('traits', []) if isinstance(char, dict) else []
+                             }
+                        else:
+                            # Merge traits
+                            new_traits = char.get('traits', []) if isinstance(char, dict) else []
+                            for t in new_traits:
+                                if t not in aggregated_char['traits']:
+                                    aggregated_char['traits'].append(t)
+                            
+                            # Update desc if longer
+                            new_desc = char.get('description', '') if isinstance(char, dict) else ''
+                            if len(new_desc) > len(aggregated_char['description']):
+                                aggregated_char['description'] = new_desc
+            
+            if aggregated_char:
+                # Construct a fake Analysis result object/dict to pass to persona generation
+                # We need a proper object structure that has .result attribute
+                class MockAnalysis:
+                    def __init__(self, data):
+                        self.result = data
+                        self.id = "mock_vector_aggregation"
+                        self.novel_id = request.novel_id
+                        self.analysis_type = "vector_aggregation"
+                
+                analysis = MockAnalysis({
+                    "characters": [aggregated_char],
+                    "summary": "Generated from Vector Metadata",
+                    "mood": "Unknown"
+                })
+                print(f"[Persona] Successfully aggregated data for '{request.character_name}' from {len(vectors)} scenes.")
+            else:
+                print(f"[Persona] Character '{request.character_name}' not found in chapter {request.chapter_id} vectors.")
 
-    if not analysis or not analysis.result:
-        # Fallback to character specific analysis if overall is missing
+    if not analysis or (not hasattr(analysis, 'result')) or (hasattr(analysis, 'result') and not analysis.result):
+        # Fallback to character specific analysis if overall is missing (Legacy logic)
+        # But if we are in chapter_id mode and failed, we should probably stop or risk global pollution.
+        if request.chapter_id:
+             # Just return a basic persona if strictly scoped but nothing found?
+             # Or raise 404? 
+             # Let's try to proceed with basic info if aggregated_char failed.
+             # But if we proceed, we fall into legacy logic which queries GLOBAL analysis.
+             # We must STOP here if chapter_id is set.
+             pass # Will fall through to 404 check below or legacy loop
+             
+        if request.chapter_id:
+             print(f"[Persona] Strict mode: No analysis found for chapter {request.chapter_id}. Aborting to prevent cross-contamination.")
+             raise HTTPException(status_code=404, detail=f"No analysis or character data found for '{request.character_name}' in this chapter.")
+
+        # Legacy fallback (Global)
         analysis = db.query(Analysis).filter(
             Analysis.novel_id == request.novel_id,
             Analysis.analysis_type == AnalysisType.CHARACTER,
@@ -411,6 +516,7 @@ async def create_room(
     new_room = CharacterChatRoom(
         user_id=user_id,
         novel_id=room_data.novel_id,
+        chapter_id=room_data.chapter_id,
         character_name=room_data.character_name,
         persona_prompt=room_data.persona_prompt
     )
@@ -424,14 +530,22 @@ async def create_room(
 @router.get("/rooms", response_model=List[CharacterChatRoomResponse])
 async def list_rooms(
     novel_id: int,
+    chapter_id: Optional[int] = None,
     db: Session = Depends(get_db)
 ):
     """
     List chat rooms for a novel.
+    If chapter_id is provided, filter by that chapter (file-scoped).
+    If not provided, return all (or global ones? For now, we return those matching the query).
     """
-    rooms = db.query(CharacterChatRoom).filter(
+    query = db.query(CharacterChatRoom).filter(
         CharacterChatRoom.novel_id == novel_id
-    ).order_by(desc(CharacterChatRoom.updated_at)).all()
+    )
+    
+    if chapter_id:
+        query = query.filter(CharacterChatRoom.chapter_id == chapter_id)
+    
+    rooms = query.order_by(desc(CharacterChatRoom.updated_at)).all()
     
     return rooms
 
@@ -489,7 +603,8 @@ async def send_message(
             chunks = chatbot_service.find_similar_chunks(
                 question=message.content,
                 top_k=3,
-                novel_filter=novel_filter
+                novel_filter=novel_filter,
+                chapter_id=room.chapter_id
             )
             if chunks:
                 rag_context = "\n\n[Reference Scenes from Novel]:\n"

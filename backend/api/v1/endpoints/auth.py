@@ -34,7 +34,7 @@ async def register(
         "id": new_user.id,
         "email": new_user.email,
         "username": new_user.username,
-        "mode": new_user.mode,
+        "user_mode": new_user.user_mode,
         "is_active": new_user.is_active,
         "created_at": new_user.created_at
     }

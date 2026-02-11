@@ -245,6 +245,20 @@ class AnalysisService:
                     # 기존 인물의 추가 등장 기록
                     if scene.chunk_index not in character_dict[char_name]['appearances']:
                         character_dict[char_name]['appearances'].append(scene.chunk_index)
+                    
+                    if isinstance(char, dict):
+                        # 설명이 더 길면 업데이트 (정보 보강)
+                        new_desc = char.get('description', '')
+                        if len(new_desc) > len(character_dict[char_name]['description']):
+                            character_dict[char_name]['description'] = new_desc
+                        
+                        # Traits 통합 (중복 제거)
+                        new_traits = char.get('traits', [])
+                        if new_traits:
+                            existing_traits = character_dict[char_name]['traits']
+                            for t in new_traits:
+                                if t not in existing_traits:
+                                    existing_traits.append(t)
             
             # 장소 정보 추출 및 집계
             for loc in metadata.get('locations', []):

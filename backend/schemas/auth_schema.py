@@ -15,7 +15,7 @@ class UserRegister(BaseModel):
     email: EmailStr = Field(..., description="이메일 주소")
     username: str = Field(..., min_length=3, max_length=50, description="사용자명")
     password: str = Field(..., min_length=8, description="비밀번호")
-    mode: str = Field(default="writer", description="사용자 모드 (reader/writer)")
+    user_mode: str = Field(default="writer", description="사용자 모드 (reader/writer)")
     
     @validator('password')
     def validate_password(cls, v):
@@ -39,7 +39,7 @@ class TokenResponse(BaseModel):
     access_token: str = Field(..., description="액세스 토큰")
     refresh_token: str = Field(..., description="리프레시 토큰")
     token_type: str = Field(default="bearer", description="토큰 타입")
-    mode: str = Field(..., description="사용자 모드 (reader/writer)")
+    user_mode: str = Field(..., description="사용자 모드 (reader/writer)")
     expires_in: int = Field(..., description="만료 시간 (초)")
 
 
@@ -57,7 +57,7 @@ class UserProfile(BaseModel):
     username: str
     is_active: bool
     is_verified: bool
-    mode: str
+    user_mode: str
     created_at: datetime
     last_login: Optional[datetime] = None
     

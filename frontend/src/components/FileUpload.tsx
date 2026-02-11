@@ -120,10 +120,11 @@ export function FileUpload({ onFileClick, novelId, mode = 'writer' }: FileUpload
     };
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        e.preventDefault();
         if (e.target.files && e.target.files[0]) {
             handleFiles(e.target.files);
         }
+        // Reset value to allow selecting the same file again
+        e.target.value = '';
     };
 
     const handleFiles = async (files: FileList) => {
@@ -227,7 +228,7 @@ export function FileUpload({ onFileClick, novelId, mode = 'writer' }: FileUpload
 
                     {/* Show upload area only if no files uploaded */}
                     {uploadedFiles.length === 0 && (
-                        <div className="upload-area" onClick={openFileDialog} style={{ cursor: 'pointer' }}>
+                        <div className="upload-area">
                             <label htmlFor="file-upload-input" className="upload-label" style={{ cursor: 'pointer' }}>
                                 <Upload size={48} className="upload-icon" />
                                 <p className="upload-text-main">

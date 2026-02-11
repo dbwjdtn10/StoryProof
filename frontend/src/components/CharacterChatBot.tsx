@@ -17,6 +17,7 @@ import {
 
 interface CreateRoomModalProps {
     novelId: number;
+    chapterId?: number;
     onClose: () => void;
     onCreated?: (room: CharacterChatRoom) => void;
     onUpdated?: (room: CharacterChatRoom) => void;
@@ -24,7 +25,7 @@ interface CreateRoomModalProps {
     mode?: 'create' | 'edit';
 }
 
-function CreateRoomModal({ novelId, onClose, onCreated, onUpdated, initialData, mode = 'create' }: CreateRoomModalProps) {
+function CreateRoomModal({ novelId, chapterId, onClose, onCreated, onUpdated, initialData, mode = 'create' }: CreateRoomModalProps) {
     const [characterName, setCharacterName] = useState(initialData?.character_name || '');
     const [personaPrompt, setPersonaPrompt] = useState(initialData?.persona_prompt || '');
     const [step, setStep] = useState<'input' | 'review'>(mode === 'edit' ? 'review' : 'input');
@@ -36,7 +37,7 @@ function CreateRoomModal({ novelId, onClose, onCreated, onUpdated, initialData, 
         setLoading(true);
         setError(null);
         try {
-            const result = await generatePersona(novelId, characterName);
+            const result = await generatePersona(novelId, characterName, chapterId);
             setPersonaPrompt(result.persona_prompt);
             setStep('review');
         } catch (err: any) {
@@ -51,7 +52,7 @@ function CreateRoomModal({ novelId, onClose, onCreated, onUpdated, initialData, 
         setLoading(true);
         try {
             if (mode === 'create') {
-                const room = await createRoom(novelId, characterName, personaPrompt);
+                const room = await createRoom(novelId, characterName, personaPrompt, chapterId);
                 onCreated?.(room);
             } else {
                 // Update mode
@@ -223,10 +224,11 @@ function CreateRoomModal({ novelId, onClose, onCreated, onUpdated, initialData, 
 
 interface RoomListProps {
     novelId: number;
+    chapterId?: number;
     onSelectRoom: (room: CharacterChatRoom) => void;
 }
 
-function RoomList({ novelId, onSelectRoom }: RoomListProps) {
+function RoomList({ novelId, chapterId, onSelectRoom }: RoomListProps) {
     const [rooms, setRooms] = useState<CharacterChatRoom[]>([]);
     const [loading, setLoading] = useState(true);
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -234,7 +236,7 @@ function RoomList({ novelId, onSelectRoom }: RoomListProps) {
     const fetchRooms = async () => {
         try {
             setLoading(true);
-            const data = await getRooms(novelId);
+            const data = await getRooms(novelId, chapterId);
             setRooms(data);
         } catch (error) {
             console.error("Failed to fetch rooms:", error);
@@ -245,7 +247,7 @@ function RoomList({ novelId, onSelectRoom }: RoomListProps) {
 
     useEffect(() => {
         fetchRooms();
-    }, [novelId]);
+    }, [novelId, chapterId]);
 
     const handleRoomCreated = (newRoom: CharacterChatRoom) => {
         setRooms([newRoom, ...rooms]);
@@ -332,6 +334,7 @@ function RoomList({ novelId, onSelectRoom }: RoomListProps) {
             {isCreateModalOpen && (
                 <CreateRoomModal
                     novelId={novelId}
+                    chapterId={chapterId}
                     onClose={() => setIsCreateModalOpen(false)}
                     onCreated={handleRoomCreated}
                 />
@@ -531,9 +534,10 @@ function ChatRoom({ room }: ChatRoomProps) {
 interface CharacterChatWindowProps {
     onClose: () => void;
     novelId: number;
+    chapterId?: number;
 }
 
-export function CharacterChatBot({ onClose, novelId }: CharacterChatWindowProps) {
+export function CharacterChatBot({ onClose, novelId, chapterId }: CharacterChatWindowProps) {
     const [activeRoom, setActiveRoom] = useState<CharacterChatRoom | null>(null);
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -574,10 +578,10 @@ export function CharacterChatBot({ onClose, novelId }: CharacterChatWindowProps)
     return (
         <div className="character-chat-window" style={{
             position: 'fixed',
-            bottom: '80px',
+            bottom: '16px',
             right: '20px',
             width: '600px',
-            height: '900px',
+            height: '850px',
             backgroundColor: 'white',
             borderRadius: '16px',
             boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
@@ -679,7 +683,7 @@ export function CharacterChatBot({ onClose, novelId }: CharacterChatWindowProps)
                 {activeRoom ? (
                     <ChatRoom room={activeRoom} />
                 ) : (
-                    <RoomList novelId={novelId} onSelectRoom={setActiveRoom} />
+                    <RoomList novelId={novelId} chapterId={chapterId} onSelectRoom={setActiveRoom} />
                 )}
             </div>
 
@@ -687,6 +691,7 @@ export function CharacterChatBot({ onClose, novelId }: CharacterChatWindowProps)
             {isEditModalOpen && activeRoom && (
                 <CreateRoomModal
                     novelId={novelId}
+                    chapterId={chapterId}
                     initialData={activeRoom}
                     mode="edit"
                     onClose={() => setIsEditModalOpen(false)}
