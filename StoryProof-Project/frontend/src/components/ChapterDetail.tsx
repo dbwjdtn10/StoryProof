@@ -8,6 +8,8 @@ import { PredictionSidebar, Message } from './predictions/PredictionSidebar';
 import { requestPrediction, getPredictionTaskStatus } from '../api/prediction';
 import { toast } from 'sonner';
 
+import { ImageGenerationView } from './ImageGenerationView';
+
 interface ChapterDetailProps {
     fileName: string;
     onBack: () => void;
@@ -489,7 +491,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
             { name: '강둑', description: '언니와 함께 앉아있던 곳', scenes: [0] },
             { name: '토끼 굴', description: '토끼가 들어간 긴 굴', scenes: [2] },
         ];
-
+    
     // ... (rest of items/timeline)
 
     if (isLoading && !initialLoadDone) {
@@ -1011,6 +1013,18 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                                 </div>
                             )}
 
+                            {mode === 'reader' && (
+                                <ImageGenerationView 
+                                    prompt={`[Character Portrait] 
+                                    Subject: ${selectedCharacter.name}. 
+                                    Visual Representation of Traits: Focus on expressing the character's core personality and unique physical features, as described by: "${selectedCharacter.description || ''}". 
+                                    Style: Classic fairytale illustration, rich in detail and expressive. 
+                                    Safety Instruction: Interpret any intense or sensitive themes as "artistic drama" or "expressive emotion." 
+                                    Constraint: Strictly NO literal violence, NO harm, NO explicit content, NO written text, NO labels.`} 
+                                    label="인물" 
+                                />
+                            )}
+
                             <div style={{ display: 'flex', gap: '16px', fontSize: '0.875rem', color: '#666', marginTop: '24px', borderTop: '1px solid #eee', paddingTop: '16px' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                                     <strong>첫 등장:</strong>
@@ -1143,6 +1157,20 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                                     {selectedItem.description || "상세 설명이 없습니다."}
                                 </p>
                             </div>
+
+                            {mode === 'reader' && (
+                                <ImageGenerationView 
+                                    prompt={`[Object Concept Art] 
+                                    Item: ${selectedItem.name}. 
+                                    Visual Description: A professional concept art of the object focusing on its form and material textures based on the description: "${selectedItem.description || ''}". 
+                                    Instruction for Text: If, and only if, the description explicitly mentions specific words, phrases, or text to be written on the item (e.g., labels, engravings, or tags), you must render that exact text accurately and legibly. If no specific text is mentioned in the description, do not add any text to the object.
+                                    Detail Focus: Highlight the tactile quality of the materials—the transparency of glass, the flow of liquids, or the texture of aged paper. The object should be presented as a tangible artifact with realistic lighting and clear silhouettes.
+                                    Style: Vintage storybook item, highly detailed and tangible. 
+                                    Safety Instruction: When text is present in the description, ensure it is integrated into the design (e.g., hand-inked on a label or carved into a surface) with correct spelling.
+                                    Constraint: Strictly NO literal violence, NO harm. Avoid modern digital fonts; any required text must look like a physical, handcrafted part of the object.`} 
+                                    label="아이템" 
+                                />
+                            )}
 
                             <div style={{ display: 'flex', gap: '16px', fontSize: '0.875rem', color: '#666', marginTop: '24px', borderTop: '1px solid #eee', paddingTop: '16px' }}>
                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
@@ -1279,6 +1307,18 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                                 </p>
                             </div>
 
+                            {/* [신규 추가]: 이미지 생성 섹션 */}
+                            {mode === 'reader' && (
+                                <ImageGenerationView 
+                                    prompt={`[Environment Art] 
+                                    Location: ${selectedLocation.name}. 
+                                    Atmospheric Scene: Create an immersive and detailed landscape based on: "${selectedLocation.description || ''}". 
+                                    Style: Enchanting fairytale setting, cinematic wide shot, dreamlike lighting. 
+                                    Constraint: Strictly NO literal violence, NO harm, NO written text, NO labels.`} 
+                                    label="장소" 
+                                />
+                            )}
+
                             <div style={{ display: 'flex', gap: '16px', fontSize: '0.875rem', color: '#666', marginTop: '24px', borderTop: '1px solid #eee', paddingTop: '16px' }}>
                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -1406,6 +1446,18 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                                     </div>
                                 )}
                             </div>
+
+                            {/* [신규 추가]: 이미지 생성 섹션 (독자 모드 한정) */}
+                            {mode === 'reader' && (
+                                <ImageGenerationView 
+                                    prompt={`[Cinematic Narrative Scene] 
+                                    Scene Content: "${selectedKeyEvent.summary}". 
+                                    Visual Key: Focus on extreme scale contrast (miniature character vs giant environment). 
+                                    Instruction: Render the scene as a surreal fairytale moment. 
+                                    Constraint: Strictly NO numbers, NO "25cm" text, NO measurement lines, NO literal violence, NO labels.`} 
+                                    label="장면" 
+                                />
+                            )}
 
                             <div style={{ display: 'flex', gap: '16px', fontSize: '0.875rem', color: '#666', marginTop: '16px', borderTop: '1px solid #eee', paddingTop: '16px' }}>
                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', width: '100%' }}>

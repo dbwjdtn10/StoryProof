@@ -9,9 +9,10 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
-from backend.api.v1.endpoints import auth, novel, chat, analysis, prediction, character_chat
+from backend.api.v1.endpoints import auth, novel, chat, analysis, prediction, character_chat, image_api # image_api 추가
 from backend.core.config import settings
 from backend.db.session import engine, init_db
+
 
 
 @asynccontextmanager
@@ -71,6 +72,9 @@ def register_routers() -> None:
     app.include_router(chat.router, prefix="/api/v1/chat", tags=["Chat"])
     app.include_router(prediction.router, prefix="/api/v1/prediction", tags=["Prediction"])
     app.include_router(character_chat.router, prefix="/api/v1/character-chat", tags=["CharacterChat"])
+    
+    # [신규 추가] 이미지 생성 API 등록
+    app.include_router(image_api.router, prefix="/api/v1/image", tags=["image"])
     print("[OK] Routers registered")
 
 
