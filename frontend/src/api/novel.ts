@@ -166,6 +166,7 @@ export interface Character {
     description?: string;
     traits?: string[];
     aliases?: string[];
+    image?: string; // Generated image URL
 }
 
 export interface Location {
@@ -173,12 +174,14 @@ export interface Location {
     appearance_count: number;
     appearances: number[];
     description?: string;
+    image?: string; // Generated image URL
 }
 
 export interface Item {
     name: string;
     first_appearance: number;
     description?: string;
+    image?: string; // Generated image URL
 }
 
 export interface KeyEvent {

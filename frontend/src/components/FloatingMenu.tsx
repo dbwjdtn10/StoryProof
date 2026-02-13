@@ -46,14 +46,14 @@ export function FloatingMenu({ onNavigateToScene, onCheckConsistency, onPredictS
                         <button className="menu-option" onClick={() => alert('환경설정')} title="환경설정">
                             <Settings size={20} />
                         </button>
+                        <button className="menu-option highlight-btn-purple" onClick={() => {
+                            if (onPredictStory) onPredictStory();
+                            setIsMenuOpen(false);
+                        }} title="스토리 예측 (What-If)" style={{ backgroundColor: '#EDE9FE', color: '#7C3AED' }}>
+                            <Sparkles size={20} />
+                        </button>
                         {mode !== 'reader' && (
                             <>
-                                <button className="menu-option highlight-btn-purple" onClick={() => {
-                                    if (onPredictStory) onPredictStory();
-                                    setIsMenuOpen(false);
-                                }} title="스토리 예측 (What-If)" style={{ backgroundColor: '#EDE9FE', color: '#7C3AED' }}>
-                                    <Sparkles size={20} />
-                                </button>
                                 <button className="menu-option highlight-btn" onClick={handleConsistencyClick} title="설정파괴분석기">
                                     <ShieldAlert size={20} color="#4F46E5" />
                                 </button>

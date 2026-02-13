@@ -1,12 +1,18 @@
 import { ArrowLeft, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Users, Package, Clock, Save, MapPin } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import { Editor } from '@tiptap/react';
+import { NovelEditor } from './NovelEditor';
+import { AuthorToolbar } from './AuthorToolbar';
+import { ReaderToolbar } from './ReaderToolbar';
 import { FloatingMenu } from './FloatingMenu';
 import { ThemeToggle } from './ThemeToggle';
-import { getChapter, updateChapter, getChapterBible, reanalyzeChapter, BibleData } from '../api/novel';
+import { getChapter, updateChapter, getChapterBible, reanalyzeChapter, BibleData, Character, Item, Location } from '../api/novel';
 import { AnalysisSidebar, AnalysisResult } from './AnalysisSidebar';
 import { PredictionSidebar, Message } from './predictions/PredictionSidebar';
 import { requestPrediction, getPredictionTaskStatus } from '../api/prediction';
 import { toast } from 'sonner';
+import { generateImage } from '../api/images';
+import '../novel-toolbar.css';
 
 interface ChapterDetailProps {
     fileName: string;
@@ -36,6 +42,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
     const [chapterStatus, setChapterStatus] = useState<'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | undefined>(undefined);
 
     const [isAnalyzing, setIsAnalyzing] = useState(false);
+    const [isImageGenerating, setIsImageGenerating] = useState(false);
 
     // Story Prediction State
     const [isPredictionSidebarOpen, setIsPredictionSidebarOpen] = useState(false);
@@ -49,8 +56,32 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
         timestamp: number;
     } | null>(null);
 
-    // Track which scene is currently being edited
-    const [editingSceneIndex, setEditingSceneIndex] = useState<number | null>(null);
+    // Tiptap Editor State
+    const [activeEditor, setActiveEditor] = useState<Editor | null>(null);
+
+    // Reader Mode Settings
+    const [readerSettings, setReaderSettings] = useState(() => {
+        const saved = localStorage.getItem('reader-settings');
+        return saved ? JSON.parse(saved) : {
+            fontSize: 18,
+            lineHeight: 2.0,
+            paragraphSpacing: 40,
+            contentWidth: 80,
+            fontFamily: 'Noto Sans KR',
+            theme: 'light'
+        };
+    });
+
+    useEffect(() => {
+        localStorage.setItem('reader-settings', JSON.stringify(readerSettings));
+
+        // Apply theme to document for reader mode
+        if (mode === 'reader') {
+            document.documentElement.setAttribute('data-reader-theme', readerSettings.theme);
+        } else {
+            document.documentElement.removeAttribute('data-reader-theme');
+        }
+    }, [readerSettings, mode]);
 
     // Clear highlight after 15 seconds
     useEffect(() => {
@@ -61,30 +92,6 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
             return () => clearTimeout(timer);
         }
     }, [highlightData]);
-
-    // Helper to render text with highlights in Read Mode
-    const renderSceneContent = (text: string, index: number) => {
-        const highlightTerm = (highlightData && highlightData.sceneIndex === index) ? highlightData.text : null;
-
-        if (!highlightTerm) {
-            return <div className="scene-text-content">{text}</div>;
-        }
-
-        const escapedTerm = highlightTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const parts = text.split(new RegExp(`(${escapedTerm})`, 'g'));
-
-        return (
-            <div className="scene-text-content">
-                {parts.map((part, i) =>
-                    part === highlightTerm ? (
-                        <span key={i} className="highlight-mark">{part}</span>
-                    ) : (
-                        <span key={i}>{part}</span>
-                    )
-                )}
-            </div>
-        );
-    };
 
     useEffect(() => {
         if (novelId && chapterId) {
@@ -171,9 +178,9 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
             const bible = await getChapterBible(novelId, chapterId);
             setBibleData(bible);
             if (bible.scenes && bible.scenes.length > 0) {
-                // 과도한 줄바꿈 제거: 연속된 2개 이상의 줄바꿈을 1개로 축소
+                // 줄바꿈 보존: 원본 텍스트 그대로 사용
                 setSceneTexts(bible.scenes.map(s =>
-                    s.original_text.trim().replace(/\n{2,}/g, '\n')
+                    s.original_text.trim()
                 ));
             }
         } catch (error) {
@@ -286,19 +293,25 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
 
                     if (data.status === "COMPLETED") {
                         clearInterval(intervalId);
+                        setAnalysisResult(data.result);
                         setIsAnalysisLoading(false);
+                        toast.success("분석이 완료되었습니다.");
                     } else if (data.status === "FAILED") {
                         clearInterval(intervalId);
                         setIsAnalysisLoading(false);
                         setAnalysisResult({ status: "실패", message: data.error || "분석 작업이 실패했습니다." });
+                        toast.error("분석 중 오류가 발생했습니다.");
                     }
                 } catch (err) {
                     console.error("Polling error:", err);
                     clearInterval(intervalId);
+                    setIsAnalysisLoading(false);
+                    setAnalysisResult({ status: "오류", message: "상태 확인 중 서버 통신 오류가 발생했습니다." });
                 }
             }, 2000);
 
-            // 컴포넌트 언마운트 시 인터벌 클리어를 위해 (실제로는 cleanup에서 처리해야 하지만 여기서는 로직 단순화)
+            // 컴포넌트 언마운트 시 인터벌 클리어를 위해 (실제로는 state나 ref로 관리하는게 좋지만 우선 이 로직 내에서 처리)
+            // 작업 중 중단 방지 등을 고려해 setInterval의 수명주기를 관리함
         } catch (error) {
             console.error("Analysis error:", error);
             setAnalysisResult({ status: "오류 발생", message: "서버와 통신 중 오류가 발생했습니다." });
@@ -375,50 +388,60 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
     const handleNavigateToQuote = (quote: string) => {
         if (!quote) return;
 
-        // 정규화 함수: 공백과 줄바꿈을 단순화하여 비교
-        const normalize = (str: string) => str.replace(/\s+/g, ' ').trim();
-        const targetQ = normalize(quote);
+        // 정규화 함수: 모든 특수문자, 공백, 줄바꿈을 제거하여 비교용으로 만듦
+        const superNormalize = (str: string) => str.replace(/[^a-zA-Z0-9가-힣]/g, '');
+        const targetClean = superNormalize(quote);
+
+        console.log(`[Navigation] Searching for quote: "${quote}"`);
+        console.log(`[Navigation] Cleaned target: "${targetClean}"`);
 
         // 1. Scene Mode Navigation (sceneTexts exists)
         if (sceneTexts.length > 0) {
-            // Find the scene containing the quote
-            const sceneIndex = sceneTexts.findIndex((s: string) => normalize(s).includes(targetQ));
+            // 정밀 검색: 모든 씬을 돌면서 정규화된 텍스트 포함 여부 확인
+            let foundIndex = -1;
 
-            if (sceneIndex !== -1) {
-                scrollToScene(sceneIndex, quote);
+            // 우선 정확한 포함 관계 확인
+            foundIndex = sceneTexts.findIndex(s => superNormalize(s).includes(targetClean));
+
+            // 만약 못 찾았다면, 앞부분과 뒷부분만으로 부분 매칭 시도 (LLM 적은 생략 가능성 대비)
+            if (foundIndex === -1 && targetClean.length > 40) {
+                const head = targetClean.substring(0, 30);
+                const tail = targetClean.substring(targetClean.length - 30);
+                console.log(`[Navigation] Fallback partial search: head("${head}"), tail("${tail}")`);
+                foundIndex = sceneTexts.findIndex(s => {
+                    const cleanS = superNormalize(s);
+                    return cleanS.includes(head) && cleanS.includes(tail);
+                });
+            }
+
+            if (foundIndex !== -1) {
+                console.log(`[Navigation] Found in scene ${foundIndex + 1}`);
+                scrollToScene(foundIndex, quote);
             } else {
-                alert('해당 문장을 본문에서 찾을 수 없습니다.');
+                console.warn(`[Navigation] Quote not found in any scene. Sample scene 1 start: ${superNormalize(sceneTexts[0]).substring(0, 50)}`);
+                alert('해당 문장을 본문에서 찾을 수 없습니다. (문장이 일부 다르거나 다른 회차의 내용일 수 있습니다)');
             }
         }
         // 2. Single Textarea Mode (content)
         else {
             const textArea = document.querySelector('.novel-text-editor') as HTMLTextAreaElement;
             if (textArea && content) {
-                // Find position
-                // Simple exact match first
-                let pos = content.indexOf(quote);
+                const cleanContent = superNormalize(content);
+                const cleanPos = cleanContent.indexOf(targetClean);
 
-                // If not found, try normalized match logic (harder in textarea selection)
-                if (pos === -1) {
-                    // Try to find by splitting and matching parts? 
-                    // For now, let's just alert if exact match fails in raw mode, 
-                    // or improved searching could be added later.
-                    const normalizedContent = normalize(content);
-                    if (normalizedContent.includes(targetQ)) {
-                        alert("문장을 찾았으나, 텍스트 에디터 모드에서는 정확한 위치로 이동하기 어렵습니다. (줄바꿈 차이 등)");
-                        return;
+                if (cleanPos !== -1) {
+                    // 대략적인 위치 찾기 (정확한 pos를 알기 위해서는 역산이 필요하나, 
+                    // 텍스트 영역이 크면 indexOf(quote)가 대부분 작동함)
+                    const pos = content.indexOf(quote);
+                    if (pos !== -1) {
+                        textArea.focus();
+                        textArea.setSelectionRange(pos, pos + quote.length);
+                        const lines = content.substring(0, pos).split("\n").length;
+                        textArea.scrollTop = (lines - 1) * 24;
+                    } else {
+                        // 정규화로는 찾았으나 원본에서 못 찾은 경우
+                        alert('문장을 찾았으나, 정확한 위치 선정이 여려워 이동이 제한됩니다.');
                     }
-                }
-
-                if (pos !== -1) {
-                    textArea.focus();
-                    textArea.setSelectionRange(pos, pos + quote.length);
-                    // Scroll to cursor
-                    const fullText = textArea.value;
-                    const textBefore = fullText.substring(0, pos);
-                    const lines = textBefore.split("\n").length;
-                    const lineHeight = 24; // approximate
-                    textArea.scrollTop = (lines - 1) * lineHeight;
                 } else {
                     alert('해당 문장을 본문에서 찾을 수 없습니다.');
                 }
@@ -426,9 +449,21 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
         }
     };
 
-    const adjustTextareaHeight = (element: HTMLTextAreaElement) => {
-        element.style.height = 'auto';
-        element.style.height = `${element.scrollHeight}px`;
+    const handleBookmark = () => {
+        toast.info("책갈피 기능은 준비 중입니다.");
+    };
+
+    const handleHighlight = () => {
+        if (!activeEditor) return;
+        activeEditor.chain().focus().toggleHighlight().run();
+    };
+
+    const handleAddMemo = () => {
+        toast.info("메모 기능은 준비 중입니다.");
+    };
+
+    const handleOpenSettings = () => {
+        toast.info("환경설정 기능은 준비 중입니다.");
     };
 
     // ... (rest of the setup)
@@ -501,6 +536,59 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
     }
 
     // ... (rest)
+    const handleGenerateImage = async (type: 'character' | 'item' | 'location', entity: Character | Item | Location) => {
+        if (!novelId || !chapterId) {
+            toast.error("소설/챕터 정보가 없습니다.");
+            return;
+        }
+
+        setIsImageGenerating(true);
+        try {
+            const result = await generateImage({
+                novel_id: novelId,
+                chapter_id: chapterId,
+                entity_type: type,
+                entity_name: entity.name,
+                description: entity.description || entity.name
+            });
+
+            // Update local state to show image immediately
+            const newImage = result.image_url; // relative path from backend
+
+            // Function to update the specific entity in a list
+            const updateEntityInList = (list: any[]) => {
+                return list.map(item => item.name === entity.name ? { ...item, image: newImage } : item);
+            };
+
+            setBibleData(prev => {
+                if (!prev) return null;
+                const newData = { ...prev };
+                if (type === 'character') newData.characters = updateEntityInList(newData.characters);
+                if (type === 'item') newData.items = updateEntityInList(newData.items);
+                if (type === 'location') newData.locations = updateEntityInList(newData.locations);
+                return newData;
+            });
+
+            // Update currently selected item if it's the one we generated for
+            if (type === 'character' && selectedCharacter?.name === entity.name) {
+                setSelectedCharacter((prev: Character | null) => prev ? { ...prev, image: newImage } : null);
+            }
+            if (type === 'item' && selectedItem?.name === entity.name) {
+                setSelectedItem((prev: Item | null) => prev ? { ...prev, image: newImage } : null);
+            }
+            if (type === 'location' && selectedLocation?.name === entity.name) {
+                setSelectedLocation((prev: Location | null) => prev ? { ...prev, image: newImage } : null);
+            }
+
+            toast.success("이미지가 생성되었습니다!");
+        } catch (error) {
+            console.error("Image generation failed:", error);
+            toast.error("이미지 생성에 실패했습니다.");
+        } finally {
+            setIsImageGenerating(false);
+        }
+    };
+
     return (
         <div className={`chapter-detail-container ${isSidebarOpen ? 'sidebar-open' : ''}`}>
             <style>{`
@@ -600,6 +688,25 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                     </div>
                 )}
             </div>
+
+            {/* Author/Reader Toolbar */}
+            {mode === 'reader' ? (
+                <ReaderToolbar
+                    editor={activeEditor}
+                    readerSettings={readerSettings}
+                    onSettingsChange={setReaderSettings}
+                    onBookmark={handleBookmark}
+                    onHighlight={handleHighlight}
+                    onAddMemo={handleAddMemo}
+                />
+            ) : (
+                <AuthorToolbar
+                    editor={activeEditor}
+                    onOpenSettings={() => {
+                        handleOpenSettings();
+                    }}
+                />
+            )}
 
 
             {/* Main Layout */}
@@ -816,7 +923,15 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                         {isLoading ? (
                             <div style={{ padding: '20px', textAlign: 'center' }}>로딩 중...</div>
                         ) : sceneTexts.length > 0 ? (
-                            <div className="scenes-container" style={{ height: '100%', overflowY: 'auto', padding: '20px' }}>
+                            <div
+                                className="scenes-container"
+                                style={{
+                                    height: '100%',
+                                    overflowY: 'auto',
+                                    padding: '20px',
+                                    backgroundColor: mode === 'reader' ? 'var(--reader-bg, #ffffff)' : 'white'
+                                }}
+                            >
                                 {sceneTexts.map((text, index) => (
                                     <div
                                         key={index}
@@ -840,88 +955,69 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                                             Scene {index + 1}
                                         </div>
 
-                                        <div className="scene-content-wrapper">
-                                            {editingSceneIndex !== index || mode === 'reader' ? (
-                                                <div
-                                                    className="scene-read-mode exact-text-match"
-                                                    onClick={() => mode !== 'reader' && setEditingSceneIndex(index)}
-                                                    style={{
-                                                        minHeight: '150px',
-                                                        border: mode === 'reader' ? 'none' : '1px solid #e2e8f0',
-                                                        borderRadius: '8px',
-                                                        cursor: mode === 'reader' ? 'default' : 'text',
-                                                        backgroundColor: 'transparent'
-                                                    }}
-                                                >
-                                                    {renderSceneContent(text, index)}
-                                                </div>
-                                            ) : (
-                                                <textarea
-                                                    value={text}
-
-                                                    onBlur={() => setEditingSceneIndex(null)}
-                                                    ref={(el) => {
-                                                        if (el) {
-                                                            adjustTextareaHeight(el);
-                                                            // Focus and move cursor to end instead of beginning
-                                                            if (document.activeElement !== el) {
-                                                                el.focus();
-                                                                const length = el.value.length;
-                                                                el.setSelectionRange(length, length);
-                                                            }
-                                                        }
-                                                    }}
-                                                    onInput={(e) => adjustTextareaHeight(e.currentTarget)}
-                                                    onChange={(e) => {
-                                                        const newScenes = [...sceneTexts];
-                                                        newScenes[index] = e.target.value;
-                                                        setSceneTexts(newScenes);
-                                                    }}
-                                                    className="exact-text-match"
-                                                    style={{
-                                                        minHeight: '150px',
-                                                        height: 'auto',
-                                                        border: '1px solid #818cf8',
-                                                        resize: 'none',
-                                                        outline: 'none',
-                                                        backgroundColor: 'transparent',
-                                                        color: 'inherit',
-                                                        borderRadius: '8px',
-                                                        boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-                                                        overflow: 'hidden'
-                                                    }}
-                                                    spellCheck={false}
-                                                />
-                                            )}
+                                        <div className="scene-content-wrapper" style={{
+                                            maxWidth: mode === 'reader' ? `${readerSettings.contentWidth}%` : '100%',
+                                            margin: mode === 'reader' ? '0 auto' : '0'
+                                        }}>
+                                            <NovelEditor
+                                                content={text.replace(/\n/g, '<br>')}
+                                                onUpdate={(html) => {
+                                                    const newScenes = [...sceneTexts];
+                                                    newScenes[index] = html;
+                                                    setSceneTexts(newScenes);
+                                                }}
+                                                onFocus={(editor) => setActiveEditor(editor)}
+                                                onCreated={(editor) => {
+                                                    if (index === 0 && !activeEditor) {
+                                                        setActiveEditor(editor);
+                                                    }
+                                                }}
+                                                editable={mode !== 'reader'}
+                                                placeholder={`장면 ${index + 1}의 내용을 입력하세요...`}
+                                                className="tiptap-editor-scene"
+                                                style={mode === 'reader' ? {
+                                                    fontSize: `${readerSettings.fontSize}px`,
+                                                    lineHeight: readerSettings.lineHeight,
+                                                    fontFamily: readerSettings.fontFamily,
+                                                    color: 'var(--text-primary)'
+                                                } : undefined}
+                                            />
                                         </div>
                                     </div>
                                 ))}
                             </div>
                         ) : (
-                            <textarea
-                                className="novel-text-editor"
-                                value={content}
-                                onChange={(e) => setContent(e.target.value)}
-                                style={{
-                                    width: '100%',
-                                    height: '100%',
-                                    border: 'none',
-                                    resize: 'none',
-                                    padding: '40px',
-                                    fontSize: '1.1rem',
-                                    lineHeight: '1.4',
-                                    outline: 'none',
-                                    backgroundColor: 'transparent',
-                                    color: 'inherit',
-                                    fontFamily: 'inherit',
-                                    whiteSpace: 'pre-wrap'
-                                }}
-                                spellCheck={false}
-                            />
+                            <div style={{
+                                maxWidth: mode === 'reader' ? `${readerSettings.contentWidth}%` : '100%',
+                                margin: mode === 'reader' ? '0 auto' : '0',
+                                height: '100%'
+                            }}>
+                                <NovelEditor
+                                    content={content.replace(/\n/g, '<br>')}
+                                    onUpdate={(html) => setContent(html)}
+                                    onFocus={(editor) => setActiveEditor(editor)}
+                                    onCreated={(editor) => {
+                                        if (!activeEditor) {
+                                            setActiveEditor(editor);
+                                        }
+                                    }}
+                                    editable={mode !== 'reader'}
+                                    placeholder="소설 내용을 입력하세요..."
+                                    className="tiptap-editor-full"
+                                    style={mode === 'reader' ? {
+                                        fontSize: `${readerSettings.fontSize}px`,
+                                        lineHeight: readerSettings.lineHeight,
+                                        fontFamily: readerSettings.fontFamily,
+                                        color: 'var(--text-primary)'
+                                    } : undefined}
+                                />
+                            </div>
                         )}
                     </div>
                 </div>
             </div>
+
+
 
             {/* Character Detail Modal */}
             {
@@ -962,6 +1058,50 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                                     style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}
                                 >
                                     <Users size={20} />
+                                </button>
+                            </div>
+
+                            {/* Image Section */}
+                            <div style={{ marginBottom: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                {selectedCharacter.image ? (
+                                    <img
+                                        src={`http://localhost:8000${selectedCharacter.image}`}
+                                        alt={selectedCharacter.name}
+                                        style={{ width: '100%', maxHeight: '300px', objectFit: 'contain', borderRadius: '8px', marginBottom: '8px' }}
+                                    />
+                                ) : (
+                                    <div style={{
+                                        width: '100%',
+                                        height: '200px',
+                                        backgroundColor: '#f1f5f9',
+                                        borderRadius: '8px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        color: '#94a3b8',
+                                        marginBottom: '8px'
+                                    }}>
+                                        이미지 없음
+                                    </div>
+                                )}
+                                <button
+                                    onClick={() => handleGenerateImage('character', selectedCharacter)}
+                                    disabled={isImageGenerating}
+                                    style={{
+                                        padding: '8px 16px',
+                                        backgroundColor: isImageGenerating ? '#cbd5e1' : '#4f46e5',
+                                        color: 'white',
+                                        border: 'none',
+                                        borderRadius: '6px',
+                                        cursor: isImageGenerating ? 'not-allowed' : 'pointer',
+                                        fontWeight: '500',
+                                        fontSize: '0.9rem',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '8px'
+                                    }}
+                                >
+                                    {isImageGenerating ? '생성 중...' : (selectedCharacter.image ? '이미지 재생성' : '이미지 생성')}
                                 </button>
                             </div>
 
@@ -1137,6 +1277,50 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                                 </button>
                             </div>
 
+                            {/* Image Section */}
+                            <div style={{ marginBottom: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                {selectedItem.image ? (
+                                    <img
+                                        src={`http://localhost:8000${selectedItem.image}`}
+                                        alt={selectedItem.name}
+                                        style={{ width: '100%', maxHeight: '300px', objectFit: 'contain', borderRadius: '8px', marginBottom: '8px' }}
+                                    />
+                                ) : (
+                                    <div style={{
+                                        width: '100%',
+                                        height: '200px',
+                                        backgroundColor: '#f1f5f9',
+                                        borderRadius: '8px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        color: '#94a3b8',
+                                        marginBottom: '8px'
+                                    }}>
+                                        이미지 없음
+                                    </div>
+                                )}
+                                <button
+                                    onClick={() => handleGenerateImage('item', selectedItem)}
+                                    disabled={isImageGenerating}
+                                    style={{
+                                        padding: '8px 16px',
+                                        backgroundColor: isImageGenerating ? '#cbd5e1' : '#4f46e5',
+                                        color: 'white',
+                                        border: 'none',
+                                        borderRadius: '6px',
+                                        cursor: isImageGenerating ? 'not-allowed' : 'pointer',
+                                        fontWeight: '500',
+                                        fontSize: '0.9rem',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '8px'
+                                    }}
+                                >
+                                    {isImageGenerating ? '생성 중...' : (selectedItem.image ? '이미지 재생성' : '이미지 생성')}
+                                </button>
+                            </div>
+
                             <div style={{ marginBottom: '16px' }}>
                                 <div style={{ fontSize: '0.875rem', color: '#666', marginBottom: '4px' }}>설명</div>
                                 <p style={{ lineHeight: '1.6', fontSize: '1rem', margin: 0 }}>
@@ -1269,6 +1453,50 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                                     style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}
                                 >
                                     <MapPin size={20} />
+                                </button>
+                            </div>
+
+                            {/* Image Section */}
+                            <div style={{ marginBottom: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                {selectedLocation.image ? (
+                                    <img
+                                        src={`http://localhost:8000${selectedLocation.image}`}
+                                        alt={selectedLocation.name}
+                                        style={{ width: '100%', maxHeight: '300px', objectFit: 'contain', borderRadius: '8px', marginBottom: '8px' }}
+                                    />
+                                ) : (
+                                    <div style={{
+                                        width: '100%',
+                                        height: '200px',
+                                        backgroundColor: '#f1f5f9',
+                                        borderRadius: '8px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        color: '#94a3b8',
+                                        marginBottom: '8px'
+                                    }}>
+                                        이미지 없음
+                                    </div>
+                                )}
+                                <button
+                                    onClick={() => handleGenerateImage('location', selectedLocation)}
+                                    disabled={isImageGenerating}
+                                    style={{
+                                        padding: '8px 16px',
+                                        backgroundColor: isImageGenerating ? '#cbd5e1' : '#4f46e5',
+                                        color: 'white',
+                                        border: 'none',
+                                        borderRadius: '6px',
+                                        cursor: isImageGenerating ? 'not-allowed' : 'pointer',
+                                        fontWeight: '500',
+                                        fontSize: '0.9rem',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '8px'
+                                    }}
+                                >
+                                    {isImageGenerating ? '생성 중...' : (selectedLocation.image ? '이미지 재생성' : '이미지 생성')}
                                 </button>
                             </div>
 

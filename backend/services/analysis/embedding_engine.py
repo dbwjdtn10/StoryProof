@@ -17,8 +17,8 @@ from backend.db.models import VectorDocument
 _global_model = None
 _global_reranker = None
 _global_kiwi = None
-_global_bm25 = None
-_global_corpus_indices = None
+_global_bm25_map = {}  # novel_id -> BM25Okapi
+_global_corpus_indices_map = {}  # novel_id -> doc_id list
 
 
 class EmbeddingSearchEngine:
@@ -51,8 +51,9 @@ class EmbeddingSearchEngine:
         # 초기 Pinecone 연결 (인덱스 확인용)
         self._init_pinecone()
         
-        # BM25 초기화 (In-Memory)
-        self._init_bm25()
+        # BM25는 검색 시 novel_id 기준으로 lazy loading 함
+        self.bm25_map = _global_bm25_map
+        self.corpus_indices_map = _global_corpus_indices_map
 
     def _init_pinecone(self):
         """Pinecone 클라이언트 및 인덱스 초기화"""
@@ -80,44 +81,37 @@ class EmbeddingSearchEngine:
                 available_indexes = self.pc.list_indexes()
 
             if self.index_name not in available_indexes:
-                print(f"⚠️ Pinecone 인덱스 '{self.index_name}'가 존재하지 않습니다.")
-                print(f"📋 사용 가능한 인덱스: {available_indexes}")
+                print(f"[Warning] Pinecone 인덱스 '{self.index_name}'가 존재하지 않습니다.")
+                print(f"[Index List] 사용 가능한 인덱스: {available_indexes}")
             else:
                 self.index = self.pc.Index(self.index_name)
-                print(f"✅ Pinecone 인덱스 연결: {self.index_name}")
+                print(f"[Success] Pinecone 인덱스 연결: {self.index_name}")
         except Exception as e:
             error_msg = str(e)
-            print(f"❌ Pinecone 초기화 실패: {error_msg}")
+            print(f"[Error] Pinecone 초기화 실패: {error_msg}")
             # 만약 패키지 명칭 변경 관련 오류라면 더 명확한 해결 가이드 출력
             if "renamed" in error_msg.lower():
                 print("💡 해결 방법: 터미널에서 'pip uninstall pinecone-client pinecone' 후 'pip install pinecone'을 실행하세요.")
                 print(f"현재 Python: {sys.executable}")
     
-    def _init_bm25(self):
+    def _init_bm25(self, novel_id: int):
         """
-        BM25 인덱스 초기화 (Global Singleton 사용)
-        주의: 실제 운영 환경에서는 Elasticsearch 등을 사용해야 하지만, 
-        현재 규모에서는 DB에서 텍스트를 로드하여 In-Memory BM25를 구축합니다.
+        특정 소설(novel_id)의 BM25 인덱스 초기화 (Global Singleton Map 사용)
         """
-        global _global_bm25, _global_corpus_indices
+        global _global_bm25_map, _global_corpus_indices_map
         
-        if _global_bm25 is not None:
-            self.bm25 = _global_bm25
-            self.corpus_indices = _global_corpus_indices
-            print("✅ BM25 Index loaded from cache")
+        if novel_id in _global_bm25_map:
             return
-
-        print("🔄 Building BM25 Index from DB (with Kiwi)...")
+            
+        print(f"[Info] Building BM25 Index for Novel {novel_id} (with Kiwi)...")
         kiwi = self._get_kiwi()
         db = SessionLocal()
         try:
-            # 모든 Parent Scene의 텍스트 로드 (Child는 Parent에 포함되므로 Parent 기준)
-            # 또는 검색 정확도를 위해 Child 단위로 할 수도 있음.
-            # 여기서는 편의상 VectorDocument 전체 로드
-            docs = db.query(VectorDocument).all()
+            # 해당 소설의 Parent Scene 텍스트만 로드
+            docs = db.query(VectorDocument).filter(VectorDocument.novel_id == novel_id).all()
             
             corpus = []
-            self.corpus_indices = []
+            corpus_indices = []
             
             for doc in docs:
                 text = doc.chunk_text
@@ -126,18 +120,18 @@ class EmbeddingSearchEngine:
                 # Kiwi 형태소 분석기 적용
                 tokens = [t.form for t in kiwi.tokenize(text)]
                 corpus.append(tokens)
-                self.corpus_indices.append(doc.vector_id)
+                corpus_indices.append(doc.vector_id)
             
             if corpus:
-                self.bm25 = BM25Okapi(corpus)
-                _global_bm25 = self.bm25
-                _global_corpus_indices = self.corpus_indices
-                print(f"✅ BM25 Index built with {len(corpus)} documents")
+                bm25 = BM25Okapi(corpus)
+                _global_bm25_map[novel_id] = bm25
+                _global_corpus_indices_map[novel_id] = corpus_indices
+                print(f"[Success] BM25 Index built for Novel {novel_id} with {len(corpus)} documents")
             else:
-                print("⚠️ No documents found for BM25")
+                print(f"[Warning] No documents found for BM25 (Novel {novel_id})")
                 
         except Exception as e:
-            print(f"❌ Failed to build BM25 Index: {e}")
+            print(f"[Error] Failed to build BM25 Index for Novel {novel_id}: {e}")
         finally:
             db.close()
 
@@ -147,9 +141,9 @@ class EmbeddingSearchEngine:
         global _global_model
         
         if _global_model is None:
-            print(f"🔄 모델 로딩 시작: {self.model_name}")
+            print(f"[Info] 모델 로딩 시작: {self.model_name}")
             _global_model = SentenceTransformer(self.model_name)
-            print(f"✅ 모델 로딩 완료: {self.model_name}")
+            print(f"[Success] 모델 로딩 완료: {self.model_name}")
             
         self.model = _global_model
         return self.model
@@ -163,9 +157,9 @@ class EmbeddingSearchEngine:
         reranker_name = getattr(settings, 'RERANKER_MODEL', "BAAI/bge-reranker-v2-m3")
 
         if _global_reranker is None:
-            print(f"🔄 Reranker 로딩 시작: {reranker_name}")
+            print(f"[Info] Reranker 로딩 시작: {reranker_name}")
             _global_reranker = CrossEncoder(reranker_name, max_length=512)
-            print(f"✅ Reranker 로딩 완료: {reranker_name}")
+            print(f"[Success] Reranker 로딩 완료: {reranker_name}")
             
         self.reranker = _global_reranker
         return self.reranker
@@ -176,12 +170,25 @@ class EmbeddingSearchEngine:
         global _global_kiwi
         
         if _global_kiwi is None:
-            print(f"🔄 Kiwi Tokenizer 로딩 시작...")
+            print(f"[Info] Kiwi Tokenizer 로딩 시작...")
             _global_kiwi = Kiwi()
-            print(f"✅ Kiwi Tokenizer 로딩 완료")
+            print(f"[Success] Kiwi Tokenizer 로딩 완료")
             
         self.kiwi = _global_kiwi
         return self.kiwi
+
+    def warmup(self):
+        """
+        서버 시작 시 모델을 미리 로드하여 첫 요청 지연을 방지합니다.
+        """
+        print("[Warmup] EmbeddingSearchEngine: Preloading models...")
+        try:
+            self._get_model()    # SentenceTransformer 로드
+            self._get_reranker() # CrossEncoder 로드
+            self._get_kiwi()     # Kiwi 형태소 분석기 로드
+            print("[Warmup] EmbeddingSearchEngine: All models loaded successfully.")
+        except Exception as e:
+            print(f"[Error] EmbeddingSearchEngine Warmup Failed: {e}")
 
     def _split_into_child_chunks(self, text: str) -> List[str]:
         """Parent Scene을 지정된 크기의 Child Chunk로 분할 (Sliding Window)"""
@@ -289,7 +296,7 @@ class EmbeddingSearchEngine:
                         'values': embedding,
                         'metadata': metadata
                     })
-
+ 
                 if (scene_index + 1) % 5 == 0:
                     print(f"  Parent 씬 처리 중: {scene_index + 1}/{len(documents)}")
             
@@ -297,28 +304,31 @@ class EmbeddingSearchEngine:
             if vectors_to_upsert:
                 # 인덱스 연결 확인 및 재시도
                 if self.index is None:
-                    print("⚠️ Pinecone 인덱스가 연결되지 않았습니다. 재연결을 시도합니다...")
+                    print("[Warning] Pinecone 인덱스가 연결되지 않았습니다. 재연결을 시도합니다...")
                     self._init_pinecone()
                     
                 if self.index is None:
                     raise RuntimeError(f"Pinecone 인덱스 '{self.index_name}'에 연결할 수 없습니다. 설정을 확인하세요.")
 
                 batch_size = 100
-                print(f"🚀 총 {len(vectors_to_upsert)}개의 Child Chunk를 Pinecone에 업로드합니다...")
+                print(f"[Action] 총 {len(vectors_to_upsert)}개의 Child Chunk를 Pinecone에 업로드합니다...")
                 
                 for i in range(0, len(vectors_to_upsert), batch_size):
                     batch = vectors_to_upsert[i:i + batch_size]
                     self.index.upsert(vectors=batch)
             
             db.commit()
-            print("✅ Pinecone 업로드 및 DB 저장 완료")
+            print("[Success] Pinecone 업로드 및 DB 저장 완료")
             
-            # BM25 인덱스 재구축 (문서 추가 시)
-            self._init_bm25()
+            # BM25 인덱스 재구축 (문서 추가 시 해당 소설 인덱스 삭제 유도)
+            if novel_id in _global_bm25_map:
+                del _global_bm25_map[novel_id]
+                del _global_corpus_indices_map[novel_id]
+            self._init_bm25(novel_id)
             
         except Exception as e:
             db.rollback()
-            print(f"❌ 문서 저장 실패: {e}")
+            print(f"[Error] 문서 저장 실패: {e}")
             raise e
         finally:
             db.close()
@@ -330,24 +340,28 @@ class EmbeddingSearchEngine:
         chapter_id: Optional[int] = None, 
         exclude_chapter_id: Optional[int] = None, 
         top_k: int = 5,
-        alpha: float = 0.825 # 최적화된 기본값 적용
+        alpha: float = 0.7, # 0.83 vs 0.7 비교 결과, 사용자 제안값인 0.7을 기본으로 채택 (키워드 비중 강화)
+        keywords: Optional[List[str]] = None,
+        original_query: Optional[str] = None
     ):
         """
-        Hybrid Search (Dense + Sparse)
+        True Hybrid Search (Union of Dense + Sparse)
         
         Args:
-            query (str): 검색 질문
+            query (str): 검색 질문 (확장된 쿼리일 수 있음)
             novel_id (int): 필터링할 소설 ID
-            chapter_id (int): 필터링할 회차 ID (선택 - 포함 필터)
-            exclude_chapter_id (int): 제외할 회차 ID (선택 - 설정 파괴 분석용)
+            chapter_id (int): 필터링할 회차 ID
+            exclude_chapter_id (int): 제외할 회차 ID
             top_k (int): 반환할 상위 결과 수
             alpha (float): 밀집 검색(Vector) 가중치 (0.0 ~ 1.0)
-                           1.0 = Pure Vector, 0.0 = Pure Keyword
+            keywords (List[str]): 명시적 키워드 리스트
+            original_query (str): 원본 질문 (리랭커에서 노이즈 없는 검색을 위해 사용)
         """
-        # 1. Dense Search (Pinecone)
+        # (Step 1-3 logic remains similar but updated)
+        
+        # --- 1. Dense Search (Pinecone) ---
         query_embedding = self.embed_text(query)
         
-        # Pinecone 필터
         filter_dict = {}
         if novel_id:
             filter_dict['novel_id'] = novel_id
@@ -356,101 +370,119 @@ class EmbeddingSearchEngine:
         elif exclude_chapter_id:
             filter_dict['chapter_id'] = {"$ne": exclude_chapter_id}
         
-        # 후보군 검색 (Top-K보다 넉넉하게)
-        candidate_k = top_k * 5
-        
         dense_results = self.index.query(
             vector=query_embedding,
-            top_k=candidate_k,
+            top_k=top_k * 10,
             include_metadata=True,
             filter=filter_dict if filter_dict else None
         )
         
-        # 2. Sparse Search (BM25)
-        # 현재는 BM25가 전체 문서에 대해 점수를 매기지만, 
-        # 성능을 위해 Dense 후보군에 대해서만 Re-ranking하거나,
-        # 전체에서 Top-K를 뽑아 교집합을 볼 수도 있습니다.
-        # 여기서는 간단히: 전체 BM25 점수를 구하고 Normalize
+        dense_matches = {m.id: m for m in dense_results.matches}
         
+        # --- 2. Sparse Search (BM25) ---
         sparse_scores_dict = {}
-        if self.bm25:
-            # Query도 동일하게 Kiwi 토큰화
-            kiwi = self._get_kiwi()
-            tokenized_query = [t.form for t in kiwi.tokenize(query)]
-            sparse_scores = self.bm25.get_scores(tokenized_query)
+        sparse_top_parents = []
+        
+        if novel_id:
+            self._init_bm25(novel_id)
+            bm25 = _global_bm25_map.get(novel_id)
+            corpus_indices = _global_corpus_indices_map.get(novel_id)
             
-            # 정규화 (Min-Max)
-            if len(sparse_scores) > 0:
-                max_score = np.max(sparse_scores)
-                min_score = np.min(sparse_scores)
-                if max_score > min_score:
-                    sparse_scores = (sparse_scores - min_score) / (max_score - min_score)
+            if bm25 and corpus_indices:
+                if keywords:
+                    tokenized_query = keywords
                 else:
-                    sparse_scores = np.zeros_like(sparse_scores)
+                    kiwi = self._get_kiwi()
+                    tokenized_query = [t.form for t in kiwi.tokenize(query)]
             
-            # ID 매핑
-            for idx, score in enumerate(sparse_scores):
-                vector_id = self.corpus_indices[idx]
-                sparse_scores_dict[vector_id] = score
+                sparse_scores = bm25.get_scores(tokenized_query)
+                
+                if len(sparse_scores) > 0:
+                    max_s = np.max(sparse_scores)
+                    min_s = np.min(sparse_scores)
+                    if max_s > min_s:
+                        normalized_scores = (sparse_scores - min_s) / (max_s - min_s)
+                    else:
+                        normalized_scores = np.zeros_like(sparse_scores)
+                    
+                    for idx, norm_score in enumerate(normalized_scores):
+                        parent_id = corpus_indices[idx]
+                        sparse_scores_dict[parent_id] = float(norm_score)
+                        if norm_score > 0:
+                            sparse_top_parents.append((parent_id, norm_score))
+                    
+                    sparse_top_parents.sort(key=lambda x: x[1], reverse=True)
+                    sparse_top_parents = sparse_top_parents[:top_k * 10]
         
-        # 3. Score Fusion (Hybrid) -> Get Top-50 Candidates
+        # --- 3. Union & Hybrid Scoring ---
+        candidate_child_ids = set(dense_matches.keys())
+        sparse_parent_ids_to_fetch = set()
+        for p_id, _ in sparse_top_parents:
+            found = any(c_id.startswith(p_id) for c_id in candidate_child_ids)
+            if not found:
+                sparse_parent_ids_to_fetch.add(p_id)
         
-        candidates = []
-        for match in dense_results.matches:
-            child_id = match.id
-            parent_id = child_id.rsplit('_chunk_', 1)[0]
-            
-            dense_score = match.score
-            sparse_score = sparse_scores_dict.get(parent_id, 0.0) 
-            
-            # Hybrid Score
-            hybrid_score = (alpha * dense_score) + ((1 - alpha) * sparse_score)
-            
-            match.score = hybrid_score
-            candidates.append(match)
-            
-        # 재정렬 (Hybrid Score 기준)
-        candidates.sort(key=lambda x: x.score, reverse=True)
+        if sparse_parent_ids_to_fetch:
+            print(f"[Hybrid] Fetching {len(sparse_parent_ids_to_fetch)} sparse candidates from Pinecone...")
+            for p_id in sparse_parent_ids_to_fetch:
+                try:
+                    parts = p_id.split('_')
+                    s_idx = int(parts[parts.index('scene')+1])
+                    c_id_filter = int(parts[parts.index('chap')+1])
+                    
+                    temp_res = self.index.query(
+                        vector=query_embedding,
+                        top_k=3, 
+                        filter={"scene_index": s_idx, "novel_id": novel_id, "chapter_id": c_id_filter},
+                        include_metadata=True
+                    )
+                    for t_match in temp_res.matches:
+                        if t_match.id not in dense_matches:
+                            dense_matches[t_match.id] = t_match
+                except (ValueError, IndexError):
+                    continue
+
+        # --- 3. Result Merging & Scoring ---
+        combined_candidates = self._merge_results(
+            dense_matches=dense_matches,
+            sparse_scores_dict=sparse_scores_dict,
+            dense_weight=alpha,
+            sparse_weight=(1.0 - alpha)
+        )
         
-        # 4. Reranking (Cross-Encoder)
-        # 상위 50개(또는 top_k * 10)만 Reranker에 태움
-        
-        rerank_candidates = candidates[:top_k * 10]
-        
+        # --- 4. Reranking (Cross-Encoder) ---
+        rerank_candidates = combined_candidates[:top_k * 10]
         final_results = []
         
-        # Reranker가 있으면 수행, 없으면 생략
+        # 리랭킹에는 원본 질문(original_query)을 사용하여 노이즈 감소
+        rank_query = original_query or query
+        
         try:
             reranker = self._get_reranker()
+            pairs = [[rank_query, m.metadata.get('text', '')] for m in rerank_candidates]
             
-            # 입력 쌍 생성: [[Query, Candidate_Text], ...]
-            # 주의: Candidate Text가 길면 잘릴 수 있음 (Max 512 token)
-            pairs = []
-            for match in rerank_candidates:
-                candidate_text = match.metadata.get('text', '')
-                pairs.append([query, candidate_text])
-                
             if pairs:
-                scores = reranker.predict(pairs)
+                # activation_fct=nn.Sigmoid() used internally if requested, 
+                # but we'll do it manually to ensure 0-1 range.
+                logits = reranker.predict(pairs)
                 
-                # 점수 업데이트
+                # Sigmoid function for normalization
+                def sigmoid(x):
+                    return 1 / (1 + np.exp(-x))
+                
+                scores = sigmoid(logits)
+                
                 for i, match in enumerate(rerank_candidates):
-                    match.score = float(scores[i]) # numpy float -> python float
+                    match.score = float(scores[i])
                     final_results.append(match)
-                    
-                # Reranker 점수 기준 재정렬
                 final_results.sort(key=lambda x: x.score, reverse=True)
             else:
                 final_results = rerank_candidates
-                
         except Exception as e:
-            print(f"⚠️ Reranker failed: {e}. Fallback to Hybrid scores.")
+            print(f"[Warning] Reranker failed: {e}. Fallback to Hybrid scores.")
             final_results = rerank_candidates
 
-        # 5. Result Formatting & Parent Aggregation
-        # Hybrid Search만 했을 때는 candidates 전체를 썼지만,
-        # Reranking 후에는 final_results (Top 50)만 사용
-        
+        # --- 5. Result Formatting & Parent Aggregation ---
         seen_keys = set()
         hits = []
         db = SessionLocal()
@@ -464,10 +496,7 @@ class EmbeddingSearchEngine:
                 if key in seen_keys: continue
                 seen_keys.add(key)
                 
-                if match_chapter_id:
-                    parent_vector_id = f"novel_{novel_id}_chap_{match_chapter_id}_scene_{scene_index}"
-                else:
-                    parent_vector_id = f"novel_{novel_id}_scene_{scene_index}"
+                parent_vector_id = f"novel_{match.metadata.get('novel_id')}_chap_{match_chapter_id}_scene_{scene_index}"
                     
                 doc = db.query(VectorDocument).filter(
                     VectorDocument.vector_id == parent_vector_id
@@ -476,11 +505,11 @@ class EmbeddingSearchEngine:
                 if doc:
                     scene_data = doc.metadata_json
                     scene_data['matched_chunk'] = match.metadata.get('text', '')
-                    scene_data['similarity'] = match.score # Reranker Score
+                    scene_data['similarity'] = match.score
                     
                     hits.append({
                         'document': scene_data,
-                        'chapter_id': chapter_id,
+                        'chapter_id': match_chapter_id,
                         'similarity': match.score,
                         'vector_id': match.id
                     })
@@ -491,3 +520,27 @@ class EmbeddingSearchEngine:
             db.close()
         
         return hits
+
+    def _merge_results(
+        self, 
+        dense_matches: Dict[str, Any], 
+        sparse_scores_dict: Dict[str, float],
+        dense_weight: float = 0.7,
+        sparse_weight: float = 0.3
+    ) -> List[Any]:
+        """
+        벡터 검색 결과와 키워드 검색 결과를 병합하고 가중치에 따라 최종 점수를 계산합니다.
+        """
+        combined = []
+        for c_id, match in dense_matches.items():
+            parent_id = c_id.rsplit('_chunk_', 1)[0]
+            dense_score = match.score
+            sparse_score = sparse_scores_dict.get(parent_id, 0.0)
+            
+            # 최종 하이브리드 점수 계산
+            match.score = (dense_weight * dense_score) + (sparse_weight * sparse_score)
+            combined.append(match)
+            
+        # 점수 기준 내림차순 정렬
+        combined.sort(key=lambda x: x.score, reverse=True)
+        return combined
