@@ -29,10 +29,10 @@ numpy>=1.24.0
 # ML for Evaluation Scripts (optional)
 torch>=2.0.0
 transformers>=4.30.0
-bitsandbytes>=0.41.0
+# bitsandbytes>=0.41.0  # REMOVED for deployment optimization
 
 # Visualization
-matplotlib>=3.7.0
+# matplotlib>=3.7.0  # REMOVED for deployment optimization
 
 # Utilities
 python-dotenv>=1.0.0
@@ -45,4 +45,4 @@ redis>=5.0.0
 
 # Search & NLP
 rank_bm25>=0.2.2
-kiwipiepy>=0.16.0  # Korean Morphological Analyzer (for benchmarks)
+kiwipiepy>=0.16.0  # Korean Morphological Analyzer (Required for Chatbot/Search)

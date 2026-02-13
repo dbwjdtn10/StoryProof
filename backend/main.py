@@ -33,11 +33,19 @@ async def lifespan(app: FastAPI):
     # Static directory creation
     os.makedirs("backend/static/images", exist_ok=True)
     
-    init_db()  # DB 초기화 (테이블 생성)
+    try:
+        init_db()  # DB 초기화 (테이블 생성)
+        print("[OK] Database initialized successfully")
+    except Exception as e:
+        print(f"[WARNING] Database initialization failed: {e}")
+        print("[INFO] Server starting without database connection")
     
     # 모델 로딩 (백그라운드 스레드에서 실행하여 서버가 먼저 뜨도록 함)
     def _load_models():
         global _model_ready
+        import time
+        # 서버 시작 안정을 위해 10초 대기 후 모델 로딩
+        time.sleep(10)
         try:
             from backend.services.chatbot_service import get_chatbot_service
             get_chatbot_service().warmup()
