@@ -45,7 +45,7 @@ async def lifespan(app: FastAPI):
         global _model_ready
         import time
         # 서버 시작 안정을 위해 10초 대기 후 모델 로딩
-        time.sleep(10)
+        time.sleep(3)
         try:
             from backend.services.chatbot_service import get_chatbot_service
             get_chatbot_service().warmup()
