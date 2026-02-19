@@ -76,7 +76,7 @@ class Settings(BaseSettings):
     # ===== Embedding Models =====
     KOREAN_EMBEDDING_MODEL: str = "dragonkue/multilingual-e5-small-ko"
     MULTILINGUAL_EMBEDDING_MODEL: str = "intfloat/multilingual-e5-small"
-    ENABLE_RERANKER: bool = True  # False로 설정 시 Reranker 비활성화 (메모리 절약)
+    ENABLE_RERANKER: bool = False  # 기본값 False (메모리 절약), True로 설정 시 Reranker 활성화
     
     # ===== Chunking Strategy =====
     CHILD_CHUNK_SIZE: int = 500  # 200 -> 500 (문맥 확보)
