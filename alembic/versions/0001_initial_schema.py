@@ -78,13 +78,11 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_chapters_id'), 'chapters', ['id'], unique=False)
 
-    # Create analysis_type enum
     analysis_type_enum = postgresql.ENUM('character', 'plot', 'style', 'overall', name='analysistype')
-    analysis_type_enum.create(op.get_bind())
+    analysis_type_enum.create(op.get_bind(), checkfirst=True)
     
-    # Create analysis_status enum
     analysis_status_enum = postgresql.ENUM('pending', 'processing', 'completed', 'failed', name='analysisstatus')
-    analysis_status_enum.create(op.get_bind())
+    analysis_status_enum.create(op.get_bind(), checkfirst=True)
 
     # Create analyses table
     op.create_table(

@@ -42,3 +42,8 @@ postgres_data/
 # OS
 .DS_Store
 Thumbs.db
+
+# Secrets
+*.pem
+*.key
+storyproof-key.pem

@@ -78,6 +78,11 @@ class ChapterResponse(ChapterBase):
     id: int
     novel_id: int
     word_count: int
+    storyboard_status: Optional[str] = "PENDING"
+    storyboard_progress: Optional[int] = 0
+    storyboard_message: Optional[str] = None
+    storyboard_error: Optional[str] = None
+    storyboard_completed_at: Optional[datetime] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
     
@@ -85,7 +90,14 @@ class ChapterResponse(ChapterBase):
         from_attributes = True
 
 
+
 class ChapterListResponse(BaseModel):
     """회차 목록 응답 스키마"""
     total: int
     chapters: List[ChapterResponse]
+
+
+class ChapterMergeRequest(BaseModel):
+    """회차 병합 요청 스키마"""
+    source_ids: List[int] = Field(..., description="병합할 소스 회차 ID 목록")
+    target_id: int = Field(..., description="병합된 내용이 저장될 대상 회차 ID")

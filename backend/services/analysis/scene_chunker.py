@@ -104,7 +104,9 @@ class SceneChunker:
     # 챕터 패턴: 명확한 챕터 구분을 감지하는 정규식
     CHAPTER_PATTERNS = [
         r'^\s*제\s*\d+\s*[장화회]',      # 제1장, 제 1 화
+        r'^\s*\d+\s*장\.?',            # 1장, 1장. (모비딕 등 지원)
         r'^\s*Chapter\s*\d+',          # Chapter 1
+        r'^\s*CHAPTER\s*\d+',          # CHAPTER 1
         r'^\s*\d+\.\s+',               # 1. 제목
         r'^\s*프롤로그',                # 프롤로그
         r'^\s*에필로그',                # 에필로그
@@ -161,11 +163,11 @@ class SceneChunker:
         
         # 명확한 챕터 구조 감지 (2개 이상 찾았을 때만)
         if matches >= 2:
-            print(f"💡 명확한 챕터 구조 감지됨 ({matches}개 헤더). 챕터 기반 분할을 적용합니다.")
+            print(f"[INFO] 명확한 챕터 구조 감지됨 ({matches}개 헤더). 챕터 기반 분할을 적용합니다.")
             return "chapter"
         else:
             # 구조화되지 않은 텍스트는 동적 임계값으로 균형잡힌 청킹
-            print(f"💡 구조화되지 않은 텍스트 감지. 동적 임계값으로 균형잡힌 청킹을 적용합니다.")
+            print(f"[INFO] 구조화되지 않은 텍스트 감지. 동적 임계값으로 균형잡힌 청킹을 적용합니다.")
             return "hybrid"  # 새로운 하이브리드 모드
     
     def calculate_dynamic_threshold(self, text: str) -> int:
@@ -231,19 +233,24 @@ class SceneChunker:
         return calculated_threshold
     
     def split_into_scenes(self, text: str) -> List[str]:
-        # 1. 구조 감지 및 모드 설정
+        """
+        간소화된 씬 분할: LLM 챕터 헤더 감지만 사용
+        
+        - 챕터 헤더가 있으면: 챕터별로 분할
+        - 챕터 헤더가 없으면: 전체를 하나의 Parent Scene으로 사용
+        """
+        # 1. 챕터 구조 감지
         self.mode = self.detect_structure(text)
         
-        if self.mode == "chapter":
-            # 챕터 모드: 챕터 헤더를 기준으로 분할하되, max_scene_sentences로 제한
-            self.current_threshold = 1000
-        elif self.mode == "hybrid":
-            # 하이브리드 모드: 동적 임계값으로 균형잡힌 청킹
-            self.current_threshold = self.calculate_dynamic_threshold(text)
-        else:
-            # 기본 씬 모드
-            self.current_threshold = self.default_threshold
-            
+        # 2. 챕터 헤더가 없으면 전체를 하나의 씬으로 반환
+        if self.mode != "chapter":
+            print(f"[INFO] 챕터 구조 없음. 전체를 1개 Parent Scene으로 사용합니다.")
+            return [text]
+        
+        # 3. 챕터 헤더 기반 분할
+        print(f"[INFO] 챕터 구조 감지됨. 챕터별로 분할합니다.")
+        
+        # 문장 단위로 분할
         sentences = re.split(r'([.!?]\s+)', text)
         
         merged_sentences = []
@@ -253,87 +260,30 @@ class SceneChunker:
             else:
                 merged_sentences.append(sentences[i])
         
+        # 챕터 헤더로만 분할
         scenes = []
         current_scene = []
-        score = 0
-        sentence_count = 0
-        prev_was_dialogue = False
         
         for sent in merged_sentences:
             if not sent.strip():
                 continue
             
-            # [수정] 줄바꿈 정규화 (2개 이상의 줄바꿈을 단일 줄바꿈으로 변환하여 공백 제거)
-            sent = re.sub(r'\n{2,}', '\n', sent)
-            
-            # [공통] 챕터/헤더 감지 (강제 분할)
+            # 챕터 헤더 감지 시 새로운 씬 시작
             if self.is_chapter_header(sent):
-                if current_scene and sentence_count >= self.min_scene_sentences:
+                if current_scene:
                     scenes.append(" ".join(current_scene))
                     current_scene = []
-                    sentence_count = 0
                 current_scene.append(sent)
-                score = 0
-                continue
-
-            # [점수 계산]
-            # 명확한 씬 구분자
-            if "***" in sent or "---" in sent or "###" in sent:
-                score += 12
-            
-            # 연속된 줄바꿈 (문단 구분)
-            if "\n\n" in sent or sent.count('\n') >= 2:
-                score += 5
-            
-            # 장소 변화
-            if self.contains_new_location(sent):
-                score += 4
-            
-            # 시간 전환
-            if any(word in sent for word in self.TIME_TRANSITIONS):
-                score += 3
-            
-            # 대화 전환 감지 (인용부호로 시작)
-            is_dialogue = sent.strip().startswith('"') or sent.strip().startswith("'")
-            if is_dialogue != prev_was_dialogue and sentence_count > 0:
-                score += 2
-            prev_was_dialogue = is_dialogue
-            
-            # 대화 종료 후 지문
-            if re.search(r'["\']\s*[.!?]\s+[^"\']+', sent):
-                score += 2
-            
-            current_scene.append(sent)
-            sentence_count += 1
-            
-            # 분할 조건:
-            # 1. 점수가 임계값 도달 AND 최소 길이 만족
-            # 2. 최대 길이 초과
-            should_split = False
-            
-            if score >= self.current_threshold and sentence_count >= self.min_scene_sentences:
-                should_split = True
-            
-            if sentence_count >= self.max_scene_sentences:
-                should_split = True
-            
-            if should_split:
-                scenes.append(" ".join(current_scene))
-                current_scene = []
-                score = 0
-                sentence_count = 0
-                prev_was_dialogue = False
-        
-        # 마지막 씬 처리 (최소 길이 체크)
-        if current_scene:
-            if sentence_count >= self.min_scene_sentences or not scenes:
-                scenes.append(" ".join(current_scene))
             else:
-                # 너무 짧으면 이전 씬에 병합
-                if scenes:
-                    scenes[-1] += " " + " ".join(current_scene)
-                else:
-                    scenes.append(" ".join(current_scene))
+                current_scene.append(sent)
         
-        print(f"✂️ 총 {len(scenes)}개의 씬으로 분할됨 (모드: {self.mode})")
+        # 마지막 씬 추가
+        if current_scene:
+            scenes.append(" ".join(current_scene))
+        
+        # 결과가 없으면 전체를 하나의 씬으로
+        if not scenes:
+            scenes = [text]
+        
+        print(f"[OK] 총 {len(scenes)}개의 Parent Scene으로 분할됨 (모드: {self.mode})")
         return scenes

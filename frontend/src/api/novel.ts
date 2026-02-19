@@ -26,6 +26,9 @@ export interface Chapter {
     content: string;
     word_count: number;
     created_at: string;
+    storyboard_status?: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+    storyboard_progress?: number;
+    storyboard_message?: string;
 }
 
 export interface StoryboardProgress {
@@ -90,7 +93,7 @@ export const uploadChapter = async (
     }
     // Note: Content-Type for FormData is automatically set by browser
 
-    const response = await fetch(`http://localhost:8000/api/v1/novels/${novelId}/chapters/upload`, {
+    const response = await fetch(`/api/v1/novels/${novelId}/chapters/upload`, {
         method: 'POST',
         headers: headers,
         body: formData,
@@ -98,7 +101,7 @@ export const uploadChapter = async (
 
     if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || 'Upload failed');
+        throw new Error(errorData.detail || 'Failed to upload chapter');
     }
 
     const uploadedChapter = await response.json();
@@ -163,6 +166,7 @@ export interface Character {
     description?: string;
     traits?: string[];
     aliases?: string[];
+    image?: string; // Generated image URL
 }
 
 export interface Location {
@@ -170,12 +174,14 @@ export interface Location {
     appearance_count: number;
     appearances: number[];
     description?: string;
+    image?: string; // Generated image URL
 }
 
 export interface Item {
     name: string;
     first_appearance: number;
     description?: string;
+    image?: string; // Generated image URL
 }
 
 export interface KeyEvent {
@@ -222,4 +228,22 @@ export const getChapterBible = async (novelId: number, chapterId: number): Promi
     } catch (error) {
         throw error;
     }
+};
+
+export const reanalyzeChapter = async (novelId: number, chapterId: number): Promise<void> => {
+    await request<{ status: string }>(`/novels/${novelId}/chapters/${chapterId}/analyze`, {
+        method: 'POST',
+        headers: getHeaders(),
+    });
+};
+
+export const mergeChapters = async (novelId: number, targetId: number, sourceIds: number[]): Promise<Chapter> => {
+    return request<Chapter>(`/novels/${novelId}/merge-contents`, {
+        method: 'PATCH',
+        headers: getHeaders(),
+        body: JSON.stringify({
+            target_id: targetId,
+            source_ids: sourceIds
+        })
+    });
 };

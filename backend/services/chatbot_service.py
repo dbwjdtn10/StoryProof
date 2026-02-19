@@ -37,8 +37,10 @@ class ChatbotService:
     """
     
     # 기본 설정값 (클래스 상수)
-    DEFAULT_ALPHA = 0.297  # 레거시 파라미터 (Pinecone에서는 미사용)
-    DEFAULT_SIMILARITY_THRESHOLD = 0.5  # 유사도 0.5 미만은 필터링
+    # Reranker 미사용 시: Vector 검색 품질 의존도가 높아지므로 Alpha를 약간 조정 (0.75)
+    # Reranker 사용 시: 다양한 후보군 확보를 위해 Alpha를 높게 유지 (0.825)
+    DEFAULT_ALPHA = 0.825 if settings.ENABLE_RERANKER else 0.75
+    DEFAULT_SIMILARITY_THRESHOLD = 0.2  # Reranker 도입으로 기준 하향 (0.5 -> 0.2)
 
     def __init__(self):
         """
@@ -57,9 +59,9 @@ class ChatbotService:
         if EmbeddingSearchEngine:
             try:
                 self.engine = EmbeddingSearchEngine()
-                print("✅ ChatbotService: EmbeddingSearchEngine loaded")
+                print("[Success] ChatbotService: EmbeddingSearchEngine loaded")
             except Exception as e:
-                print(f"❌ ChatbotService: Failed to load EmbeddingSearchEngine: {e}")
+                print(f"[Error] ChatbotService: Failed to load EmbeddingSearchEngine: {e}")
                 self.engine = None
         else:
             self.engine = None
@@ -78,50 +80,21 @@ class ChatbotService:
         top_k: int = 5,
         alpha: float = DEFAULT_ALPHA,
         similarity_threshold: float = DEFAULT_SIMILARITY_THRESHOLD,
-        novel_filter: Optional[str] = None
+        novel_id: Optional[int] = None,
+        chapter_id: Optional[int] = None,
+        novel_filter: Optional[str] = None,
+        keywords: Optional[List[str]] = None,
+        original_query: Optional[str] = None
     ) -> List[Dict]:
         """
         질문과 가장 유사한 씬(청크)을 Pinecone에서 검색합니다.
-        
-        동작 과정:
-        1. 질문을 BGE-M3 모델로 임베딩 벡터로 변환
-        2. Pinecone에서 코사인 유사도 기반 검색
-        3. novel_filter가 있으면 특정 소설로 필터링
-        4. similarity_threshold 이상인 결과만 반환
-        
-        Args:
-            question (str): 사용자 질문 (예: "주인공의 이름은?")
-            top_k (int): 반환할 최대 결과 개수 (기본값: 5)
-            alpha (float): 레거시 파라미터, 현재 미사용 (호환성 유지용)
-            similarity_threshold (float): 최소 유사도 (0.0~1.0, 기본값: 0.5)
-            novel_filter (Optional[str]): 소설 제목 또는 파일명으로 필터링
-                                         (예: "alice", "KR_fantasy_alice")
-            
-        Returns:
-            List[Dict]: 유사한 씬 목록, 각 딕셔너리는 다음 키를 포함:
-                - text (str): 씬의 원본 텍스트
-                - filename (str): 소설 제목 또는 요약
-                - similarity (float): 유사도 점수 (0.0~1.0)
-                - scene_index (int): 씬 번호
-                - summary (str): 씬 요약
-                
-        Example:
-            >>> service = ChatbotService()
-            >>> results = service.find_similar_chunks(
-            ...     question="앨리스는 어디로 떨어졌나요?",
-            ...     top_k=3,
-            ...     novel_filter="alice"
-            ... )
-            >>> print(f"찾은 씬 개수: {len(results)}")
         """
         # 검색 엔진이 초기화되지 않은 경우 빈 리스트 반환
         if not self.engine:
             return []
             
-        # Step 1: novel_filter로 소설 ID 조회
-        # 특정 소설 내에서만 검색하고 싶을 때 사용
-        novel_id = None
-        if novel_filter:
+        # Step 1: novel_filter로 소설 ID 조회 (novel_id가 직접 전달되지 않은 경우만)
+        if novel_id is None and novel_filter:
             db = SessionLocal()
             try:
                 # 파일명에서 확장자 제거 (예: "alice.txt" → "alice")
@@ -131,35 +104,49 @@ class ChatbotService:
                 novel = db.query(Novel).filter(Novel.title.ilike(f"%{search_term}%")).first()
                 if novel:
                     novel_id = novel.id
+                    print(f"[Search] Chatbot: Resolved novel_filter '{novel_filter}' to ID {novel_id} ({novel.title})")
+                else:
+                    print(f"[Warning] Chatbot: novel_filter '{novel_filter}' not found in DB")
             finally:
                 db.close()
+        elif novel_id:
+            print(f"[Search] Chatbot: Using direct novel_id {novel_id}")
         
         # Step 2: Pinecone 벡터 검색 실행
-        # EmbeddingSearchEngine.search()는 다음을 수행:
-        # 1. 질문을 BGE-M3로 임베딩 변환
-        # 2. Pinecone에서 유사 벡터 검색
-        # 3. PostgreSQL에서 메타데이터 조회
         try:
-            results = self.engine.search(query=question, novel_id=novel_id, top_k=top_k)
+            results = self.engine.search(
+                query=question, 
+                novel_id=novel_id, 
+                chapter_id=chapter_id, 
+                top_k=top_k,
+                alpha=alpha,
+                keywords=keywords,
+                original_query=original_query or question
+            )
+            print(f"[Search] Chatbot: Found {len(results)} results (Novel: {novel_id}, Chapter Context: {chapter_id})")
             
             # Step 3: 결과 포맷 변환 및 필터링
             formatted_results = []
             for res in results:
                 similarity = res['similarity']
+                doc = res['document']
+                scene_idx = doc.get('scene_index', '?')
                 
                 # 유사도가 임계값 미만이면 제외
                 if similarity < similarity_threshold:
+                    print(f"  - [DROP] Scene {scene_idx}: similarity {similarity:.4f} < {similarity_threshold}")
                     continue
+                
+                print(f"  - [KEEP] Scene {scene_idx}: similarity {similarity:.4f}")
                     
-                doc = res['document']
                 formatted_results.append({
                     'text': doc.get('original_text', ''),
-                    'filename': doc.get('summary', 'Unknown'), # summary를 filename 대신 사용하거나 메타데이터에서 찾음
-                    'similarity': similarity,
-                    'original_similarity': similarity,
-                    # 추가 메타데이터
                     'scene_index': doc.get('scene_index'),
-                    'summary': doc.get('summary')
+                    'chapter_id': res.get('chapter_id'),
+                    'summary': doc.get('summary'),
+                    'novel_id': novel_id,
+                    'similarity': similarity,
+                    'original_similarity': similarity
                 })
             
             return formatted_results
@@ -206,8 +193,14 @@ class ChatbotService:
         # 프롬프트 구성
         # - 컨텍스트는 3,500자로 제한 (Gemini 토큰 제한 고려)
         # - 답변 형식을 명확히 지정하여 일관된 출력 유도
+        # - 할루시네이션 방지: 컨텍스트 외부 지식 사용 금지
         prompt = f"""다음 문맥을 바탕으로 질문에 답변하세요.
-문맥은 소설의 여러 부분에서 발췌된 내용입니다. 문맥에 정답이 없거나 부족하다면, 당신이 알고 있는 소설의 지식을 동원하여 구체적이고 풍부하게 답변해주세요.
+
+[답변 가이드라인]
+1. **제공된 문맥을 최우선으로 참고하세요.**
+2. **문맥에 직접적인 정답이 없다면, 문맥의 단서들을 종합하여 가장 합리적인 답변을 추론하세요.**
+3. **추론된 답변일 경우, "~로 추정됩니다" 또는 "문맥상 ~인 것으로 보입니다"와 같이 표현하세요.**
+4. **답변에 [Context N]과 같은 출처 표시는 절대 포함하지 마세요.**
 
 [답변 형식]
 반드시 다음 형식을 지켜주세요. 두 섹션 사이에는 빈 줄을 두세요.
@@ -216,7 +209,7 @@ class ChatbotService:
 (질문에 대한 핵심 답변을 1~2문장으로 요약)
 
 [상세 설명]
-(찾은 문맥을 바탕으로 한 구체적인 설명과 근거)
+(문맥을 바탕으로 한 구체적인 설명과 근거, 추론 내용 포함)
 
 문맥:
 {context[:3500]}
@@ -226,44 +219,177 @@ class ChatbotService:
 답변:"""
         
         # Gemini API 호출
+        # 할루시네이션 방지를 위한 생성 파라미터 설정:
+        # - temperature=0.1: 낮은 온도로 일관성 및 사실성 향상
+        # - top_p=0.8: 확률 분포 제한으로 예측 가능성 증가
+        # - top_k=20: 후보 토큰 제한
         try:
             response = self.client.models.generate_content(
-                model=settings.GEMINI_MODEL,  # 예: "gemini-2.5-flash"
-                contents=prompt
+                model=settings.GEMINI_CHAT_MODEL,  # 예: "gemini-2.5-flash"
+                contents=prompt,
+                config={
+                    'temperature': 0.1,  # 낮은 temperature로 할루시네이션 감소
+                    'top_p': 0.8,        # 확률 분포 제한
+                    'top_k': 20,         # 후보 토큰 제한
+                    'max_output_tokens': 1024
+                }
             )
             return response.text
         except Exception as e:
             return f"답변 생성 중 오류가 발생했습니다: {str(e)}"
     
+    def warmup(self):
+        """
+        챗봇 서비스 웜업 (엔진 모델 프리로딩)
+        """
+        if self.engine:
+            self.engine.warmup()
+        else:
+            print("[Warning] ChatbotService: Engine not initialized, skipping warmup.")
+
+    def augment_query(self, question: str) -> str:
+        """
+        사용자 질문을 검색에 최적화된 형태로 확장합니다.
+        Gemini를 사용하여 관련 키워드, 동의어, 구체적인 표현만 추출하고, 원본 질문과 결합합니다.
+        """
+        if not self.client:
+            return question
+
+        prompt = f"""당신은 소설 검색 전문가입니다. 다음 질문에 대해 검색 정확도를 높이기 위한 **추가 검색 키워드**만 공백으로 구분하여 나열하세요.
+
+[사용자 질문]
+"{question}"
+
+[확장 가이드]
+1. 질문의 핵심 소재, 인물, 장소, 시간적 배경(처음, 끝 등)에 대한 관련 키워드를 추출하세요.
+2. "장소"에 대해서는 "위치, 배경, 공간" 등 다양한 동의어를 추가하세요.
+3. 질문에 "처음", "시작" 등이 포함되면 "최초, 등장, Scene 1" 등의 키워드를 추가하세요.
+4. 질문 내용은 다시 적지 말고, **오직 추가 키워드들만** 공백으로 구분하여 한 줄로 출력하세요.
+
+[출력 형식]
+추가 키워드1 키워드2 키워드3 ... (설명 없이 키워드만)
+
+출력:"""
+        try:
+            response = self.client.models.generate_content(
+                model=settings.GEMINI_CHAT_MODEL,
+                contents=prompt,
+                config={
+                    'temperature': 0.2,
+                    'max_output_tokens': 100
+                }
+            )
+            keywords = response.text.strip()
+            
+            # 따옴표 제거
+            keywords = keywords.strip('"').strip("'")
+            
+            # 원본 질문과 결합 (원본 질문 보존 보장)
+            augmented = f"{question} {keywords}"
+            
+            print(f"[Augment] Query Expanded: '{question}' -> '{augmented}'")
+            return augmented
+        except Exception as e:
+            print(f"[Warning] Query Augmentation Failed: {e}")
+            return question
+        except Exception as e:
+            print(f"[Warning] Query Augmentation Failed: {e}")
+            return question
+
+    def _extract_keywords(self, text: str) -> List[str]:
+        """
+        텍스트에서 검색에 유용한 명사 및 핵심 키워드를 추출합니다.
+        Kiwi 형태소 분석기를 사용합니다.
+        """
+        if not self.engine or not hasattr(self.engine, '_get_kiwi'):
+            return text.split()
+            
+        try:
+            kiwi = self.engine._get_kiwi()
+            # NNG(일반 명사), NNP(고유 명사), SL(외국어) 위주로 추출
+            tokens = kiwi.tokenize(text)
+            keywords = [t.form for t in tokens if t.tag in ['NNG', 'NNP', 'SL'] or len(t.form) > 1]
+            
+            # 중복 제거 및 너무 짧은 단어 필터링 (한 글자 명사 제외 등, 상황에 따라 조절)
+            unique_keywords = list(dict.fromkeys(keywords))
+            print(f"[Keyword] Keywords Extracted: {unique_keywords}")
+            return unique_keywords
+        except Exception as e:
+            print(f"[Warning] Keyword Extraction Failed: {e}")
+            return text.split()
+
+    def hybrid_search(
+        self, 
+        question: str, 
+        novel_id: Optional[int] = None,
+        chapter_id: Optional[int] = None,
+        novel_filter: Optional[str] = None,
+        **kwargs
+    ) -> List[Dict]:
+        """
+        하이브리드 검색: LLM 가공 + 벡터 검색 + 키워드 검색
+        """
+        # 1. LLM으로 쿼리 확장
+        augmented = self.augment_query(question)
+        
+        # 2. 확장된 쿼리에서 키워드 추출 (Sparse 검색용)
+        keywords = self._extract_keywords(augmented)
+        
+        # 3. 통합 검색 (Dense + Sparse)
+        # find_similar_chunks 내부의 engine.search가 hybrid score를 계산함
+        results = self.find_similar_chunks(
+            question=augmented,
+            novel_id=novel_id,
+            chapter_id=chapter_id,
+            novel_filter=novel_filter,
+            keywords=keywords,
+            original_query=question,  # 리랭커를 위해 원본 질문 전달
+            **kwargs
+        )
+        
+        return results
+
     def ask(
         self,
         question: str,
         alpha: float = DEFAULT_ALPHA,
         similarity_threshold: float = DEFAULT_SIMILARITY_THRESHOLD,
+        novel_id: Optional[int] = None,
+        chapter_id: Optional[int] = None,
         novel_filter: Optional[str] = None
     ) -> Dict:
         """
         질문에 대한 답변 생성 (전체 파이프라인)
         
-        Args:
-            question: 사용자 질문
-            alpha: 가중치
-            similarity_threshold: 유사도 임계값
-            novel_filter: 소설 필터
-            
-        Returns:
-            Dict: 답변 및 메타데이터
+        검색 전략:
+        1. 하이브리드 검색 (LLM 확장 + Dense + Sparse)
+        2. 실패 시 원본 쿼리로 2차 검색 (폴백)
         """
-        # 1. 유사한 상위 청크 찾기 (Top 5)
-        top_chunks = self.find_similar_chunks(
+        # 1. 하이브리드 검색 실행
+        print(f"[Search] 원본 질문: '{question}'")
+        top_chunks = self.hybrid_search(
             question=question,
-            top_k=5,
             alpha=alpha,
             similarity_threshold=similarity_threshold,
+            novel_id=novel_id,
+            chapter_id=chapter_id,
             novel_filter=novel_filter
         )
         
-        # 2. 유사한 스토리보드가 없는 경우
+        # 2. 실패 시 원본 쿼리로 2차 검색 (폴백)
+        if not top_chunks:
+            print("[Warning] 하이브리드 검색 실패, 원본 쿼리로 재시도...")
+            top_chunks = self.find_similar_chunks(
+                question=question,  # 원본 쿼리
+                top_k=5,
+                alpha=alpha,
+                similarity_threshold=similarity_threshold,
+                novel_id=novel_id,
+                chapter_id=chapter_id,
+                novel_filter=novel_filter
+            )
+
+        # 3. 여전히 유사한 스토리보드가 없는 경우
         if not top_chunks:
             error_msg = "죄송합니다. 관련 내용을 찾을 수 없습니다."
             if not self.engine:
@@ -276,7 +402,7 @@ class ChatbotService:
                 "found_context": False
             }
         
-        # 3. 컨텍스트 생성 (상위 청크 텍스트 결합)
+        # 4. 컨텍스트 생성 (상위 청크 텍스트 결합)
         context_texts = []
         for i, chunk in enumerate(top_chunks):
             # 씬 번호나 요약이 있으면 포함
@@ -290,20 +416,33 @@ class ChatbotService:
         
         context = "\n\n".join(context_texts)
         
-        # 가장 높은 유사도 정보
-        best_chunk = top_chunks[0]
-        
         # 4. LLM으로 답변 생성
         answer = self.generate_answer(question, context)
         
+        # 가장 높은 유사도 정보
+        best_chunk = top_chunks[0]
+        
+        # novel title 가져오기
+        novel_title = "Unknown Novel"
+        if best_chunk.get('novel_id'):
+            db = SessionLocal()
+            try:
+                novel = db.query(Novel).filter(Novel.id == best_chunk['novel_id']).first()
+                if novel:
+                    novel_title = novel.title
+            finally:
+                db.close()
+
         return {
             "answer": answer,
             "source": {
-                "filename": best_chunk.get('filename') or f"Scene {best_chunk.get('scene_index')}",
+                "filename": novel_title,
+                "chapter_id": best_chunk.get('chapter_id'),
                 "scene_index": best_chunk.get('scene_index'),
+                "summary": best_chunk.get('summary'),
                 "total_scenes": len(top_chunks)
             },
-            "similarity": best_chunk['similarity'],
+            "similarity": best_chunk.get('similarity', 0.0), # similarity might be missing in some cases if not careful
             "found_context": True
         }
 

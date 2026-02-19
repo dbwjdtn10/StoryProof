@@ -8,6 +8,7 @@ import "./upload.css";
 import "./chapter-detail.css";
 import "./floating-menu.css";
 import "./theme.css";
+import "./splash-screen.css";
 
 createRoot(document.getElementById("root")!).render(
     <ThemeProvider>
