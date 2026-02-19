@@ -65,7 +65,7 @@ export default function App() {
 
     const checkReady = async () => {
       try {
-        const res = await fetch('http://localhost:8000/api/v1/health/ready');
+        const res = await fetch('/api/v1/health/ready');
         if (res.ok && mounted) {
           const data = await res.json();
           if (data.ready) {
