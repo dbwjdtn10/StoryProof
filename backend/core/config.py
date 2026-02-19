@@ -80,9 +80,6 @@ class Settings(BaseSettings):
     # ===== Chunking Strategy =====
     CHILD_CHUNK_SIZE: int = 500  # 200 -> 500 (문맥 확보)
     CHILD_CHUNK_OVERLAP: int = 100  # 50 -> 100 (연결성 강화)
-
-    # ===== Reranker 설정 =====
-    ENABLE_RERANKER: bool = False  # True: Reranker 사용 (메모리 1GB+), False: Hybrid Search만 사용 (메모리 절약)
     
     # ===== Celery 설정 =====
     CELERY_BROKER_URL: str = "redis://localhost:6379/1"

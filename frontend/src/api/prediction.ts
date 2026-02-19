@@ -2,7 +2,7 @@
  * Story Prediction API Service
  */
 
-const API_BASE_URL = `${window.location.protocol}//${window.location.host}/api/v1/prediction`;
+const API_BASE_URL = 'http://localhost:8000/api/v1/prediction';
 
 export interface PredictionTaskResponse {
     task_id: string;

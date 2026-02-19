@@ -53,45 +53,37 @@ class StoryConsistencyAgent:
 만약 [기존 설정 데이터]나 [전체 줄거리 요약]에 그러한 암시가 전혀 없는데 갑자기 발생했다면, 반드시 '개연성 경고'를 발생시키세요.
 """
         
-        max_retries = 3
-        for attempt in range(max_retries):
+        try:
+            # Use aio for async generation
+            # Enable JSON mode for more reliable parsing
+            response = await self.client.aio.models.generate_content(
+                model=settings.GEMINI_CHAT_MODEL,
+                contents=prompt,
+                config={
+                    "response_mime_type": "application/json"
+                }
+            )
+            
+            raw_text = response.text.strip()
+            
+            # Extract JSON more robustly
+            json_match = re.search(r'(\{.*\})', raw_text, re.DOTALL)
+            clean_text = json_match.group(1) if json_match else raw_text
+            
+            # Simple cleanup for common issues
+            clean_text = clean_text.replace('```json', '').replace('```', '').strip()
+            
             try:
-                # Use aio for async generation
-                # Enable JSON mode for more reliable parsing
-                response = await self.client.aio.models.generate_content(
-                    model=settings.GEMINI_CHAT_MODEL,
-                    contents=prompt,
-                    config={
-                        "response_mime_type": "application/json"
-                    }
-                )
+                return json.loads(clean_text)
+            except json.JSONDecodeError as je:
+                # If first attempt fails, try basic escaping fix for quotes within quotes
+                print(f"⚠️ JSON Decode Error, attempting recovery: {je}")
+                # This is a risky fix but can help with unescaped quotes in descriptions/suggestions
+                # only if the structure itself is mostly okay.
+                return json.loads(clean_text) # Fallback to standard error flow if recovery not simple
                 
-                raw_text = response.text.strip()
-                
-                # Extract JSON more robustly
-                json_match = re.search(r'(\{.*\})', raw_text, re.DOTALL)
-                clean_text = json_match.group(1) if json_match else raw_text
-                
-                # Simple cleanup for common issues
-                clean_text = clean_text.replace('```json', '').replace('```', '').strip()
-                
-                try:
-                    return json.loads(clean_text)
-                except json.JSONDecodeError as je:
-                    # If first attempt fails, try basic escaping fix for quotes within quotes
-                    print(f"[Warning] JSON Decode Error, attempting recovery: {je}")
-                    return json.loads(clean_text)
-                    
-            except Exception as e:
-                wait_time = (2 ** attempt) + 1
-                if "429" in str(e):
-                    wait_time += 5 # Additional wait for rate limits
-                    print(f"[Warning] Rate limit hit (429), waiting {wait_time}s before retry {attempt+1}/{max_retries}...")
-                else:
-                    print(f"[Error] StoryConsistencyAgent Analysis Error (Attempt {attempt+1}): {e}")
-                
-                if attempt < max_retries - 1:
-                    import asyncio
-                    await asyncio.sleep(wait_time)
-                else:
-                    return {"status": "분석 오류", "message": f"API 호출 실패 ({max_retries}회 시도): {str(e)}"}
+        except Exception as e:
+            print(f"❌ StoryConsistencyAgent Analysis Error: {e}")
+            if 'response' in locals() and hasattr(response, 'text'):
+                print(f"Raw Response snippet: {response.text[:500]}...")
+            return {"status": "분석 오류", "message": f"JSON 파싱 실패: {str(e)}"}

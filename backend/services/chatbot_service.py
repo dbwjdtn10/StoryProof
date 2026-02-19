@@ -37,9 +37,7 @@ class ChatbotService:
     """
     
     # 기본 설정값 (클래스 상수)
-    # Reranker 미사용 시: Vector 검색 품질 의존도가 높아지므로 Alpha를 약간 조정 (0.75)
-    # Reranker 사용 시: 다양한 후보군 확보를 위해 Alpha를 높게 유지 (0.825)
-    DEFAULT_ALPHA = 0.825 if settings.ENABLE_RERANKER else 0.75
+    DEFAULT_ALPHA = 0.825  # 최적화된 기본값 (Vector 82.5%, BM25 17.5%)
     DEFAULT_SIMILARITY_THRESHOLD = 0.2  # Reranker 도입으로 기준 하향 (0.5 -> 0.2)
 
     def __init__(self):

@@ -10,11 +10,11 @@ import { SplashScreen } from './components/SplashScreen';
 
 // 커스텀 스플래시 이미지 경로 (5개 중 랜덤 선택)
 const SPLASH_IMAGE_URLS = [
-  '/static/images/splash1.png',
-  '/static/images/splash2.png',
-  '/static/images/splash3.png',
-  '/static/images/splash4.png',
-  '/static/images/splash5.png',
+  'http://localhost:8000/static/images/splash1.png',
+  'http://localhost:8000/static/images/splash2.png',
+  'http://localhost:8000/static/images/splash3.png',
+  'http://localhost:8000/static/images/splash4.png',
+  'http://localhost:8000/static/images/splash5.png',
 ];
 
 // 이미지 로드 확인 헬퍼
@@ -65,7 +65,7 @@ export default function App() {
 
     const checkReady = async () => {
       try {
-        const res = await fetch('/api/v1/health/ready');
+        const res = await fetch('http://localhost:8000/api/v1/health/ready');
         if (res.ok && mounted) {
           const data = await res.json();
           if (data.ready) {

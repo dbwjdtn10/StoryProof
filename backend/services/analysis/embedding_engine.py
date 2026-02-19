@@ -150,10 +150,6 @@ class EmbeddingSearchEngine:
 
     def _get_reranker(self):
         """Reranker 로드 및 반환 (Lazy Loading & Singleton)"""
-        # 설정에서 Reranker 비활성화 시 None 반환
-        if not settings.ENABLE_RERANKER:
-            return None
-
         from sentence_transformers import CrossEncoder
         global _global_reranker
         
@@ -463,35 +459,25 @@ class EmbeddingSearchEngine:
         
         try:
             reranker = self._get_reranker()
+            pairs = [[rank_query, m.metadata.get('text', '')] for m in rerank_candidates]
             
-            # Reranker가 활성화된 경우에만 실행
-            if reranker:
-                pairs = [[rank_query, m.metadata.get('text', '')] for m in rerank_candidates]
+            if pairs:
+                # activation_fct=nn.Sigmoid() used internally if requested, 
+                # but we'll do it manually to ensure 0-1 range.
+                logits = reranker.predict(pairs)
                 
-                if pairs:
-                    # activation_fct=nn.Sigmoid() used internally if requested, 
-                    # but we'll do it manually to ensure 0-1 range.
-                    logits = reranker.predict(pairs)
-                    
-                    # Sigmoid function for normalization
-                    def sigmoid(x):
-                        return 1 / (1 + np.exp(-x))
-                    
-                    scores = sigmoid(logits)
-                    
-                    for i, match in enumerate(rerank_candidates):
-                        match.score = float(scores[i])
-                        final_results.append(match)
-                    final_results.sort(key=lambda x: x.score, reverse=True)
-                else:
-                    final_results = rerank_candidates
+                # Sigmoid function for normalization
+                def sigmoid(x):
+                    return 1 / (1 + np.exp(-x))
+                
+                scores = sigmoid(logits)
+                
+                for i, match in enumerate(rerank_candidates):
+                    match.score = float(scores[i])
+                    final_results.append(match)
+                final_results.sort(key=lambda x: x.score, reverse=True)
             else:
-                # Reranker 비활성화 시 Hybrid Score 그대로 사용
-                # 단, Hybrid Score는 코사인 유사도(0-1)와 BM25(0-1 정규화)의 조합이므로
-                # 그대로 사용해도 무방하지만, Reranker 점수와 호환성을 위해 스케일링 고려 가능
-                # 현재는 그대로 사용 (Hybrid Score 자체가 신뢰도 지표)
                 final_results = rerank_candidates
-                
         except Exception as e:
             print(f"[Warning] Reranker failed: {e}. Fallback to Hybrid scores.")
             final_results = rerank_candidates

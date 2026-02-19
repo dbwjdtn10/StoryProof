@@ -271,7 +271,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                 ? sceneTexts.join('\n\n')
                 : content;
 
-            const response = await fetch(`/api/v1/analysis/consistency`, {
+            const response = await fetch(`http://localhost:8000/api/v1/analysis/consistency`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -288,7 +288,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
             // 폴링 시작
             const intervalId = setInterval(async () => {
                 try {
-                    const statusRes = await fetch(`/api/v1/analysis/task/${task_id}`);
+                    const statusRes = await fetch(`http://localhost:8000/api/v1/analysis/task/${task_id}`);
                     const data = await statusRes.json();
 
                     if (data.status === "COMPLETED") {
