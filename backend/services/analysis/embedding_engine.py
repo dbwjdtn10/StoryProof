@@ -184,7 +184,10 @@ class EmbeddingSearchEngine:
         print("[Warmup] EmbeddingSearchEngine: Preloading models...")
         try:
             self._get_model()    # SentenceTransformer 로드
-            self._get_reranker() # CrossEncoder 로드
+            if settings.ENABLE_RERANKER:
+                self._get_reranker() # CrossEncoder 로드
+            else:
+                print("[Warmup] Reranker 비활성화 (ENABLE_RERANKER=False)")
             self._get_kiwi()     # Kiwi 형태소 분석기 로드
             print("[Warmup] EmbeddingSearchEngine: All models loaded successfully.")
         except Exception as e:
@@ -457,29 +460,29 @@ class EmbeddingSearchEngine:
         # 리랭킹에는 원본 질문(original_query)을 사용하여 노이즈 감소
         rank_query = original_query or query
         
-        try:
-            reranker = self._get_reranker()
-            pairs = [[rank_query, m.metadata.get('text', '')] for m in rerank_candidates]
-            
-            if pairs:
-                # activation_fct=nn.Sigmoid() used internally if requested, 
-                # but we'll do it manually to ensure 0-1 range.
-                logits = reranker.predict(pairs)
-                
-                # Sigmoid function for normalization
-                def sigmoid(x):
-                    return 1 / (1 + np.exp(-x))
-                
-                scores = sigmoid(logits)
-                
-                for i, match in enumerate(rerank_candidates):
-                    match.score = float(scores[i])
-                    final_results.append(match)
-                final_results.sort(key=lambda x: x.score, reverse=True)
-            else:
+        if settings.ENABLE_RERANKER:
+            try:
+                reranker = self._get_reranker()
+                pairs = [[rank_query, m.metadata.get('text', '')] for m in rerank_candidates]
+
+                if pairs:
+                    logits = reranker.predict(pairs)
+
+                    def sigmoid(x):
+                        return 1 / (1 + np.exp(-x))
+
+                    scores = sigmoid(logits)
+
+                    for i, match in enumerate(rerank_candidates):
+                        match.score = float(scores[i])
+                        final_results.append(match)
+                    final_results.sort(key=lambda x: x.score, reverse=True)
+                else:
+                    final_results = rerank_candidates
+            except Exception as e:
+                print(f"[Warning] Reranker failed: {e}. Fallback to Hybrid scores.")
                 final_results = rerank_candidates
-        except Exception as e:
-            print(f"[Warning] Reranker failed: {e}. Fallback to Hybrid scores.")
+        else:
             final_results = rerank_candidates
 
         # --- 5. Result Formatting & Parent Aggregation ---
