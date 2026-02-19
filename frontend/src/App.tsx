@@ -10,11 +10,11 @@ import { SplashScreen } from './components/SplashScreen';
 
 // 커스텀 스플래시 이미지 경로 (5개 중 랜덤 선택)
 const SPLASH_IMAGE_URLS = [
-  'http://localhost:8000/static/images/splash1.png',
-  'http://localhost:8000/static/images/splash2.png',
-  'http://localhost:8000/static/images/splash3.png',
-  'http://localhost:8000/static/images/splash4.png',
-  'http://localhost:8000/static/images/splash5.png',
+  '/static/images/splash1.png',
+  '/static/images/splash2.png',
+  '/static/images/splash3.png',
+  '/static/images/splash4.png',
+  '/static/images/splash5.png',
 ];
 
 // 이미지 로드 확인 헬퍼
