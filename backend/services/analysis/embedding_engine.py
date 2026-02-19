@@ -181,6 +181,9 @@ class EmbeddingSearchEngine:
         """
         서버 시작 시 모델을 미리 로드하여 첫 요청 지연을 방지합니다.
         """
+        import os
+        print(f"[Debug] settings.ENABLE_RERANKER={settings.ENABLE_RERANKER} (type={type(settings.ENABLE_RERANKER).__name__})")
+        print(f"[Debug] os.environ ENABLE_RERANKER={os.environ.get('ENABLE_RERANKER', 'NOT_SET')}")
         print("[Warmup] EmbeddingSearchEngine: Preloading models...")
         try:
             self._get_model()    # SentenceTransformer 로드
