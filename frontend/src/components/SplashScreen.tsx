@@ -26,10 +26,9 @@ export function SplashScreen({
         if (imageUrls.length > 0) {
             const randomIndex = Math.floor(Math.random() * imageUrls.length);
             const selected = imageUrls[randomIndex];
-            console.log(`[SplashScreen] Received ${imageUrls.length} images, selected:`, selected);
             setSelectedImage(selected);
         } else {
-            console.log('[SplashScreen] No images available, using default logo');
+            // No images available, using default logo
         }
     }, [imageUrls]);
 

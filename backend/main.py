@@ -166,25 +166,31 @@ async def health_check():
     Returns:
         dict: 헬스 체크 결과
     """
+    import logging
+    _logger = logging.getLogger(__name__)
     from sqlalchemy import text
+
     db_status = "disconnected"
+    db = None
     try:
         from backend.db.session import SessionLocal
         db = SessionLocal()
         db.execute(text("SELECT 1"))
-        db.close()
         db_status = "connected"
-    except Exception:
-        pass
+    except Exception as e:
+        _logger.warning(f"Health check DB 연결 실패: {e}")
+    finally:
+        if db:
+            db.close()
 
     pinecone_status = "disconnected"
     try:
-        from backend.services.analysis.embedding_engine import EmbeddingSearchEngine
-        engine = EmbeddingSearchEngine()
+        from backend.services.analysis.embedding_engine import get_embedding_search_engine
+        engine = get_embedding_search_engine()
         if engine.index is not None:
             pinecone_status = "connected"
-    except Exception:
-        pass
+    except Exception as e:
+        _logger.warning(f"Health check Pinecone 확인 실패: {e}")
 
     overall = "healthy" if db_status == "connected" else "degraded"
     return {

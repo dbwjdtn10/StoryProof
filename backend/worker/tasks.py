@@ -218,8 +218,8 @@ def process_chapter_storyboard(novel_id: int, chapter_id: int):
         if 'temp_file_path' in locals() and temp_file_path and os.path.exists(temp_file_path):
             try:
                 os.unlink(temp_file_path)
-            except Exception:
-                pass
+            except Exception as cleanup_exc:
+                logger.debug(f"임시 파일 삭제 실패 (무시): {cleanup_exc}")
 
 
 # @celery_app.task(bind=True, max_retries=3)
@@ -412,8 +412,8 @@ def detect_inconsistency_task(self, novel_id: int, text_fragment: str, chapter_i
                     analysis.status = AnalysisStatus.FAILED
                     analysis.error_message = str(exc)
                     db.commit()
-            except Exception:
-                pass
+            except Exception as db_exc:
+                logger.warning(f"설정 일관성 검사 실패 DB 상태 업데이트 중 오류: {db_exc}")
         logger.error(f"설정 일관성 검사 실패: {exc}")
         raise self.retry(exc=exc, countdown=30)
     finally:

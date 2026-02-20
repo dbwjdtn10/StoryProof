@@ -57,6 +57,17 @@ export default defineConfig({
         manualChunks: {
           'vendor': ['react', 'react-dom'],
           'tiptap': ['@tiptap/react', '@tiptap/starter-kit', '@tiptap/core'],
+          'radix': [
+            '@radix-ui/react-dialog',
+            '@radix-ui/react-dropdown-menu',
+            '@radix-ui/react-popover',
+            '@radix-ui/react-tabs',
+            '@radix-ui/react-select',
+            '@radix-ui/react-scroll-area',
+            '@radix-ui/react-tooltip',
+          ],
+          'icons': ['lucide-react'],
+          'toast': ['sonner'],
         },
       },
     },

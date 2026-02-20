@@ -25,6 +25,7 @@ _global_kiwi = None
 _global_bm25_map = {}  # novel_id -> BM25Okapi
 _global_bm25_dirty = set()  # lazy rebuild 대상 novel_id
 _global_corpus_indices_map = {}  # novel_id -> doc_id list
+_bm25_lock = threading.Lock()  # BM25 캐시 동시 접근 보호
 
 # EmbeddingSearchEngine 싱글톤
 _global_engine = None
@@ -106,25 +107,26 @@ class EmbeddingSearchEngine:
         """
         global _global_bm25_map, _global_corpus_indices_map, _global_bm25_dirty
 
-        # dirty 플래그가 있으면 기존 캐시 삭제 후 재구축
-        if novel_id in _global_bm25_dirty:
-            _global_bm25_map.pop(novel_id, None)
-            _global_corpus_indices_map.pop(novel_id, None)
-            _global_bm25_dirty.discard(novel_id)
+        with _bm25_lock:
+            # dirty 플래그가 있으면 기존 캐시 삭제 후 재구축
+            if novel_id in _global_bm25_dirty:
+                _global_bm25_map.pop(novel_id, None)
+                _global_corpus_indices_map.pop(novel_id, None)
+                _global_bm25_dirty.discard(novel_id)
 
-        if novel_id in _global_bm25_map:
-            return
-            
+            if novel_id in _global_bm25_map:
+                return
+
         logger.info(f"Building BM25 Index for Novel {novel_id} (with Kiwi)...")
         kiwi = self._get_kiwi()
         db = SessionLocal()
         try:
             # 해당 소설의 Parent Scene 텍스트만 로드
             docs = db.query(VectorDocument).filter(VectorDocument.novel_id == novel_id).all()
-            
+
             corpus = []
             corpus_indices = []
-            
+
             for doc in docs:
                 text = doc.chunk_text
                 if not text: continue
@@ -139,15 +141,16 @@ class EmbeddingSearchEngine:
                 tokens = [t.form for t in kiwi.tokenize(text)]
                 corpus.append(tokens)
                 corpus_indices.append(doc.vector_id)
-            
-            if corpus:
-                bm25 = BM25Okapi(corpus)
-                _global_bm25_map[novel_id] = bm25
-                _global_corpus_indices_map[novel_id] = corpus_indices
-                logger.info(f"BM25 Index built for Novel {novel_id} with {len(corpus)} documents")
-            else:
-                logger.warning(f"No documents found for BM25 (Novel {novel_id})")
-                
+
+            with _bm25_lock:
+                if corpus:
+                    bm25 = BM25Okapi(corpus)
+                    _global_bm25_map[novel_id] = bm25
+                    _global_corpus_indices_map[novel_id] = corpus_indices
+                    logger.info(f"BM25 Index built for Novel {novel_id} with {len(corpus)} documents")
+                else:
+                    logger.warning(f"No documents found for BM25 (Novel {novel_id})")
+
         except Exception as e:
             logger.error(f"Failed to build BM25 Index for Novel {novel_id}: {e}")
         finally:
@@ -262,7 +265,8 @@ class EmbeddingSearchEngine:
                 logger.warning(f"Pinecone 벡터 삭제 실패 (novel={novel_id}, chapter={chapter_id}): {e}")
 
         # BM25 캐시 무효화 (lazy rebuild: 검색 시점에 재구축)
-        _global_bm25_dirty.add(novel_id)
+        with _bm25_lock:
+            _global_bm25_dirty.add(novel_id)
 
     def add_documents(self, documents: List[Dict], novel_id: int, chapter_id: int):
         """
@@ -364,7 +368,8 @@ class EmbeddingSearchEngine:
             logger.info("Pinecone 업로드 및 DB 저장 완료")
             
             # BM25 인덱스 lazy rebuild: dirty 마킹만 하고 검색 시점에 재구축
-            _global_bm25_dirty.add(novel_id)
+            with _bm25_lock:
+                _global_bm25_dirty.add(novel_id)
             
         except Exception as e:
             db.rollback()

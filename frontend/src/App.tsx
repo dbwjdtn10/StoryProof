@@ -11,6 +11,7 @@ import { ThemeToggle } from './components/ThemeToggle';
 import { register, login } from './api/auth';
 import { getNovels, createNovel, Novel } from './api/novel';
 import { SplashScreen } from './components/SplashScreen';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 // Lazy-loaded 화면 컴포넌트 (코드 스플리팅)
 const ChapterDetail = lazy(() => import('./components/ChapterDetail').then(m => ({ default: m.ChapterDetail })));
@@ -163,73 +164,79 @@ export default function App() {
   // Landing Screen
   if (currentScreen === 'landing') {
     return (
-      <Suspense fallback={
-        <div className="skeleton-loader">
-          <div className="skeleton-bar skeleton-wide" />
-          <div className="skeleton-bar skeleton-narrow" />
-        </div>
-      }>
-        <LandingPage
-          onLogin={() => setCurrentScreen('login')}
-          onSignup={() => setCurrentScreen('signup')}
-        />
-      </Suspense>
+      <ErrorBoundary>
+        <Suspense fallback={
+          <div className="skeleton-loader">
+            <div className="skeleton-bar skeleton-wide" />
+            <div className="skeleton-bar skeleton-narrow" />
+          </div>
+        }>
+          <LandingPage
+            onLogin={() => setCurrentScreen('login')}
+            onSignup={() => setCurrentScreen('signup')}
+          />
+        </Suspense>
+      </ErrorBoundary>
     );
   }
 
   // Upload Screen
   if (currentScreen === 'upload') {
     return (
-      <Suspense fallback={
-        <div className="skeleton-loader">
-          <div className="skeleton-bar skeleton-wide" />
-          <div className="skeleton-bar skeleton-narrow" />
-        </div>
-      }>
-        <FileUpload
-          onFileClick={(chapter) => {
-            setSelectedFile(chapter.title);
-            setSelectedChapterId(chapter.id);
-            setCurrentScreen('chapterDetail');
-          }}
-          novelId={currentNovel?.id}
-          mode={userMode}
-        />
-      </Suspense>
+      <ErrorBoundary>
+        <Suspense fallback={
+          <div className="skeleton-loader">
+            <div className="skeleton-bar skeleton-wide" />
+            <div className="skeleton-bar skeleton-narrow" />
+          </div>
+        }>
+          <FileUpload
+            onFileClick={(chapter) => {
+              setSelectedFile(chapter.title);
+              setSelectedChapterId(chapter.id);
+              setCurrentScreen('chapterDetail');
+            }}
+            novelId={currentNovel?.id}
+            mode={userMode}
+          />
+        </Suspense>
+      </ErrorBoundary>
     );
   }
 
   // Chapter Detail Screen
   if (currentScreen === 'chapterDetail') {
     return (
-      <Suspense fallback={
-        <div className="skeleton-loader">
-          <div className="skeleton-bar skeleton-wide" />
-          <div className="skeleton-bar skeleton-narrow" />
-        </div>
-      }>
-        <ChapterDetail
-          fileName={selectedFile}
-          onBack={() => setCurrentScreen('upload')}
-          novelId={currentNovel?.id}
-          chapterId={selectedChapterId}
-          mode={userMode}
-          onOpenCharacterChat={() => setShowChatBot(true)}
-          onCloseCharacterChat={() => setShowChatBot(false)}
-          showCharacterChat={showChatBot}
-          onNavigateChapter={(newChapterId, newTitle) => {
-            setSelectedChapterId(newChapterId);
-            setSelectedFile(newTitle);
-          }}
-        />
-        {currentNovel && showChatBot && (
-          <CharacterChatBot
-            novelId={currentNovel.id}
+      <ErrorBoundary>
+        <Suspense fallback={
+          <div className="skeleton-loader">
+            <div className="skeleton-bar skeleton-wide" />
+            <div className="skeleton-bar skeleton-narrow" />
+          </div>
+        }>
+          <ChapterDetail
+            fileName={selectedFile}
+            onBack={() => setCurrentScreen('upload')}
+            novelId={currentNovel?.id}
             chapterId={selectedChapterId}
-            onClose={() => setShowChatBot(false)}
+            mode={userMode}
+            onOpenCharacterChat={() => setShowChatBot(true)}
+            onCloseCharacterChat={() => setShowChatBot(false)}
+            showCharacterChat={showChatBot}
+            onNavigateChapter={(newChapterId, newTitle) => {
+              setSelectedChapterId(newChapterId);
+              setSelectedFile(newTitle);
+            }}
           />
-        )}
-      </Suspense>
+          {currentNovel && showChatBot && (
+            <CharacterChatBot
+              novelId={currentNovel.id}
+              chapterId={selectedChapterId}
+              onClose={() => setShowChatBot(false)}
+            />
+          )}
+        </Suspense>
+      </ErrorBoundary>
     );
   }
 
