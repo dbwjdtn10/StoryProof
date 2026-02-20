@@ -12,6 +12,7 @@ RAG (Retrieval-Augmented Generation) 기반 소설 질의응답 시스템
 사용자 질문 → 임베딩 변환 → Pinecone 검색 → 유사 씬 추출 → Gemini 답변 생성
 """
 
+import time
 import threading
 import logging
 from typing import Dict, List, Optional
@@ -75,6 +76,10 @@ class ChatbotService:
         else:
             self.client = None
             logger.warning("GOOGLE_API_KEY not set. LLM functionality will be disabled.")
+
+        # augment_query TTL 캐시 (키: question, 값: (augmented_query, timestamp))
+        self._augment_cache: Dict[str, tuple] = {}
+        self._augment_cache_ttl = 3600  # 1시간
     
     def find_similar_chunks(
         self,
@@ -305,10 +310,17 @@ class ChatbotService:
     def augment_query(self, question: str) -> str:
         """
         사용자 질문을 검색에 최적화된 형태로 확장합니다.
-        Gemini를 사용하여 관련 키워드, 동의어, 구체적인 표현만 추출하고, 원본 질문과 결합합니다.
+        TTL 캐시 적용: 동일 질문은 1시간 동안 LLM 호출 없이 캐시에서 반환.
         """
         if not self.client:
             return question
+
+        # 캐시 확인
+        now = time.time()
+        cached = self._augment_cache.get(question)
+        if cached and (now - cached[1]) < self._augment_cache_ttl:
+            logger.info(f"[Augment] Cache hit: '{question}'")
+            return cached[0]
 
         prompt = f"""당신은 소설 검색 전문가입니다. 다음 질문에 대해 검색 정확도를 높이기 위한 **추가 검색 키워드**만 공백으로 구분하여 나열하세요.
 
@@ -335,13 +347,16 @@ class ChatbotService:
                 }
             )
             keywords = response.text.strip()
-            
+
             # 따옴표 제거
             keywords = keywords.strip('"').strip("'")
-            
+
             # 원본 질문과 결합 (원본 질문 보존 보장)
             augmented = f"{question} {keywords}"
-            
+
+            # 캐시 저장
+            self._augment_cache[question] = (augmented, now)
+
             logger.info(f"[Augment] Query Expanded: '{question}' -> '{augmented}'")
             return augmented
         except Exception as e:

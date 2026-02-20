@@ -6,6 +6,7 @@ StoryConsistencyAgent를 사용하여 소설의 설정 파괴를 탐지하고 �
 import json
 import logging
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from google import genai
 from backend.services.analysis import EmbeddingSearchEngine
 from backend.db.session import SessionLocal
@@ -48,9 +49,14 @@ class StoryConsistencyAgent:
             self.search_engine = EmbeddingSearchEngine()
 
     def _fetch_context_for_novel(self, novel_id: int, query: str, top_k: int = 5):
-        """Pinecone 벡터 검색 + DB 소설 요약 조회를 단일 메서드로 통합."""
+        """Pinecone 벡터 검색 + DB 소설 요약 조회를 단일 메서드로 통합.
+
+        Returns:
+            tuple: (relevant_context, summary, max_similarity)
+        """
         search_results = self.search_engine.search(query=query, novel_id=novel_id, top_k=top_k)
         relevant_context = self._format_search_results(search_results)
+        max_similarity = max((r.get('similarity', 0) for r in search_results), default=0)
 
         db = SessionLocal()
         try:
@@ -59,7 +65,7 @@ class StoryConsistencyAgent:
         finally:
             db.close()
 
-        return relevant_context, summary
+        return relevant_context, summary, max_similarity
 
     def _fetch_bible_summary(self, novel_id: int, chapter_id: int = None) -> str:
         """Analysis DB에서 바이블 요약 조회. 실패 시 빈 문자열 반환."""
@@ -74,23 +80,29 @@ class StoryConsistencyAgent:
             db.close()
 
     def _fetch_enriched_context(self, novel_id: int, query: str) -> tuple:
-        """컨텍스트 조회 + Agent-lite 공백 탐지 + 바이블 주입 통합.
+        """컨텍스트 + 바이블 병렬 조회 + 유사도 기반 gap detection 스킵.
 
         Returns:
             tuple: (relevant_context, summary, bible_block)
         """
-        relevant_context, summary = self._fetch_context_for_novel(novel_id, query)
+        # 병렬: Pinecone 검색 + Bible 조회
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            ctx_future = executor.submit(self._fetch_context_for_novel, novel_id, query)
+            bible_future = executor.submit(self._fetch_bible_summary, novel_id)
+            relevant_context, summary, max_similarity = ctx_future.result()
+            bible = bible_future.result()
 
-        for gap_q in self._identify_search_gaps(relevant_context, query):
-            extra = self._format_search_results(
-                self.search_engine.search(query=gap_q, novel_id=novel_id, top_k=3)
-            )
-            if extra and extra != "관련 정보 없음":
-                relevant_context += f"\n\n[추가 검색]\n{extra}"
+        if max_similarity < 0.7:
+            for gap_q in self._identify_search_gaps(relevant_context, query):
+                extra = self._format_search_results(
+                    self.search_engine.search(query=gap_q, novel_id=novel_id, top_k=3)
+                )
+                if extra and extra != "관련 정보 없음":
+                    relevant_context += f"\n\n[추가 검색]\n{extra}"
+        else:
+            logger.debug(f"Gap detection 스킵 (max_similarity={max_similarity:.3f} >= 0.7)")
 
-        bible = self._fetch_bible_summary(novel_id)
         bible_block = f"\n\n[바이블 요약]:\n{bible}" if bible else ""
-
         return relevant_context, summary, bible_block
 
     def _parse_json_response(self, text: str, fallback_key: str = None) -> dict:
@@ -165,10 +177,16 @@ class StoryConsistencyAgent:
         스토리 전개 예측 (What-If 시나리오)
 
         사용자의 가정을 바탕으로 스토리가 어떻게 전개될지 예측합니다.
-        Agent-lite: 검색 공백 탐지 후 추가 검색 수행.
-        Method C: Analysis DB 바이블 요약을 프롬프트에 직접 주입.
+        gap detection 없이 컨텍스트+바이블 병렬 조회 후 LLM 1회 호출.
         """
-        relevant_context, summary, bible_block = self._fetch_enriched_context(novel_id, user_input)
+        # 병렬: Pinecone 검색 + Bible 조회 (gap detection 불필요)
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            ctx_future = executor.submit(self._fetch_context_for_novel, novel_id, user_input)
+            bible_future = executor.submit(self._fetch_bible_summary, novel_id)
+            relevant_context, summary, _ = ctx_future.result()
+            bible = bible_future.result()
+
+        bible_block = f"\n\n[바이블 요약]:\n{bible}" if bible else ""
 
         from backend.core.prompts import STORY_PREDICTION_SYSTEM_PROMPT
         prompt = f"""{STORY_PREDICTION_SYSTEM_PROMPT}
