@@ -1,29 +1,23 @@
 import asyncio
+import logging
+import time
 from functools import partial
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 from typing import Any, Dict
-from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 from backend.db.session import get_db
 from backend.db.models import User, Analysis, AnalysisType
 from backend.core.security import get_current_user
 from backend.services.image_service import ImageService
 from backend.services.novel_service import NovelService
+from backend.schemas.image_schema import ImageGenerationRequest, ImageGenerationResponse
 
 router = APIRouter()
-
-class ImageGenerationRequest(BaseModel):
-    novel_id: int
-    chapter_id: int | None = None
-    entity_type: str  # 'characters', 'items', 'locations'
-    entity_name: str
-    description: str | None = None
-
-class ImageGenerationResponse(BaseModel):
-    image_url: str
-    refined_prompt: str
 
 @router.post("/generate", response_model=ImageGenerationResponse)
 async def generate_entity_image(
@@ -34,7 +28,7 @@ async def generate_entity_image(
     """
     Generate an image for a specific entity (character, item, location) and update the analysis record.
     """
-    print(f"[DEBUG] Image Generation Request: novel_id={request.novel_id}, chapter_id={request.chapter_id}, type={request.entity_type}, name={request.entity_name}")
+    logger.info(f"Image Generation Request: novel_id={request.novel_id}, chapter_id={request.chapter_id}, type={request.entity_type}, name={request.entity_name}")
     
     # 1. Verify ownership/permission
     # Using NovelService to check permissions (it raises HTTPException if not allowed)
@@ -67,10 +61,10 @@ async def generate_entity_image(
     analysis = analysis_query.order_by(Analysis.updated_at.desc()).first()
     
     if not analysis:
-         print(f"[DEBUG] Analysis record not found for query: novel_id={request.novel_id}, chapter_id={request.chapter_id}")
-         raise HTTPException(status_code=404, detail="Analysis record not found. Please analyze the chapter first.")
-    
-    print(f"[DEBUG] Analysis record found: id={analysis.id}")
+        logger.warning(f"Analysis record not found for query: novel_id={request.novel_id}, chapter_id={request.chapter_id}")
+        raise HTTPException(status_code=404, detail="Analysis record not found. Please analyze the chapter first.")
+
+    logger.info(f"Analysis record found: id={analysis.id}")
 
     # 3. Initialize Image Service
     try:
@@ -117,7 +111,6 @@ async def generate_entity_image(
 
     # 5. Generate Image
     # Filename: novel_{id}_{type}_{name}_{timestamp}.png
-    import time
     safe_name = "".join(c for c in request.entity_name if c.isalnum() or c in (' ', '_', '-')).strip().replace(' ', '_')
     timestamp = int(time.time())
     filename = f"novel_{request.novel_id}_{request.entity_type}_{safe_name}_{timestamp}.png"
@@ -161,7 +154,6 @@ async def generate_entity_image(
         updated_result[json_key] = entity_list
         analysis.result = updated_result
         # Force update flag if needed for some ORMs, but re-assigning usually works
-        from sqlalchemy.orm.attributes import flag_modified
         flag_modified(analysis, "result")
         
         db.commit()

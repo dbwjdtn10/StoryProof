@@ -1,20 +1,29 @@
+"""캐릭터 채팅 API 엔드포인트"""
 
+import json
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
-from sqlalchemy import func
 from typing import List, Optional
 import asyncio
-import json
 import logging
 from functools import partial
-from pydantic import BaseModel
 from datetime import datetime
 
 from backend.db.session import get_db
-from backend.db.models import Novel, Analysis, AnalysisType, CharacterChatRoom, CharacterChatMessage
+from backend.db.models import Novel, Analysis, AnalysisType, CharacterChatRoom, CharacterChatMessage, VectorDocument
 from backend.core.config import settings
 from backend.services.chatbot_service import get_chatbot_service
+from backend.services.character_chat_service import CharacterChatService
+from backend.schemas.character_chat_schema import (
+    CharacterChatRoomCreate, CharacterChatRoomUpdate, CharacterChatRoomResponse,
+    CharacterChatMessageCreate, CharacterChatMessageResponse,
+    PersonaGenerationRequest, PersonaGenerationResponse,
+)
+
+# Setup logger (must be before genai import attempt)
+logger = logging.getLogger(__name__)
 
 # Initialize Gemini Client
 try:
@@ -23,58 +32,12 @@ try:
     client = genai.Client(api_key=settings.GOOGLE_API_KEY)
 except ImportError:
     client = None
-    print("Warning: google-genai not installed or configured.")
+    logger.warning("Warning: google-genai not installed or configured.")
 
-# Setup logger
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
 
-# --- Schemas ---
-class CharacterChatRoomCreate(BaseModel):
-    novel_id: int
-    chapter_id: Optional[int] = None
-    character_name: str
-    persona_prompt: str
-
-class CharacterChatRoomUpdate(BaseModel):
-    persona_prompt: Optional[str] = None
-
-class CharacterChatRoomResponse(BaseModel):
-    id: int
-    user_id: int
-    novel_id: int
-    chapter_id: Optional[int]
-    character_name: str
-    persona_prompt: str
-    created_at: datetime
-    updated_at: Optional[datetime]
-
-    class Config:
-        from_attributes = True
-
-class CharacterChatMessageCreate(BaseModel):
-    content: str
-
-class CharacterChatMessageResponse(BaseModel):
-    id: int
-    room_id: int
-    role: str
-    content: str
-    created_at: datetime
-
-    class Config:
-        from_attributes = True
-
-class PersonaGenerationRequest(BaseModel):
-    novel_id: int
-    chapter_id: Optional[int] = None
-    character_name: str
-
-class PersonaGenerationResponse(BaseModel):
-    character_name: str
-    persona_prompt: str
 
 # --- Helper Functions ---
+
 def extract_character_dialogues(analysis_data: dict, character_name: str, max_dialogues: int = 50) -> list:
     """
     Extract actual dialogue lines spoken by the character from scene data.
@@ -82,310 +45,216 @@ def extract_character_dialogues(analysis_data: dict, character_name: str, max_di
     """
     dialogues = []
     scenes = analysis_data.get("scenes", [])
-    
+
     logger.info(f"[DIALOGUE EXTRACTION] Extracting dialogues for character: {character_name}")
     logger.info(f"[DIALOGUE EXTRACTION] Total scenes to check: {len(scenes)}")
-    
+
     for scene_idx, scene in enumerate(scenes):
-        # Check if character appears in this scene
         characters_in_scene = scene.get("characters", [])
         if character_name not in characters_in_scene:
             continue
-            
+
         logger.debug(f"[DIALOGUE EXTRACTION] Scene {scene_idx}: Character found, extracting...")
-        
-        # Extract dialogue from original_text
+
         text = scene.get("original_text", "")
         if not text:
             continue
-            
+
         lines = text.split('\n')
-        
         for line in lines:
             stripped = line.strip()
-            
-            # Improved dialogue detection:
-            # 1. Lines starting with quotes (English or Korean)
-            # 2. Lines with em-dash dialogue format (— dialogue)
-            # 3. Lines with 「」brackets (Japanese-style quotes)
             is_dialogue = (
-                stripped.startswith('"') or 
-                stripped.startswith("'") or 
-                stripped.startswith('“') or  # Korean opening quote
-                stripped.startswith('「') or
-                stripped.startswith('—')  # Em-dash dialogue
+                stripped.startswith('"') or
+                stripped.startswith("'") or
+                stripped.startswith('\u201c') or  # Korean opening quote
+                stripped.startswith('\u300c') or
+                stripped.startswith('\u2014')  # Em-dash dialogue
             )
-            
-            if is_dialogue and len(stripped) > 3:  # Filter out very short lines
-                # Clean up the dialogue
-                cleaned = stripped.strip('—').strip()
+            if is_dialogue and len(stripped) > 3:
+                cleaned = stripped.strip('\u2014').strip()
                 dialogues.append(cleaned)
                 logger.debug(f"[DIALOGUE EXTRACTION] Found: {cleaned[:50]}...")
-                
                 if len(dialogues) >= max_dialogues:
                     logger.info(f"[DIALOGUE EXTRACTION] Reached max dialogues ({max_dialogues})")
                     return dialogues
-    
+
     logger.info(f"[DIALOGUE EXTRACTION] Extracted {len(dialogues)} dialogues for {character_name}")
     return dialogues
 
-# --- Router ---
-router = APIRouter()
 
-@router.post("/generate-persona", response_model=PersonaGenerationResponse)
-async def generate_persona(
-    request: PersonaGenerationRequest,
-    db: Session = Depends(get_db)
+def _fetch_analysis_for_character(
+    db: Session, novel_id: int, chapter_id: Optional[int], character_name: str
 ):
-    """
-    Generate a persona system prompt for a character using analysis data.
-    """
-    if not client:
-        raise HTTPException(
-            status_code=500,
-            detail="LLM client not initialized. Check GOOGLE_API_KEY."
-        )
-
-    # Debug logging - Track incoming request
-    print(f"\n[DEBUG] ===== GENERATE PERSONA REQUEST =====")
-    print(f"[DEBUG] Requested novel_id: {request.novel_id}")
-    print(f"[DEBUG] Requested character_name: {request.character_name}")
-
-    # Fetch Analysis
-    # Prioritize Chapter-specific analysis if chapter_id is provided
+    """분석 데이터 조회. 챕터별 분석 → 벡터 메타데이터 집계 → 글로벌 분석 순으로 시도."""
     query = db.query(Analysis).filter(
-        Analysis.novel_id == request.novel_id,
+        Analysis.novel_id == novel_id,
         Analysis.status == "completed"
     )
-    
-    if request.chapter_id:
-        # Try to find analysis specifically for this chapter (Character or Overall)
-        # We might need to be careful if AnalysisType.CHARACTER is used for single chapter
-        # For now, let's filter by chapter_id if it exists in the Analysis table
-        query = query.filter(Analysis.chapter_id == request.chapter_id)
-    else:
-        # Fallback to Global Analysis (Chapter ID is NULL)
-        # query = query.filter(Analysis.chapter_id.is_(None)) 
-        # But maybe we want ANY analysis if global is missing?
-        # Let's stick to novel_id filter for now if no chapter_id providing "Global" context
-        pass 
-        
+    if chapter_id:
+        query = query.filter(Analysis.chapter_id == chapter_id)
+
     analysis = query.order_by(desc(Analysis.created_at)).first()
-    
-    # If no specific analysis found for chapter, fall back to global?
-    # User requested strict isolation: "Make it readable from current novel/file only"
-    # So if chapter analysis is missing, we might NOT want global.
-    # However, if the user just uploaded, maybe there is NO analysis yet?
-    # In that case, we should probably return a default or error, or try to use VectorDocument metadata.
-    
-    if not analysis and request.chapter_id:
-        print(f"[Persona] No Analysis found for chapter {request.chapter_id}. Aggregating from VectorDocument metadata...")
-        # Fallback: Aggregate character data from VectorDocument metadata for this chapter
-        # This is useful when the file is uploaded and processed (vectors exist) but explicit "Analysis" step hasn't run or failed.
-        # This ensures we still have valid character options from the file itself.
-        
-        from backend.db.models import VectorDocument
-        
-        # Fetch parent vectors (chunk_index is what we need, but metadata contains character info)
-        # We need to scan metadata_json of parent documents in this chapter.
+
+    if not analysis and chapter_id:
+        logger.info(f"[Persona] No Analysis found for chapter {chapter_id}. Aggregating from VectorDocument metadata...")
         vectors = db.query(VectorDocument).filter(
-            VectorDocument.novel_id == request.novel_id,
-            VectorDocument.chapter_id == request.chapter_id
+            VectorDocument.novel_id == novel_id,
+            VectorDocument.chapter_id == chapter_id
         ).all()
-        
+
         if vectors:
-            from backend.services.analysis.gemini_structurer import GeminiStructurer
-            # We can use the aggregation logic from GeminiStructurer!
-            # It expects StructuredScene objects, but we can construct dicts or mock objects?
-            # Actually extract_global_entities expects list of StructuredScene.
-            # Let's manually aggregate simple traits here to check if the requested character exists.
-            
             aggregated_char = None
-            
             for vec in vectors:
                 meta = vec.metadata_json or {}
-                chars = meta.get('characters', [])
-                for char in chars:
+                for char in meta.get('characters', []):
                     c_name = char.get('name') if isinstance(char, dict) else char
-                    if c_name == request.character_name:
-                        # Found match!
-                        if not aggregated_char:
-                             aggregated_char = {
-                                 "name": c_name,
-                                 "description": char.get('description', '') if isinstance(char, dict) else '',
-                                 "traits": char.get('traits', []) if isinstance(char, dict) else []
-                             }
-                        else:
-                            # Merge traits
-                            new_traits = char.get('traits', []) if isinstance(char, dict) else []
-                            for t in new_traits:
-                                if t not in aggregated_char['traits']:
-                                    aggregated_char['traits'].append(t)
-                            
-                            # Update desc if longer
-                            new_desc = char.get('description', '') if isinstance(char, dict) else ''
-                            if len(new_desc) > len(aggregated_char['description']):
-                                aggregated_char['description'] = new_desc
-            
+                    if c_name != character_name:
+                        continue
+                    if not aggregated_char:
+                        aggregated_char = {
+                            "name": c_name,
+                            "description": char.get('description', '') if isinstance(char, dict) else '',
+                            "traits": char.get('traits', []) if isinstance(char, dict) else []
+                        }
+                    else:
+                        new_traits = char.get('traits', []) if isinstance(char, dict) else []
+                        for t in new_traits:
+                            if t not in aggregated_char['traits']:
+                                aggregated_char['traits'].append(t)
+                        new_desc = char.get('description', '') if isinstance(char, dict) else ''
+                        if len(new_desc) > len(aggregated_char['description']):
+                            aggregated_char['description'] = new_desc
+
             if aggregated_char:
-                # Construct a fake Analysis result object/dict to pass to persona generation
-                # We need a proper object structure that has .result attribute
                 class MockAnalysis:
-                    def __init__(self, data):
+                    def __init__(self, data, nid):
                         self.result = data
                         self.id = "mock_vector_aggregation"
-                        self.novel_id = request.novel_id
+                        self.novel_id = nid
                         self.analysis_type = "vector_aggregation"
-                
+
                 analysis = MockAnalysis({
                     "characters": [aggregated_char],
                     "summary": "Generated from Vector Metadata",
                     "mood": "Unknown"
-                })
-                print(f"[Persona] Successfully aggregated data for '{request.character_name}' from {len(vectors)} scenes.")
+                }, novel_id)
+                logger.info(f"[Persona] Successfully aggregated data for '{character_name}' from {len(vectors)} scenes.")
             else:
-                print(f"[Persona] Character '{request.character_name}' not found in chapter {request.chapter_id} vectors.")
+                logger.warning(f"[Persona] Character '{character_name}' not found in chapter {chapter_id} vectors.")
 
-    if not analysis or (not hasattr(analysis, 'result')) or (hasattr(analysis, 'result') and not analysis.result):
-        # Fallback to character specific analysis if overall is missing (Legacy logic)
-        # But if we are in chapter_id mode and failed, we should probably stop or risk global pollution.
-        if request.chapter_id:
-             # Just return a basic persona if strictly scoped but nothing found?
-             # Or raise 404? 
-             # Let's try to proceed with basic info if aggregated_char failed.
-             # But if we proceed, we fall into legacy logic which queries GLOBAL analysis.
-             # We must STOP here if chapter_id is set.
-             pass # Will fall through to 404 check below or legacy loop
-             
-        if request.chapter_id:
-             print(f"[Persona] Strict mode: No analysis found for chapter {request.chapter_id}. Aborting to prevent cross-contamination.")
-             raise HTTPException(status_code=404, detail=f"No analysis or character data found for '{request.character_name}' in this chapter.")
-
+    if not analysis or not getattr(analysis, 'result', None):
+        if chapter_id:
+            logger.warning(f"[Persona] Strict mode: No analysis found for chapter {chapter_id}. Aborting.")
+            raise HTTPException(
+                status_code=404,
+                detail=f"No analysis or character data found for '{character_name}' in this chapter."
+            )
         # Legacy fallback (Global)
         analysis = db.query(Analysis).filter(
-            Analysis.novel_id == request.novel_id,
+            Analysis.novel_id == novel_id,
             Analysis.analysis_type == AnalysisType.CHARACTER,
             Analysis.status == "completed"
         ).order_by(desc(Analysis.created_at)).first()
-    
-    # Debug: Show what we found
+
     if analysis:
-        print(f"[DEBUG] Found analysis ID: {analysis.id}")
-        print(f"[DEBUG] Analysis novel_id: {analysis.novel_id}")
-        print(f"[DEBUG] Analysis type: {analysis.analysis_type}")
+        logger.debug(f"[Persona] Found analysis ID: {analysis.id}, type: {analysis.analysis_type}")
     else:
-        print(f"[DEBUG] NO ANALYSIS FOUND for novel_id={request.novel_id}")
-    
+        logger.warning(f"[Persona] NO ANALYSIS FOUND for novel_id={novel_id}")
+
     if not analysis or not analysis.result:
-         raise HTTPException(
+        raise HTTPException(
             status_code=404,
             detail="Analysis data not found for this novel. Please run analysis first."
         )
 
-    # Find character data
-    character_data = None
+    return analysis
+
+
+def _find_character_in_analysis(analysis, character_name: str) -> dict:
+    """분석 결과에서 캐릭터 데이터 찾기 (정확 매칭 → 부분 매칭)."""
     data = analysis.result
-    
-    # Debug logging
-    print(f"[DEBUG] Analysis type: {analysis.analysis_type}")
-    print(f"[DEBUG] Data type: {type(data)}")
-    print(f"[DEBUG] Data keys: {list(data.keys()) if isinstance(data, dict) else 'Not a dict'}")
-    
-    # Handle both structure types (Overall vs Character specific)
+    logger.debug(f"[Persona] Analysis type: {analysis.analysis_type}, data type: {type(data)}")
+
     characters_list = []
-    
     if isinstance(data, dict):
-        # Try different possible keys for characters
-        characters_list = (
-            data.get("characters", []) or 
-            data.get("character_analysis", []) or 
-            []
-        )
-        print(f"[DEBUG] Characters list length: {len(characters_list)}")
-        if characters_list:
-            print(f"[DEBUG] First character sample: {characters_list[0]}")
+        characters_list = data.get("characters", []) or data.get("character_analysis", []) or []
+        logger.debug(f"[Persona] Characters list length: {len(characters_list)}")
     elif isinstance(data, list):
         characters_list = data
-        
-    # Normalize function to remove whitespace
+
     def normalize_name(name: str) -> str:
         return name.replace(" ", "").lower() if name else ""
 
-    target_name_norm = normalize_name(request.character_name)
-    print(f"[DEBUG] Looking for normalized name: '{target_name_norm}'")
+    target_norm = normalize_name(character_name)
+    logger.debug(f"[Persona] Looking for normalized name: '{target_norm}'")
 
     # First pass: Exact match
     for char in characters_list:
         if not isinstance(char, dict):
             continue
         char_name = char.get("name") or char.get("character_name")
-        char_name_norm = normalize_name(char_name)
-        print(f"[DEBUG] Checking character: '{char_name}' (normalized: '{char_name_norm}')")
-        if char_name_norm == target_name_norm:
-            character_data = char
-            break
-            
+        if normalize_name(char_name) == target_norm:
+            return char
+
     # Second pass: Partial match
-    if not character_data:
-        for char in characters_list:
-            if not isinstance(char, dict):
-                continue
-            char_name = char.get("name") or char.get("character_name")
-            char_name_norm = normalize_name(char_name)
-            if target_name_norm in char_name_norm or char_name_norm in target_name_norm:
-                character_data = char
-                print(f"[DEBUG] Found partial match: '{char_name}'")
-                break
+    for char in characters_list:
+        if not isinstance(char, dict):
+            continue
+        char_name = char.get("name") or char.get("character_name")
+        char_name_norm = normalize_name(char_name)
+        if target_norm in char_name_norm or char_name_norm in target_norm:
+            logger.debug(f"[Persona] Found partial match: '{char_name}'")
+            return char
 
-    
-    if not character_data:
-        # Provide helpful debug info in error
-        available_names = []
-        for char in characters_list[:10]:  # Show first 10
-            if isinstance(char, dict):
-                name = char.get("name") or char.get("character_name")
-                if name:
-                    available_names.append(name)
-        
-        error_detail = f"Character '{request.character_name}' not found in analysis."
-        if available_names:
-            error_detail += f" Available characters: {', '.join(available_names)}"
-        else:
-            error_detail += " No characters found in analysis data."
-            
-        raise HTTPException(
-            status_code=404,
-            detail=error_detail
-        )
-         
-    # [Context Enhancement] Add relations if available
+    available_names = [
+        char.get("name") or char.get("character_name")
+        for char in characters_list[:10]
+        if isinstance(char, dict) and (char.get("name") or char.get("character_name"))
+    ]
+    error_detail = f"Character '{character_name}' not found in analysis."
+    if available_names:
+        error_detail += f" Available characters: {', '.join(available_names)}"
+    else:
+        error_detail += " No characters found in analysis data."
+    raise HTTPException(status_code=404, detail=error_detail)
+
+
+def _build_persona_meta_prompt(
+    character_data: dict, character_name: str, analysis_result: dict, dialogues: list
+) -> str:
+    """페르소나 생성을 위한 메타 프롬프트 구축."""
     relations_text = ""
-    # Try to find relationships in overall analysis
-    if "relationships" in analysis.result:
-        rels = analysis.result["relationships"]
-        # Filter for this character
-        char_rels = [r for r in rels if request.character_name in r.get("source", "") or request.character_name in r.get("target", "")]
+    if "relationships" in analysis_result:
+        rels = analysis_result["relationships"]
+        char_rels = [
+            r for r in rels
+            if character_name in r.get("source", "") or character_name in r.get("target", "")
+        ]
         if char_rels:
-             relations_text = "\n" + "\n".join([f"- {r.get('target' if r.get('source') == request.character_name else 'source')}: {r.get('relation')} ({r.get('description')})" for r in char_rels])
+            relations_text = "\n" + "\n".join([
+                f"- {r.get('target' if r.get('source') == character_name else 'source')}: "
+                f"{r.get('relation')} ({r.get('description')})"
+                for r in char_rels
+            ])
 
-    # [Enhancement] Extract character dialogues for speech pattern analysis
-    dialogues = extract_character_dialogues(data, request.character_name, max_dialogues=50)
-    dialogue_examples = ""
-    has_dialogues = False
-    
-    if dialogues:
-        has_dialogues = True
+    has_dialogues = bool(dialogues)
+    if has_dialogues:
         dialogue_count = len(dialogues)
         dialogue_examples = f"\n\n[실제 대사 예시 (총 {dialogue_count}개)]"
         dialogue_examples += "\n" + "\n".join([f"{i+1}. {d}" for i, d in enumerate(dialogues)])
-        dialogue_examples += f"\n\n⚠️ 중요: 위 {dialogue_count}개의 실제 대사를 반드시 분석하라. 말투 패턴, 어미 사용 빈도, 문장 길이, 반복 표현을 통계적으로 추출하라."
+        dialogue_examples += (
+            f"\n\n⚠️ 중요: 위 {dialogue_count}개의 실제 대사를 반드시 분석하라. "
+            f"말투 패턴, 어미 사용 빈도, 문장 길이, 반복 표현을 통계적으로 추출하라."
+        )
     else:
-        logger.warning(f"[PERSONA] No dialogues found for {request.character_name}. Using general analysis only.")
-        dialogue_examples = "\n\n[알림: 이 캐릭터의 직접적인 대사를 찾을 수 없습니다. 성격 설명과 특징만으로 말투를 추론하세요.]"
-    
-    # Generate Prompt using Gemini
+        logger.warning(f"[PERSONA] No dialogues found for {character_name}. Using general analysis only.")
+        dialogue_examples = (
+            "\n\n[알림: 이 캐릭터의 직접적인 대사를 찾을 수 없습니다. "
+            "성격 설명과 특징만으로 말투를 추론하세요.]"
+        )
+
     meta_prompt = f"""
-너는 세계 최고의 캐릭터 프롬프트 엔지니어이다. 
+너는 세계 최고의 캐릭터 프롬프트 엔지니어이다.
 아래 웹소설 캐릭터의 데이터를 분석하여, 이 캐릭터가 되어 실시간 대화를 수행할 AI의 **'시스템 지침(System Instruction)'**을 작성하라.
 
 [데이터 베이스]
@@ -416,28 +285,25 @@ async def generate_persona(
 [출력 형식]
 지침 내용만 출력할 것.
     """
-        
-    # Add dialogue inclusion guideline if dialogues exist
+
     if has_dialogues:
         meta_prompt += """
-    
+
 6. **🎯 중요: 실제 대사 포함 필수**:
    - 위 [실제 대사 예시] 중에서 캐릭터의 말투를 가장 잘 보여주는 **10-15개를 선별**하여 생성할 시스템 지침에 포함시켜라
    - 생성하는 시스템 지침의 말투 규칙 설명 후에 반드시 다음 형식으로 추가하라:
-   
+
    예시 형식:
    [참고할 실제 대사 예시]
    1. "대사 내용..."
    2. "대사 내용..."
    ...(10-15개)
-   
+
    위 대사를 참고하여 대화할 때 유사한 어투와 패턴을 사용하라.
     """
 
-
-    # [Strict Grounding Instruction Injection]
     meta_prompt += """
-    
+
 [필수 포함 규칙]
 생성된 시스템 프롬프트에는 반드시 다음 규칙들을 포함해야 한다:
 "1. 너는 소설 설정에 기반한 캐릭터 역할극을 수행한다.
@@ -445,207 +311,103 @@ async def generate_persona(
 3. 사용자가 소설의 사실과 모순되는 말을 하면, 네 기억을 바탕으로 캐릭터답게 교정하라.
 4. 답변은 자연스러운 대화를 위해 간결하게 유지하라. 특별히 긴 설명을 요청받지 않는 한, 장황하게 설명하거나 정보를 늘어놓지 마라. 일반적인 답변은 1~3문장을 목표로 하라."
     """
-    
+
+    return meta_prompt
+
+
+def _fetch_character_bible(
+    db: Session, novel_id: int, chapter_id: Optional[int], character_name: str
+) -> str:
+    """특정 캐릭터의 설정 정보(관계 포함)를 Analysis DB에서 추출."""
+    query = db.query(Analysis).filter(
+        Analysis.novel_id == novel_id,
+        Analysis.analysis_type == AnalysisType.CHARACTER
+    )
+    if chapter_id:
+        query = query.filter(Analysis.chapter_id == chapter_id)
+    analysis = query.order_by(Analysis.updated_at.desc()).first()
+
+    if not analysis or not analysis.result:
+        return ""
+
+    result = analysis.result
+    parts = []
+
+    # 해당 캐릭터 정보 추출
+    for c in result.get('characters', []):
+        if c.get('name') == character_name:
+            traits = ", ".join(c.get('traits', [])[:5])
+            desc = c.get('description', '')[:150]
+            parts.append(f"[{character_name} 설정]\n성격/특징: {desc}\n주요 특성: {traits}")
+            break
+
+    # 해당 캐릭터 관련 관계 추출
+    rel_lines = []
+    for r in result.get('relationships', []):
+        if character_name in (r.get('character1', ''), r.get('character2', '')):
+            other = r.get('character2', '') if r.get('character1', '') == character_name else r.get('character1', '')
+            rel_lines.append(f"- {other}: {r.get('description', '')[:80]}")
+    if rel_lines:
+        parts.append("[관계]\n" + "\n".join(rel_lines[:5]))
+
+    return "\n\n".join(parts)[:400]
+
+
+async def _perform_rag_search(
+    db: Session, chatbot_service, room: CharacterChatRoom, message_content: str
+) -> str:
+    """RAG 검색으로 소설 관련 컨텍스트를 조회. 검색 실패 시 빈 문자열 반환."""
+    if not chatbot_service or not chatbot_service.engine:
+        return ""
+
     try:
         loop = asyncio.get_running_loop()
-        response = await loop.run_in_executor(
+        chunks = await loop.run_in_executor(
             None,
-            partial(client.models.generate_content, model='gemini-2.5-flash', contents=meta_prompt)
-        )
-        persona_prompt = response.text.strip()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to generate persona: {str(e)}")
-
-    return PersonaGenerationResponse(
-        character_name=request.character_name,
-        persona_prompt=persona_prompt
-    )
-
-@router.put("/rooms/{room_id}", response_model=CharacterChatRoomResponse)
-async def update_room(
-    room_id: int,
-    room_update: CharacterChatRoomUpdate,
-    db: Session = Depends(get_db)
-):
-    """
-    Update a character chat room (e.g. persona prompt).
-    """
-    room = db.query(CharacterChatRoom).filter(CharacterChatRoom.id == room_id).first()
-    if not room:
-        raise HTTPException(status_code=404, detail="Chat room not found")
-        
-    if room_update.persona_prompt is not None:
-        room.persona_prompt = room_update.persona_prompt
-        
-    room.updated_at = func.now()
-    db.commit()
-    db.refresh(room)
-    return room
-
-@router.delete("/rooms/{room_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_room(
-    room_id: int,
-    db: Session = Depends(get_db)
-):
-    """
-    Delete a character chat room.
-    """
-    room = db.query(CharacterChatRoom).filter(CharacterChatRoom.id == room_id).first()
-    if not room:
-        raise HTTPException(status_code=404, detail="Chat room not found")
-        
-    db.delete(room)
-    db.commit()
-    return None
-
-@router.post("/rooms", response_model=CharacterChatRoomResponse)
-async def create_room(
-    room_data: CharacterChatRoomCreate,
-    db: Session = Depends(get_db)
-):
-    """
-    Create a new character chat room.
-    """
-    # Verify novel exists
-    novel = db.query(Novel).filter(Novel.id == room_data.novel_id).first()
-    if not novel:
-        raise HTTPException(status_code=404, detail="Novel not found")
-        
-    # Create room
-    # Get actual user_id from auth if possible, otherwise use novel author or 1
-    # For now, we trust the frontend to handle auth or just use 1 as fallback/demo
-    user_id = novel.author_id 
-
-    new_room = CharacterChatRoom(
-        user_id=user_id,
-        novel_id=room_data.novel_id,
-        chapter_id=room_data.chapter_id,
-        character_name=room_data.character_name,
-        persona_prompt=room_data.persona_prompt
-    )
-    
-    db.add(new_room)
-    db.commit()
-    db.refresh(new_room)
-    
-    return new_room
-
-@router.get("/rooms", response_model=List[CharacterChatRoomResponse])
-async def list_rooms(
-    novel_id: int,
-    chapter_id: Optional[int] = None,
-    db: Session = Depends(get_db)
-):
-    """
-    List chat rooms for a novel.
-    If chapter_id is provided, filter by that chapter (file-scoped).
-    If not provided, return all (or global ones? For now, we return those matching the query).
-    """
-    query = db.query(CharacterChatRoom).filter(
-        CharacterChatRoom.novel_id == novel_id
-    )
-    
-    if chapter_id:
-        query = query.filter(CharacterChatRoom.chapter_id == chapter_id)
-    
-    rooms = query.order_by(desc(CharacterChatRoom.updated_at)).all()
-    
-    return rooms
-
-@router.post("/rooms/{room_id}/messages", response_model=List[CharacterChatMessageResponse])
-async def send_message(
-    room_id: int,
-    message: CharacterChatMessageCreate,
-    db: Session = Depends(get_db)
-):
-    """
-    Send a message to the character and get a response.
-    """
-    room = db.query(CharacterChatRoom).filter(CharacterChatRoom.id == room_id).first()
-    if not room:
-        raise HTTPException(status_code=404, detail="Chat room not found")
-        
-    if not client:
-        raise HTTPException(status_code=500, detail="LLM client not initialized")
-
-    # 1. Save User Message
-    user_msg = CharacterChatMessage(
-        room_id=room.id,
-        role="user",
-        content=message.content
-    )
-    db.add(user_msg)
-    db.commit() # Commit to save ID and order
-    
-    # 2. Fetch recent history for context (last 10 messages)
-    history_records = db.query(CharacterChatMessage).filter(
-        CharacterChatMessage.room_id == room.id
-    ).order_by(CharacterChatMessage.created_at).all()
-    
-    # 3. RAG: Retrieve Context
-    chatbot_service = get_chatbot_service()
-    rag_context = ""
-    source_info = None
-    
-    if chatbot_service and chatbot_service.engine:
-        # Find similar chunks using the user's message
-        # We need the novel_id. The room is linked to a novel.
-        novel = db.query(Novel).filter(Novel.id == room.novel_id).first()
-        novel_filter = None
-        if novel:
-            # Construct filter like "alice" from "alice.txt" roughly, or better use ID if service supports it
-            # Currently chatbot service uses filename string matching. 
-            # Let's try to match by title if possible, or we need to ensure filename logic matches.
-            # Assuming title + extension or similar. 
-            # For robustness, we might skip novel_filter if uncertain, but that mixes novels.
-            # TODO: Improve ChatbotService to filter by novel_id directly. 
-            # For now, let's rely on the global search or simple title match fallback.
-            novel_filter = novel.title # Basic attempt
-            
-        try:
-            loop = asyncio.get_running_loop()
-            chunks = await loop.run_in_executor(
-                None,
-                partial(
-                    chatbot_service.find_similar_chunks,
-                    question=message.content,
-                    top_k=3,
-                    novel_filter=novel_filter,
-                    chapter_id=room.chapter_id
-                )
+            partial(
+                chatbot_service.find_similar_chunks,
+                question=message_content,
+                top_k=3,
+                novel_id=room.novel_id,   # novel_id를 직접 전달 (title 우회 조회 불필요)
+                chapter_id=room.chapter_id
             )
-            if chunks:
-                rag_context = "\n\n[Reference Scenes from Novel]:\n"
-                for i, chunk in enumerate(chunks):
-                    rag_context += f"Scene {chunk.get('scene_index', '?')}: {chunk['text'][:500]}...\n"
-                
-                # Metadata for frontend (optional)
-                source_info = [{
-                    "scene": c.get('scene_index'), 
-                    "similarity": c.get('similarity')
-                } for c in chunks]
-                
-        except Exception as e:
-            print(f"RAG Search failed: {e}")
+        )
+        if not chunks:
+            return ""
+        rag_context = "\n\n[Reference Scenes from Novel]:\n"
+        for chunk in chunks:
+            rag_context += f"Scene {chunk.get('scene_index', '?')}: {chunk['text'][:500]}...\n"
+        return rag_context
+    except Exception as e:
+        logger.error(f"RAG Search failed: {e}")
+        return ""
 
-    # 4. Generate Response
-    input_text = message.content
-    if rag_context:
-        # Inject RAG context with clear separation
-        input_text = f"""
-### [기억 데이터] ###
-{rag_context}
 
-### [사용자의 메시지] ###
-{message.content}
-"""
-    
-    # Format history for Gemini
-    contents = []
-    
-    # Add System Instruction logic (Gemini 2.5 supports system_instruction param) 
-    # Combine Persona + Messenger Protocol + Self-Checking
-    system_instruction = room.persona_prompt + """
+def _parse_self_check_response(ai_reply: str, room_id: int, character_name: str) -> str:
+    """AI 응답에서 SELF_CHECK 파싱 및 로깅 후 정제된 메시지 반환."""
+    logger.info(f"{'='*70}")
+    logger.info(f"[AI RESPONSE DEBUG] Room {room_id} | Character: {character_name}")
+    logger.info(f"Full response length: {len(ai_reply)} chars")
+    logger.info(f"Contains [SELF_CHECK]: {'[SELF_CHECK]' in ai_reply}")
+    logger.info(f"{'='*70}")
+
+    if "[SELF_CHECK]" in ai_reply:
+        parts = ai_reply.split("[SELF_CHECK]", 1)
+        user_message = parts[0].strip()
+        self_check_log = parts[1].strip()
+        logger.info(f"[SELF-CHECK] Room {room_id} | Character: {character_name}")
+        logger.info(f"[SELF-CHECK] {self_check_log}")
+        return user_message
+
+    logger.warning(f"[SELF-CHECK] ⚠️ LLM did not include self-check for Room {room_id}")
+    logger.warning(f"[SELF-CHECK] Response length: {len(ai_reply)} chars")
+    logger.warning(f"[SELF-CHECK] First 200 chars: {ai_reply[:200]}...")
+    logger.warning(f"[SELF-CHECK] Tip: Check prompt or try regenerating persona")
+    return ai_reply
+
+
+# 캐릭터 챗 공통 프로토콜 지침 (send_message + send_message_stream 공유)
+_CHAT_PROTOCOL = """
 
 [채팅 프로토콜: 실시간 메신저 모드]
 1. **간결성**: 한 번의 답장은 1~3문장 이내로 제한한다.
@@ -653,6 +415,7 @@ async def send_message(
 3. **몰입 유지**: 사용자가 소설 설정과 맞지 않는 말을 하면, 캐릭터답게 반응하라.
 4. **현장감**: 질문에만 답하지 말고, 가끔은 캐릭터의 현재 감정이나 상황을 툭 던져라.
 5. **금지**: 설명조의 말투, 긴 문단, AI다운 정중함을 모두 버려라.
+6. **절대 금지 — 사실 날조**: 소설 속 사건, 인물 관계, 장소, 대화 내용 등 구체적인 사실은 [기억 데이터]에 있는 내용만 말하라. [기억 데이터]에 "찾지 못했습니다"라고 나오거나 관련 내용이 없으면, 그 사실에 대해서는 반드시 "잘 기억이 안 나" 또는 화제 전환으로 대응하라. 네 학습 데이터나 상상으로 소설 내용을 지어내는 것은 절대 금지다.
 
 [필수 출력 형식]
 모든 답변은 다음 형식을 EXACTLY 따라야 한다:
@@ -676,23 +439,144 @@ Checklist: 5/5 | Confidence: 4.5/5.0 | Notes: 짧고 캐릭터답게
 
 체크리스트 항목: (1)페르소나 유지 (2)말투 일관성 (3)설정 준수 (4)길이 적절 (5)RAG 자연 활용
     """
-    
+
+
+# --- Router ---
+router = APIRouter()
+
+
+@router.post("/generate-persona", response_model=PersonaGenerationResponse)
+async def generate_persona(
+    request: PersonaGenerationRequest,
+    db: Session = Depends(get_db)
+):
+    """Generate a persona system prompt for a character using analysis data."""
+    if not client:
+        raise HTTPException(
+            status_code=500,
+            detail="LLM client not initialized. Check GOOGLE_API_KEY."
+        )
+
+    logger.info(f"===== GENERATE PERSONA REQUEST =====")
+    logger.info(f"novel_id: {request.novel_id}, character_name: {request.character_name}")
+
+    analysis = _fetch_analysis_for_character(db, request.novel_id, request.chapter_id, request.character_name)
+    character_data = _find_character_in_analysis(analysis, request.character_name)
+    dialogues = extract_character_dialogues(analysis.result, request.character_name, max_dialogues=50)
+    meta_prompt = _build_persona_meta_prompt(character_data, request.character_name, analysis.result, dialogues)
+
+    try:
+        loop = asyncio.get_running_loop()
+        response = await loop.run_in_executor(
+            None,
+            partial(client.models.generate_content, model='gemini-2.5-flash', contents=meta_prompt)
+        )
+        persona_prompt = response.text.strip()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate persona: {str(e)}")
+
+    return PersonaGenerationResponse(
+        character_name=request.character_name,
+        persona_prompt=persona_prompt
+    )
+
+
+@router.put("/rooms/{room_id}", response_model=CharacterChatRoomResponse)
+async def update_room(
+    room_id: int,
+    room_update: CharacterChatRoomUpdate,
+    db: Session = Depends(get_db)
+):
+    """Update a character chat room (e.g. persona prompt)."""
+    return CharacterChatService.update_room(db, room_id, room_update.persona_prompt)
+
+
+@router.delete("/rooms/{room_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_room(
+    room_id: int,
+    db: Session = Depends(get_db)
+):
+    """Delete a character chat room."""
+    CharacterChatService.delete_room(db, room_id)
+
+
+@router.post("/rooms", response_model=CharacterChatRoomResponse)
+async def create_room(
+    room_data: CharacterChatRoomCreate,
+    db: Session = Depends(get_db)
+):
+    """Create a new character chat room."""
+    return CharacterChatService.create_room(
+        db,
+        novel_id=room_data.novel_id,
+        chapter_id=room_data.chapter_id,
+        character_name=room_data.character_name,
+        persona_prompt=room_data.persona_prompt,
+    )
+
+
+@router.get("/rooms", response_model=List[CharacterChatRoomResponse])
+async def list_rooms(
+    novel_id: int,
+    chapter_id: Optional[int] = None,
+    db: Session = Depends(get_db)
+):
+    """List chat rooms for a novel."""
+    return CharacterChatService.list_rooms(db, novel_id, chapter_id)
+
+
+@router.post("/rooms/{room_id}/messages", response_model=List[CharacterChatMessageResponse])
+async def send_message(
+    room_id: int,
+    message: CharacterChatMessageCreate,
+    db: Session = Depends(get_db)
+):
+    """Send a message to the character and get a response."""
+    room = CharacterChatService.get_room(db, room_id)
+
+    if not client:
+        raise HTTPException(status_code=500, detail="LLM client not initialized")
+
+    # 1. Save User Message
+    user_msg = CharacterChatMessage(room_id=room.id, role="user", content=message.content)
+    db.add(user_msg)
+    db.commit()
+
+    # 2. Fetch chat history
+    history_records = db.query(CharacterChatMessage).filter(
+        CharacterChatMessage.room_id == room.id
+    ).order_by(CharacterChatMessage.created_at).all()
+
+    # 3. RAG: Retrieve Context
+    chatbot_service = get_chatbot_service()
+    rag_context = await _perform_rag_search(db, chatbot_service, room, message.content)
+
+    # 4. Build input with optional RAG context
+    # 캐릭터 설정 바이블 조회 (Method C - 캐릭터 슬라이스)
+    char_bible = _fetch_character_bible(db, room.novel_id, room.chapter_id, room.character_name)
+    bible_prefix = f"### [캐릭터 설정] ###\n{char_bible}\n\n" if char_bible else ""
+
+    # RAG 결과가 없어도 [기억 데이터] 블록을 항상 포함시켜,
+    # LLM이 관련 소설 장면이 없다는 사실을 인지하도록 한다.
+    memory_block = rag_context if rag_context else "[이 질문과 관련된 소설 장면을 찾지 못했습니다.]"
+    input_text = f"""{bible_prefix}### [기억 데이터] ###
+{memory_block}
+
+### [사용자의 메시지] ###
+{message.content}"""
+
+    # Build system instruction
+    system_instruction = room.persona_prompt + _CHAT_PROTOCOL
+
+    # Build conversation history
+    contents = []
     for msg in history_records:
         if msg.id == user_msg.id:
             continue  # 현재 메시지는 RAG 컨텍스트와 함께 아래서 추가
         role = "user" if msg.role == "user" else "model"
-        # We don't inject RAG into past history to save tokens and avoid confusion
-        contents.append(types.Content(
-            role=role,
-            parts=[types.Part(text=msg.content)]
-        ))
+        contents.append(types.Content(role=role, parts=[types.Part(text=msg.content)]))
+    contents.append(types.Content(role="user", parts=[types.Part(text=input_text)]))
 
-    # Add current message with RAG context
-    contents.append(types.Content(
-        role="user",
-        parts=[types.Part(text=input_text)]
-    ))
-        
     try:
         loop = asyncio.get_running_loop()
         response = await loop.run_in_executor(
@@ -704,71 +588,150 @@ Checklist: 5/5 | Confidence: 4.5/5.0 | Notes: 짧고 캐릭터답게
                 config=types.GenerateContentConfig(system_instruction=system_instruction)
             )
         )
-        ai_reply = response.text.strip()
-        
-        # Debug: Log full response to check if SELF_CHECK is present
-        logger.info(f"\n{'='*70}")
-        logger.info(f"[AI RESPONSE DEBUG] Room {room_id} | Character: {room.character_name}")
-        logger.info(f"Full response length: {len(ai_reply)} chars")
-        logger.info(f"Contains [SELF_CHECK]: {'[SELF_CHECK]' in ai_reply}")
-        logger.info(f"{'='*70}")
-        
-        # Parse self-check from response
-        user_message = ai_reply
-        self_check_log = ""
-        
-        if "[SELF_CHECK]" in ai_reply:
-            parts = ai_reply.split("[SELF_CHECK]", 1)
-            user_message = parts[0].strip()
-            self_check_log = parts[1].strip()
-            
-            # Log to uvicorn console (not saved to DB or shown to user)
-            logger.info(f"\n{'='*70}")
-            logger.info(f"[SELF-CHECK] Room {room_id} | Character: {room.character_name}")
-            logger.info(f"[SELF-CHECK] {self_check_log}")
-            logger.info(f"{'='*70}\n")
-        else:
-            # Just warn if self-check is missing - don't generate fake data
-            logger.warning(f"\n[SELF-CHECK] ⚠️ LLM did not include self-check for Room {room_id}")
-            logger.warning(f"[SELF-CHECK] Response length: {len(ai_reply)} chars")
-            logger.warning(f"[SELF-CHECK] First 200 chars: {ai_reply[:200]}...")
-            logger.warning(f"[SELF-CHECK] Tip: Check prompt or try regenerating persona\n")
-        
-        ai_reply = user_message  # Use cleaned message for DB
-        
+        ai_reply = _parse_self_check_response(response.text.strip(), room_id, room.character_name)
     except Exception as e:
-        # Fallback if generation fails
         ai_reply = "..."
-        print(f"Error generating chat response: {e}")
-        
+        logger.error(f"Error generating chat response: {e}")
+
     # 5. Save AI Message
-    ai_msg = CharacterChatMessage(
-        room_id=room.id,
-        role="assistant",
-        content=ai_reply
-    )
+    ai_msg = CharacterChatMessage(room_id=room.id, role="assistant", content=ai_reply)
     db.add(ai_msg)
-
-    # Update room updated_at (ai_msg.created_at은 커밋 전이라 None이므로 현재 시간 사용)
-    from datetime import datetime
     room.updated_at = datetime.utcnow()
-
     db.commit()
     db.refresh(user_msg)
     db.refresh(ai_msg)
-    
+
     return [user_msg, ai_msg]
+
 
 @router.get("/rooms/{room_id}/messages", response_model=List[CharacterChatMessageResponse])
 async def get_messages(
     room_id: int,
     db: Session = Depends(get_db)
 ):
+    """Get message history for a room."""
+    return CharacterChatService.get_messages(db, room_id)
+
+
+@router.post("/rooms/{room_id}/messages/stream")
+async def send_message_stream(
+    room_id: int,
+    message: CharacterChatMessageCreate,
+    db: Session = Depends(get_db)
+):
     """
-    Get message history for a room.
+    캐릭터 챗 스트리밍 응답 (SSE)
+
+    이벤트 형식:
+      data: {"type": "user_saved", "id": ..., "content": "...", "created_at": "..."}
+      data: {"type": "token", "text": "..."}
+      data: {"type": "done", "ai_id": ..., "ai_content": "...", "created_at": "..."}
     """
-    messages = db.query(CharacterChatMessage).filter(
-        CharacterChatMessage.room_id == room_id
+    room = CharacterChatService.get_room(db, room_id)
+
+    if not client:
+        raise HTTPException(status_code=500, detail="LLM client not initialized")
+
+    # 1. Save User Message
+    user_msg = CharacterChatMessage(room_id=room.id, role="user", content=message.content)
+    db.add(user_msg)
+    db.commit()
+    db.refresh(user_msg)
+
+    # 2. Fetch chat history
+    history_records = db.query(CharacterChatMessage).filter(
+        CharacterChatMessage.room_id == room.id
     ).order_by(CharacterChatMessage.created_at).all()
-    
-    return messages
+
+    # 3. RAG + 바이블
+    chatbot_service = get_chatbot_service()
+    rag_context = await _perform_rag_search(db, chatbot_service, room, message.content)
+    char_bible = _fetch_character_bible(db, room.novel_id, room.chapter_id, room.character_name)
+    bible_prefix = f"### [캐릭터 설정] ###\n{char_bible}\n\n" if char_bible else ""
+    memory_block = rag_context if rag_context else "[이 질문과 관련된 소설 장면을 찾지 못했습니다.]"
+    input_text = f"""{bible_prefix}### [기억 데이터] ###
+{memory_block}
+
+### [사용자의 메시지] ###
+{message.content}"""
+
+    system_instruction = room.persona_prompt + _CHAT_PROTOCOL
+
+    # 4. Build conversation history
+    contents = []
+    for msg in history_records:
+        if msg.id == user_msg.id:
+            continue
+        role = "user" if msg.role == "user" else "model"
+        contents.append(types.Content(role=role, parts=[types.Part(text=msg.content)]))
+    contents.append(types.Content(role="user", parts=[types.Part(text=input_text)]))
+
+    loop = asyncio.get_running_loop()
+
+    async def generate():
+        # 유저 메시지 저장 완료 알림
+        yield f"data: {json.dumps({'type': 'user_saved', 'id': user_msg.id, 'content': user_msg.content, 'created_at': user_msg.created_at.isoformat()})}\n\n"
+
+        # Gemini 스트리밍: 동기 → 비동기 변환
+        queue: asyncio.Queue = asyncio.Queue()
+
+        def _run_stream():
+            try:
+                for chunk in client.models.generate_content_stream(
+                    model='gemini-2.5-flash',
+                    contents=contents,
+                    config=types.GenerateContentConfig(system_instruction=system_instruction)
+                ):
+                    if chunk.text:
+                        asyncio.run_coroutine_threadsafe(queue.put(chunk.text), loop)
+            except Exception as e:
+                asyncio.run_coroutine_threadsafe(queue.put(e), loop)
+            finally:
+                asyncio.run_coroutine_threadsafe(queue.put(None), loop)
+
+        loop.run_in_executor(None, _run_stream)
+
+        # [SELF_CHECK] 필터링하며 스트리밍
+        full_text = ""
+        sent_chars = 0
+
+        while True:
+            item = await queue.get()
+            if item is None:
+                break
+            if isinstance(item, Exception):
+                yield f"data: {json.dumps({'type': 'error', 'text': str(item)})}\n\n"
+                break
+
+            full_text += item
+            check_pos = full_text.find("[SELF_CHECK]")
+
+            if check_pos >= 0:
+                # [SELF_CHECK] 발견: 그 이전 텍스트만 전송
+                visible = full_text[:check_pos].rstrip()
+                if len(visible) > sent_chars:
+                    new_text = visible[sent_chars:]
+                    if new_text:
+                        yield f"data: {json.dumps({'type': 'token', 'text': new_text})}\n\n"
+                break
+            else:
+                new_text = full_text[sent_chars:]
+                if new_text:
+                    yield f"data: {json.dumps({'type': 'token', 'text': new_text})}\n\n"
+                sent_chars = len(full_text)
+
+        # AI 메시지 저장
+        parsed_reply = _parse_self_check_response(full_text.strip(), room_id, room.character_name)
+        ai_msg = CharacterChatMessage(room_id=room.id, role="assistant", content=parsed_reply)
+        db.add(ai_msg)
+        room.updated_at = datetime.utcnow()
+        db.commit()
+        db.refresh(ai_msg)
+
+        yield f"data: {json.dumps({'type': 'done', 'ai_id': ai_msg.id, 'ai_content': ai_msg.content, 'created_at': ai_msg.created_at.isoformat()})}\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+    )

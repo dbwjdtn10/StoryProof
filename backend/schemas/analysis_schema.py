@@ -27,6 +27,21 @@ class AnalysisStatusEnum(str, Enum):
     CANCELLED = "cancelled"
 
 
+# ===== AI 분석 API 요청 =====
+
+class ConsistencyRequest(BaseModel):
+    """설정 파괴 분석 요청"""
+    novel_id: int
+    chapter_id: Optional[int] = None
+    text: str
+
+
+class PredictionRequest(BaseModel):
+    """스토리 예측 요청"""
+    novel_id: int
+    text: str
+
+
 # ===== 분석 요청 =====
 
 class AnalysisRequest(BaseModel):

@@ -10,12 +10,19 @@ from typing import List, Optional
 from backend.db.session import get_db
 from backend.core.security import get_current_user
 from backend.services.novel_service import NovelService
+from backend.services.analysis_service import AnalysisService
 from backend.schemas.novel_schema import (
     NovelCreate, NovelUpdate, NovelResponse, NovelListResponse,
     ChapterResponse, ChapterUpdate, ChapterMergeRequest
 )
 
 router = APIRouter()
+
+
+def _is_admin(user) -> bool:
+    """사용자의 관리자 상태 추출"""
+    return getattr(user, "is_admin", False)
+
 
 # ===== 소설 관리 =====
 
@@ -76,7 +83,7 @@ async def merge_chapters(
     - 여러 회차 내용을 하나로 합칩니다. (target_id로 병합)
     - 병합된 소스 회차들은 삭제됩니다.
     """
-    is_admin = getattr(current_user, "is_admin", False)
+    is_admin = _is_admin(current_user)
     return NovelService.merge_chapters(
         db, novel_id, merge_data.target_id, merge_data.source_ids, current_user.id, is_admin
     )
@@ -89,7 +96,7 @@ async def get_chapters(
     current_user = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    is_admin = getattr(current_user, "is_admin", False)
+    is_admin = _is_admin(current_user)
     return NovelService.get_chapters(db, novel_id, current_user.id, is_admin)
 
 @router.get("/{novel_id}/chapters/{chapter_id}", response_model=ChapterResponse)
@@ -99,7 +106,7 @@ async def get_chapter(
     current_user = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    is_admin = getattr(current_user, "is_admin", False)
+    is_admin = _is_admin(current_user)
     return NovelService.get_chapter(db, novel_id, chapter_id, current_user.id, is_admin)
 
 @router.post("/{novel_id}/chapters/upload", status_code=status.HTTP_201_CREATED, response_model=ChapterResponse)
@@ -112,7 +119,7 @@ async def upload_chapter_file(
     db: Session = Depends(get_db)
 ):
     """파일 업로드로 회차 생성 (백그라운드 분석 트리거 포함)"""
-    is_admin = getattr(current_user, "is_admin", False)
+    is_admin = _is_admin(current_user)
     return await NovelService.create_chapter_from_file(
         db, novel_id, current_user.id, file, chapter_number, title, is_admin
     )
@@ -130,7 +137,7 @@ async def reanalyze_chapter(
     - Pinecone 벡터 인덱싱
     - 스토리보드 구조화 (LLM)
     """
-    is_admin = getattr(current_user, "is_admin", False)
+    is_admin = _is_admin(current_user)
     # 권한 및 존재 여부 확인 (NovelService 내부 로직 활용 권장)
     # 여기서는 간단히 Service 호출
     return NovelService.analyze_chapter(db, novel_id, chapter_id, current_user.id, is_admin)
@@ -146,7 +153,7 @@ async def update_chapter(
     """
     회차 수정
     """
-    is_admin = getattr(current_user, "is_admin", False)
+    is_admin = _is_admin(current_user)
     return NovelService.update_chapter(db, novel_id, chapter_id, chapter_update, current_user.id, is_admin)
 
 @router.delete("/{novel_id}/chapters/{chapter_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -156,7 +163,7 @@ async def delete_chapter(
     current_user = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    is_admin = getattr(current_user, "is_admin", False)
+    is_admin = _is_admin(current_user)
     NovelService.delete_chapter(db, novel_id, chapter_id, current_user.id, is_admin)
 
 # ===== 레거시/기타 엔드포인트 유지 (스토리보드 진행률 등) =====
@@ -169,7 +176,7 @@ async def get_storyboard_status(
     current_user = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    is_admin = getattr(current_user, "is_admin", False)
+    is_admin = _is_admin(current_user)
     chapter = NovelService.get_chapter(db, novel_id, chapter_id, current_user.id, is_admin)
     
     return {
@@ -187,7 +194,6 @@ async def get_chapter_bible(
     current_user = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    from backend.services.analysis_service import AnalysisService
-    is_admin = getattr(current_user, "is_admin", False)
+    is_admin = _is_admin(current_user)
     return AnalysisService.get_chapter_bible(db, novel_id, chapter_id, current_user.id, is_admin)
  

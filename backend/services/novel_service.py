@@ -4,6 +4,8 @@
 소설 및 챕터의 CRUD 작업, 파일 업로드, 분석 요청 등을 처리하는 서비스입니다.
 """
 
+import os
+import glob
 from typing import List, Optional, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
@@ -22,6 +24,26 @@ logger = logging.getLogger(__name__)
 
 class NovelService:
     """소설 및 챕터 관리 서비스"""
+
+    @staticmethod
+    def _cleanup_chapter_vectors(novel_id: int, chapter_id: int) -> None:
+        """Pinecone 벡터 정리. 실패 시 경고 로그 출력."""
+        try:
+            from backend.services.analysis.embedding_engine import EmbeddingSearchEngine
+            EmbeddingSearchEngine().delete_chapter_vectors(novel_id, chapter_id)
+        except Exception as e:
+            logger.warning(f"Pinecone 벡터 정리 실패 (chapter={chapter_id}): {e}")
+
+    @staticmethod
+    def _check_novel_ownership(db: Session, novel_id: int, user_id: int, is_admin: bool = False) -> "Novel":
+        """소설 소유권 확인 후 Novel 객체 반환. 없으면 404, 권한 없으면 403."""
+        novel = db.query(Novel).filter(Novel.id == novel_id).first()
+        if not novel:
+            raise HTTPException(status_code=404, detail="소설을 찾을 수 없습니다.")
+        if novel.author_id != user_id and not is_admin:
+            raise HTTPException(status_code=403, detail="권한이 없습니다.")
+        return novel
+
     @staticmethod
     def get_novels(
         db: Session, 
@@ -121,12 +143,7 @@ class NovelService:
     @staticmethod
     def update_novel(db: Session, novel_id: int, update_data: NovelUpdate, user_id: int) -> Novel:
         """소설 수정"""
-        novel = db.query(Novel).filter(Novel.id == novel_id).first()
-        if not novel:
-            raise HTTPException(status_code=404, detail="소설을 찾을 수 없습니다.")
-            
-        if novel.author_id != user_id:
-            raise HTTPException(status_code=403, detail="권한이 없습니다.")
+        novel = NovelService._check_novel_ownership(db, novel_id, user_id)
             
         if update_data.title is not None:
             novel.title = update_data.title
@@ -148,27 +165,14 @@ class NovelService:
     @staticmethod
     def delete_novel(db: Session, novel_id: int, user_id: int) -> None:
         """소설 삭제"""
-        novel = db.query(Novel).filter(Novel.id == novel_id).first()
-        if not novel:
-            raise HTTPException(status_code=404, detail="소설을 찾을 수 없습니다.")
-            
-        if novel.author_id != user_id:
-            raise HTTPException(status_code=403, detail="권한이 없습니다.")
+        novel = NovelService._check_novel_ownership(db, novel_id, user_id)
         
         # Pinecone 벡터 정리 (모든 챕터)
-        try:
-            from backend.services.analysis.embedding_engine import EmbeddingSearchEngine
-            engine = EmbeddingSearchEngine()
-            chapters = db.query(Chapter).filter(Chapter.novel_id == novel_id).all()
-            for chapter in chapters:
-                engine.delete_chapter_vectors(novel_id, chapter.id)
-        except Exception as e:
-            logger.warning(f"Pinecone 벡터 정리 실패 (novel={novel_id}): {e}")
+        chapters = db.query(Chapter).filter(Chapter.novel_id == novel_id).all()
+        for chapter in chapters:
+            NovelService._cleanup_chapter_vectors(novel_id, chapter.id)
 
         # 관련 이미지 파일 삭제
-        import os
-        import glob
-
         base_dir = os.getcwd()
         images_dir = os.path.join(base_dir, "backend", "static", "images")
         pattern = os.path.join(images_dir, f"novel_{novel_id}_*.png")
@@ -223,13 +227,7 @@ class NovelService:
     @staticmethod
     def get_chapters(db: Session, novel_id: int, user_id: int, is_admin: bool = False) -> List[Chapter]:
         """회차 목록 조회"""
-        novel = db.query(Novel).filter(Novel.id == novel_id).first()
-        if not novel:
-            raise HTTPException(status_code=404, detail="Novel not found")
-            
-        if novel.author_id != user_id and not is_admin:
-             raise HTTPException(status_code=403, detail="Not authorized")
-
+        NovelService._check_novel_ownership(db, novel_id, user_id, is_admin)
         return db.query(Chapter).filter(Chapter.novel_id == novel_id).order_by(Chapter.chapter_number).all()
 
     @staticmethod
@@ -285,12 +283,7 @@ class NovelService:
             HTTPException: 파일이 비어있거나, 중복 챕터 번호인 경우
         """
         # 1. 소설 조회 및 권한 확인
-        novel = db.query(Novel).filter(Novel.id == novel_id).first()
-        if not novel:
-            raise HTTPException(status_code=404, detail="소설을 찾을 수 없습니다.")
-        
-        if novel.author_id != user_id and not is_admin:
-            raise HTTPException(status_code=403, detail="권한이 없습니다.")
+        NovelService._check_novel_ownership(db, novel_id, user_id, is_admin)
 
         # 2. 중복 확인
         existing = db.query(Chapter).filter(
@@ -326,7 +319,7 @@ class NovelService:
                 from backend.worker.tasks import process_chapter_storyboard
                 process_chapter_storyboard.delay(novel_id, new_chapter.id)
             except Exception as e:
-                print(f"⚠️ Celery 작업 등록 실패: {e}")
+                logger.warning(f"Celery 작업 등록 실패: {e}")
             
             return new_chapter
         except Exception as e:
@@ -372,20 +365,15 @@ class NovelService:
 
     @staticmethod
     def update_chapter(
-        db: Session, 
-        novel_id: int, 
-        chapter_id: int, 
-        update_data: ChapterUpdate, 
+        db: Session,
+        novel_id: int,
+        chapter_id: int,
+        update_data: ChapterUpdate,
         user_id: int,
         is_admin: bool = False
     ) -> Chapter:
         """회차 수정"""
-        novel = db.query(Novel).filter(Novel.id == novel_id).first()
-        if not novel:
-            raise HTTPException(status_code=404, detail="소설을 찾을 수 없습니다.")
-            
-        if novel.author_id != user_id and not is_admin:
-            raise HTTPException(status_code=403, detail="권한이 없습니다.")
+        NovelService._check_novel_ownership(db, novel_id, user_id, is_admin)
 
         chapter = db.query(Chapter).filter(
             Chapter.id == chapter_id,
@@ -418,12 +406,7 @@ class NovelService:
     @staticmethod
     def delete_chapter(db: Session, novel_id: int, chapter_id: int, user_id: int, is_admin: bool = False) -> None:
         """회차 삭제"""
-        novel = db.query(Novel).filter(Novel.id == novel_id).first()
-        if not novel:
-            raise HTTPException(status_code=404, detail="소설을 찾을 수 없습니다.")
-            
-        if novel.author_id != user_id and not is_admin:
-            raise HTTPException(status_code=403, detail="권한이 없습니다.")
+        NovelService._check_novel_ownership(db, novel_id, user_id, is_admin)
 
         chapter = db.query(Chapter).filter(
             Chapter.id == chapter_id,
@@ -434,11 +417,7 @@ class NovelService:
             raise HTTPException(status_code=404, detail="회차를 찾을 수 없습니다.")
             
         # Pinecone 벡터 정리 (DB 삭제 전에 수행)
-        try:
-            from backend.services.analysis.embedding_engine import EmbeddingSearchEngine
-            EmbeddingSearchEngine().delete_chapter_vectors(novel_id, chapter_id)
-        except Exception as e:
-            logger.warning(f"Pinecone 벡터 정리 실패 (chapter={chapter_id}): {e}")
+        NovelService._cleanup_chapter_vectors(novel_id, chapter_id)
 
         # 관련된 캐릭터 채팅방 삭제 (Cascade가 안 걸려 있을 경우 수동 삭제)
         # CharacterChatMessage는 CharacterChatRoom 삭제 시 ORM cascade로 삭제됨
@@ -476,12 +455,7 @@ class NovelService:
             Chapter: 병합된 대상 회차 객체
         """
         # 1. 권한 및 소설 확인
-        novel = db.query(Novel).filter(Novel.id == novel_id).first()
-        if not novel:
-            raise HTTPException(status_code=404, detail="소설을 찾을 수 없습니다.")
-            
-        if novel.author_id != user_id and not is_admin:
-            raise HTTPException(status_code=403, detail="권한이 없습니다.")
+        NovelService._check_novel_ownership(db, novel_id, user_id, is_admin)
 
         # 2. 관련 모든 회차 조회
         all_ids = set(source_ids) | {target_id}

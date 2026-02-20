@@ -4,11 +4,14 @@ StoryConsistencyAgent를 사용하여 소설의 설정 파괴를 탐지하고 �
 """
 
 import json
+import logging
 from google import genai
 from backend.services.analysis import EmbeddingSearchEngine
 from backend.db.session import SessionLocal
 from backend.db.models import Novel
 from backend.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class StoryConsistencyAgent:
@@ -43,42 +46,11 @@ class StoryConsistencyAgent:
         except Exception:
             self.search_engine = EmbeddingSearchEngine()
 
-    def check_consistency(self, novel_id: int, input_text: str) -> dict:
-        """
-        설정 일관성 검사
-        
-        주어진 텍스트가 기존 소설 설정과 일관성이 있는지 검사합니다.
-        Pinecone에서 관련 컨텍스트를 검색하고 Gemini API로 분석합니다.
-        
-        Args:
-            novel_id (int): 소설 ID
-            input_text (str): 검사할 텍스트
-            
-        Returns:
-            dict: 분석 결과
-                {
-                    "status": "설정 파괴 감지" | "설정 일치",
-                    "results": [
-                        {
-                            "type": "설정 충돌" | "개연성 경고",
-                            "quote": "문제가 된 구절",
-                            "description": "분석 내용",
-                            "suggestion": "수정 제안"
-                        }
-                    ]
-                }
-        """
-        # 1. Pinecone 벡터 검색으로 관련 컨텍스트 찾기
-        search_results = self.search_engine.search(
-            query=input_text, 
-            novel_id=novel_id, 
-            top_k=5
-        )
-        
-        # 검색 결과를 텍스트로 변환
+    def _fetch_context_for_novel(self, novel_id: int, query: str, top_k: int = 5):
+        """Pinecone 벡터 검색 + DB 소설 요약 조회를 단일 메서드로 통합."""
+        search_results = self.search_engine.search(query=query, novel_id=novel_id, top_k=top_k)
         relevant_context = self._format_search_results(search_results)
 
-        # 2. PostgreSQL에서 소설 요약 정보 조회
         db = SessionLocal()
         try:
             novel = db.query(Novel).filter(Novel.id == novel_id).first()
@@ -86,21 +58,79 @@ class StoryConsistencyAgent:
         finally:
             db.close()
 
-        # 3. Gemini API로 분석
-        # prompts.py에서 가져온 프롬프트 사용
+        return relevant_context, summary
+
+    def _fetch_bible_summary(self, novel_id: int, chapter_id: int = None) -> str:
+        """Analysis DB에서 바이블 요약 조회. 실패 시 빈 문자열 반환."""
+        db = SessionLocal()
+        try:
+            from backend.services.analysis_service import AnalysisService
+            return AnalysisService.get_bible_summary(db, novel_id, chapter_id)
+        except Exception as e:
+            logger.warning(f"바이블 요약 조회 실패 (novel={novel_id}): {e}")
+            return ""
+        finally:
+            db.close()
+
+    def _identify_search_gaps(self, existing_context: str, query: str) -> list:
+        """현재 검색 결과에서 누락된 정보를 파악, 추가 검색 쿼리 반환 (최대 2개)."""
+        prompt = f"""아래 검색 결과가 질문에 답하기에 충분한지 평가하세요.
+
+[질문]: {query}
+
+[현재 검색 결과 (요약)]:
+{existing_context[:600]}
+
+부족한 정보가 있다면 추가 검색 키워드를 JSON 배열로 반환하세요 (최대 2개).
+충분하면 빈 배열을 반환하세요.
+반드시 JSON 배열만 반환: ["키워드1", "키워드2"] 또는 []"""
+        try:
+            response = self.client.models.generate_content(
+                model=settings.GEMINI_STRUCTURING_MODEL,
+                contents=prompt,
+                config={'temperature': 0.1, 'response_mime_type': 'application/json'}
+            )
+            result = json.loads(response.text.strip())
+            return result[:2] if isinstance(result, list) else []
+        except Exception:
+            return []
+
+    def check_consistency(self, novel_id: int, input_text: str) -> dict:
+        """
+        설정 일관성 검사
+
+        주어진 텍스트가 기존 소설 설정과 일관성이 있는지 검사합니다.
+        Pinecone에서 관련 컨텍스트를 검색하고 Gemini API로 분석합니다.
+        Agent-lite: 검색 공백 탐지 후 추가 검색 수행.
+        Method C: Analysis DB 바이블 요약을 프롬프트에 직접 주입.
+        """
+        relevant_context, summary = self._fetch_context_for_novel(novel_id, input_text)
+
+        # Agent-lite: 검색 공백 탐지 후 추가 검색
+        gap_queries = self._identify_search_gaps(relevant_context, input_text)
+        for gap_q in gap_queries:
+            extra = self._format_search_results(
+                self.search_engine.search(query=gap_q, novel_id=novel_id, top_k=3)
+            )
+            if extra and extra != "관련 정보 없음":
+                relevant_context += f"\n\n[추가 검색]\n{extra}"
+
+        # Method C: 바이블 주입
+        bible = self._fetch_bible_summary(novel_id)
+        bible_block = f"\n\n[바이블 요약]:\n{bible}" if bible else ""
+
         from backend.core.prompts import STORY_GUARD_SYSTEM_PROMPT
-        
         prompt = f"""{STORY_GUARD_SYSTEM_PROMPT}
 
 [기존 설정]:
-{relevant_context}
+{relevant_context}{bible_block}
 
 [요약]:
 {summary}
 
 [검토 문장]:
 {input_text}"""
-        
+
         try:
             response = self.client.models.generate_content(
                 model=settings.GEMINI_STRUCTURING_MODEL,
@@ -110,63 +140,46 @@ class StoryConsistencyAgent:
                     'response_mime_type': 'application/json'
                 }
             )
-            
             clean_text = response.text.replace('```json', '').replace('```', '').strip()
             return json.loads(clean_text)
         except Exception as e:
-            print(f"[Error] 설정 일관성 검사 실패: {e}")
-            return {
-                "status": "분석 오류", 
-                "message": str(e),
-                "results": []
-            }
+            logger.error(f"설정 일관성 검사 실패: {e}")
+            return {"status": "분석 오류", "message": str(e), "results": []}
 
     def predict_story(self, novel_id: int, user_input: str) -> dict:
         """
         스토리 전개 예측 (What-If 시나리오)
-        
+
         사용자의 가정을 바탕으로 스토리가 어떻게 전개될지 예측합니다.
-        
-        Args:
-            novel_id (int): 소설 ID
-            user_input (str): 사용자의 가정 (예: "만약 주인공이 ~했다면?")
-            
-        Returns:
-            dict: 예측 결과
-                {
-                    "prediction": "예측된 스토리 내용"
-                }
+        Agent-lite: 검색 공백 탐지 후 추가 검색 수행.
+        Method C: Analysis DB 바이블 요약을 프롬프트에 직접 주입.
         """
-        # 1. Pinecone 벡터 검색 (관련 설정/장면 찾기)
-        search_results = self.search_engine.search(
-            query=user_input, 
-            novel_id=novel_id, 
-            top_k=5
-        )
-        
-        relevant_context = self._format_search_results(search_results)
+        relevant_context, summary = self._fetch_context_for_novel(novel_id, user_input)
 
-        # 2. PostgreSQL에서 소설 요약 정보 조회
-        db = SessionLocal()
-        try:
-            novel = db.query(Novel).filter(Novel.id == novel_id).first()
-            summary = novel.description if novel else "정보 없음"
-        finally:
-            db.close()
+        # Agent-lite: 검색 공백 탐지 후 추가 검색
+        gap_queries = self._identify_search_gaps(relevant_context, user_input)
+        for gap_q in gap_queries:
+            extra = self._format_search_results(
+                self.search_engine.search(query=gap_q, novel_id=novel_id, top_k=3)
+            )
+            if extra and extra != "관련 정보 없음":
+                relevant_context += f"\n\n[추가 검색]\n{extra}"
 
-        # 3. Gemini API로 예측 생성
+        # Method C: 바이블 주입
+        bible = self._fetch_bible_summary(novel_id)
+        bible_block = f"\n\n[바이블 요약]:\n{bible}" if bible else ""
+
         from backend.core.prompts import STORY_PREDICTION_SYSTEM_PROMPT
-        
         prompt = f"""{STORY_PREDICTION_SYSTEM_PROMPT}
 
 [기존 설정 및 장면]:
-{relevant_context}
+{relevant_context}{bible_block}
 
 [소설 요약]:
 {summary}
 
 [사용자 가정(What-If)]: {user_input}"""
-        
+
         try:
             response = self.client.models.generate_content(
                 model=settings.GEMINI_STRUCTURING_MODEL,
@@ -176,20 +189,14 @@ class StoryConsistencyAgent:
                     'response_mime_type': 'application/json'
                 }
             )
-            
             clean_text = response.text.replace('```json', '').replace('```', '').strip()
-            
-            # JSON 파싱 시도, 실패하면 텍스트 그대로 반환
             try:
                 return json.loads(clean_text)
             except json.JSONDecodeError:
                 return {"prediction": clean_text}
-                
         except Exception as e:
-            print(f"[Error] 스토리 예측 실패: {e}")
-            return {
-                "prediction": f"예측 생성 중 오류가 발생했습니다: {str(e)}"
-            }
+            logger.error(f"스토리 예측 실패: {e}")
+            return {"prediction": f"예측 생성 중 오류가 발생했습니다: {str(e)}"}
     
     def _format_search_results(self, search_results: list) -> str:
         """

@@ -59,6 +59,8 @@ class Settings(BaseSettings):
     GOOGLE_API_KEY: Optional[str] = None
     GEMINI_STRUCTURING_MODEL: str = "gemini-2.5-flash"  # 앵커 찾기 등 구조화용
     GEMINI_CHAT_MODEL: str = "gemini-2.5-flash"  # 챗봇용
+    GEMINI_REFINE_MODEL: str = "gemini-2.0-flash"  # 이미지 프롬프트 정제용
+    IMAGEN_GENERATE_MODEL: str = "imagen-4.0-generate-001"  # 이미지 생성용
     
     # ===== LangChain 설정 =====
     LANGCHAIN_API_KEY: Optional[str] = None
@@ -77,6 +79,15 @@ class Settings(BaseSettings):
     KOREAN_EMBEDDING_MODEL: str = "dragonkue/multilingual-e5-small-ko"
     MULTILINGUAL_EMBEDDING_MODEL: str = "intfloat/multilingual-e5-small"
     ENABLE_RERANKER: bool = False  # 기본값 False (메모리 절약), True로 설정 시 Reranker 활성화
+    RERANKER_MODEL: str = "BAAI/bge-reranker-v2-m3"
+
+    # ===== 검색 설정 =====
+    SEARCH_DEFAULT_ALPHA: float = 0.825          # Vector 82.5%, BM25 17.5%
+    SEARCH_DEFAULT_SIMILARITY_THRESHOLD: float = 0.2  # Reranker 도입으로 기준 하향
+    SEARCH_CONTEXT_MAX_CHARS: int = 3500         # Gemini 컨텍스트 최대 길이
+    GEMINI_RESPONSE_TEMPERATURE: float = 0.1
+    GEMINI_RESPONSE_TOP_P: float = 0.8
+    GEMINI_RESPONSE_TOP_K: int = 20
     
     # ===== Chunking Strategy =====
     CHILD_CHUNK_SIZE: int = 500  # 200 -> 500 (문맥 확보)

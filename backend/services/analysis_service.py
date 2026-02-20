@@ -299,5 +299,55 @@ class AnalysisService:
         bible_data["characters"] = list(character_dict.values())
         bible_data["locations"] = list(location_dict.values())
         bible_data["items"] = list(item_dict.values())
-        
+
         return bible_data
+
+    @staticmethod
+    def get_bible_summary(
+        db: Session,
+        novel_id: int,
+        chapter_id: int = None,
+        max_chars: int = 1000
+    ) -> str:
+        """
+        Analysis DB에서 압축된 바이블 요약 텍스트 반환.
+        LLM 프롬프트에 직접 주입하기 위한 간결한 텍스트 형식.
+        분석 데이터가 없으면 빈 문자열 반환.
+        """
+        query = db.query(Analysis).filter(
+            Analysis.novel_id == novel_id,
+            Analysis.analysis_type == AnalysisType.CHARACTER
+        )
+        if chapter_id:
+            query = query.filter(Analysis.chapter_id == chapter_id)
+        analysis = query.order_by(Analysis.updated_at.desc()).first()
+
+        if not analysis or not analysis.result:
+            return ""
+
+        result = analysis.result
+        parts = []
+
+        characters = result.get('characters', [])[:5]
+        if characters:
+            lines = []
+            for c in characters:
+                traits = ", ".join(c.get('traits', [])[:3])
+                desc = c.get('description', '')[:80]
+                lines.append(f"- {c.get('name','')}: {desc} [{traits}]")
+            parts.append("[등장인물]\n" + "\n".join(lines))
+
+        relationships = result.get('relationships', [])[:5]
+        if relationships:
+            lines = [
+                f"- {r.get('character1','')}-{r.get('character2','')}: {r.get('description','')[:60]}"
+                for r in relationships
+            ]
+            parts.append("[관계]\n" + "\n".join(lines))
+
+        key_events = result.get('key_events', [])[:3]
+        if key_events:
+            lines = [f"- {e.get('summary', '')[:80]}" for e in key_events]
+            parts.append("[핵심사건]\n" + "\n".join(lines))
+
+        return "\n\n".join(parts)[:max_chars]

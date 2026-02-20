@@ -7,27 +7,15 @@ AI 분석 API 엔드포인트
 """
 
 from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel
-from typing import Optional
 from celery.result import AsyncResult
 
+from backend.worker.tasks import detect_inconsistency_task
+from backend.worker.celery_app import celery_app
+from backend.services.agent import StoryConsistencyAgent
+from backend.core.config import settings
+from backend.schemas.analysis_schema import ConsistencyRequest, PredictionRequest
 
 router = APIRouter()
-
-
-# ===== Schemas =====
-
-class ConsistencyRequest(BaseModel):
-    """설정 파괴 분석 요청"""
-    novel_id: int
-    chapter_id: Optional[int] = None
-    text: str
-
-
-class PredictionRequest(BaseModel):
-    """스토리 예측 요청"""
-    novel_id: int
-    text: str
 
 
 # ===== 설정 파괴 분석 =====
@@ -40,7 +28,6 @@ async def request_consistency(request: ConsistencyRequest):
     Celery 작업으로 비동기 처리되며, task_id를 반환합니다.
     결과는 GET /task/{task_id}로 조회 가능합니다.
     """
-    from backend.worker.tasks import detect_inconsistency_task
     task = detect_inconsistency_task.delay(request.novel_id, request.text, request.chapter_id)
     return {"task_id": task.id, "status": "PENDING"}
 
@@ -57,7 +44,6 @@ async def get_task_result(task_id: str):
         result: 분석 결과 (COMPLETED 시)
         error: 에러 메시지 (FAILED 시)
     """
-    from backend.worker.celery_app import celery_app
     result = AsyncResult(task_id, app=celery_app)
     if result.state == 'SUCCESS':
         return {"status": "COMPLETED", "result": result.result}
@@ -76,9 +62,6 @@ def request_prediction(request: PredictionRequest):
     사용자의 What-If 가정을 바탕으로 스토리 전개를 예측합니다.
     FastAPI가 자동으로 threadpool에서 실행합니다.
     """
-    from backend.services.agent import StoryConsistencyAgent
-    from backend.core.config import settings
-
     try:
         agent = StoryConsistencyAgent(api_key=settings.GOOGLE_API_KEY)
         result = agent.predict_story(request.novel_id, request.text)

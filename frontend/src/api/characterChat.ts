@@ -78,3 +78,60 @@ export const deleteRoom = async (roomId: number): Promise<void> => {
         method: 'DELETE',
     });
 };
+
+const API_BASE_URL = `${window.location.protocol}//${window.location.host}/api/v1`;
+
+/**
+ * 캐릭터 챗 스트리밍 버전 (SSE)
+ * 유저 메시지 저장 → AI 토큰 스트리밍 → AI 메시지 완료 순으로 콜백 호출
+ */
+export const sendMessageStream = async (
+    roomId: number,
+    content: string,
+    onUserSaved: (msg: CharacterChatMessage) => void,
+    onToken: (text: string) => void,
+    onDone: (aiMsg: CharacterChatMessage) => void
+): Promise<void> => {
+    const token = localStorage.getItem('token');
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const response = await fetch(`${API_BASE_URL}/character-chat/rooms/${roomId}/messages/stream`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ content })
+    });
+
+    if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.detail || `HTTP ${response.status}`);
+    }
+
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n\n');
+        buffer = lines.pop() ?? '';
+
+        for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            const data = line.slice(6).trim();
+            try {
+                const parsed = JSON.parse(data);
+                if (parsed.type === 'user_saved') {
+                    onUserSaved({ id: parsed.id, room_id: roomId, role: 'user', content: parsed.content, created_at: parsed.created_at });
+                } else if (parsed.type === 'token' && parsed.text) {
+                    onToken(parsed.text);
+                } else if (parsed.type === 'done') {
+                    onDone({ id: parsed.ai_id, room_id: roomId, role: 'assistant', content: parsed.ai_content, created_at: parsed.created_at });
+                }
+            } catch { /* ignore parse errors */ }
+        }
+    }
+};

@@ -7,7 +7,7 @@
 - 현재 사용자 프로필 조회
 """
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from backend.db.session import get_db
@@ -64,7 +64,6 @@ async def logout():
 @router.post("/refresh")
 async def refresh_token():
     """JWT 토큰 갱신 (TODO: refresh token 로직 구현)"""
-    from fastapi import HTTPException
     raise HTTPException(status_code=501, detail="토큰 갱신 기능은 아직 구현되지 않았습니다.")
 
 

@@ -1,11 +1,12 @@
 import { MessageCircle, X, Send, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
-import { askQuestion, ChatAnswerResponse } from '../api/chat';
+import { askQuestionStream, ChatAnswerResponse, StreamMeta } from '../api/chat';
 import '../chatbot.css';
 
 interface Message {
     role: 'user' | 'assistant';
     content: string;
+    isStreaming?: boolean;
     source?: {
         filename: string;
         scene_index?: number;
@@ -172,40 +173,56 @@ export function ChatInterface({ onNavigateToScene, novelId, chapterId }: ChatInt
     }, [messages]);
 
     const handleSend = async () => {
-        if (message.trim() && !isLoading) {
-            const userMessage = message.trim();
-            setMessage('');
-            // Add user message to chat
-            setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
-            setIsLoading(true);
+        if (!message.trim() || isLoading) return;
 
-            try {
-                // Call API
-                const response: ChatAnswerResponse = await askQuestion({
-                    question: userMessage,
-                    novel_id: novelId,
-                    chapter_id: chapterId,
-                    alpha: 0.32,
-                    similarity_threshold: 0.35 // 낮아진 임계값 반영
-                });
+        const userMessage = message.trim();
+        setMessage('');
+        setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+        setIsLoading(true);
 
-                // Add assistant response to chat
-                setMessages(prev => [...prev, {
-                    role: 'assistant',
-                    content: response.answer,
-                    source: response.source,
-                    similarity: response.similarity
-                }]);
-            } catch (err: any) {
-                console.error('Chat error:', err);
-                const errorMessage = err.response?.data?.detail || err.message || '답변 생성 중 오류가 발생했습니다.';
-                setMessages(prev => [...prev, {
-                    role: 'assistant',
-                    content: `오류: ${errorMessage}`
-                }]);
-            } finally {
-                setIsLoading(false);
-            }
+        // 스트리밍 플레이스홀더 추가
+        setMessages(prev => [...prev, { role: 'assistant', content: '', isStreaming: true }]);
+
+        let metaInfo: StreamMeta | null = null;
+
+        try {
+            await askQuestionStream(
+                { question: userMessage, novel_id: novelId, chapter_id: chapterId, alpha: 0.32, similarity_threshold: 0.35 },
+                // onToken: 마지막 메시지에 토큰 누적
+                (token) => {
+                    setMessages(prev => {
+                        const arr = [...prev];
+                        const last = arr[arr.length - 1];
+                        arr[arr.length - 1] = { ...last, content: last.content + token };
+                        return arr;
+                    });
+                },
+                // onMeta: 출처/유사도 정보 저장
+                (meta) => { metaInfo = meta; },
+                // onDone: 스트리밍 완료 → isStreaming 해제 + 메타 반영
+                () => {
+                    setMessages(prev => {
+                        const arr = [...prev];
+                        const last = arr[arr.length - 1];
+                        arr[arr.length - 1] = {
+                            ...last,
+                            isStreaming: false,
+                            source: metaInfo?.source ?? null,
+                            similarity: metaInfo?.similarity ?? 0
+                        };
+                        return arr;
+                    });
+                }
+            );
+        } catch (err: any) {
+            console.error('Chat error:', err);
+            setMessages(prev => {
+                const arr = [...prev];
+                arr[arr.length - 1] = { role: 'assistant', content: `오류: ${err.message || '답변 생성 중 오류가 발생했습니다.'}` };
+                return arr;
+            });
+        } finally {
+            setIsLoading(false);
         }
     };
 
@@ -222,7 +239,7 @@ export function ChatInterface({ onNavigateToScene, novelId, chapterId }: ChatInt
                 {messages.map((msg, idx) => (
                     <ChatMessageItem key={idx} msg={msg} onNavigateToScene={onNavigateToScene} chapterId={chapterId} />
                 ))}
-                {isLoading && (
+                {isLoading && messages[messages.length - 1]?.content === '' && (
                     <div className="chatbot-message assistant" style={{ alignSelf: 'flex-start' }}>
                         <div className="chatbot-message-bubble assistant-bubble" style={{ padding: '0.75rem 1rem', borderRadius: '1.5rem' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>

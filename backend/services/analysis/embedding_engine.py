@@ -153,8 +153,7 @@ class EmbeddingSearchEngine:
         from sentence_transformers import CrossEncoder
         global _global_reranker
         
-        # 설정된 Reranker 모델 (없으면 BAAI/bge-reranker-v2-m3 사용)
-        reranker_name = getattr(settings, 'RERANKER_MODEL', "BAAI/bge-reranker-v2-m3")
+        reranker_name = settings.RERANKER_MODEL
 
         if _global_reranker is None:
             print(f"[Info] Reranker 로딩 시작: {reranker_name}")

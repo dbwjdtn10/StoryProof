@@ -33,8 +33,8 @@ class ImageService:
             raise ImportError("google-genai library is required.")
             
         self.client = genai.Client(api_key=api_key)
-        self.refine_model = "gemini-2.0-flash" 
-        self.image_model = "imagen-4.0-generate-001" 
+        self.refine_model = settings.GEMINI_REFINE_MODEL
+        self.image_model = settings.IMAGEN_GENERATE_MODEL
 
     def refine_prompt(self, prompt: str) -> str:
         """

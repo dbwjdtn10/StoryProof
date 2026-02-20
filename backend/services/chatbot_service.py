@@ -13,10 +13,13 @@ RAG (Retrieval-Augmented Generation) 기반 소설 질의응답 시스템
 """
 
 import threading
+import logging
 from typing import Dict, List, Optional
 
 from google import genai
 from backend.core.config import settings
+
+logger = logging.getLogger(__name__)
 from backend.db.session import SessionLocal
 from backend.db.models import Novel
 from backend.services.analysis import EmbeddingSearchEngine
@@ -37,9 +40,9 @@ class ChatbotService:
         DEFAULT_SIMILARITY_THRESHOLD (float): 최소 유사도 임계값
     """
     
-    # 기본 설정값 (클래스 상수)
-    DEFAULT_ALPHA = 0.825  # 최적화된 기본값 (Vector 82.5%, BM25 17.5%)
-    DEFAULT_SIMILARITY_THRESHOLD = 0.2  # Reranker 도입으로 기준 하향 (0.5 -> 0.2)
+    # 기본 설정값 (settings에서 로드)
+    DEFAULT_ALPHA = settings.SEARCH_DEFAULT_ALPHA
+    DEFAULT_SIMILARITY_THRESHOLD = settings.SEARCH_DEFAULT_SIMILARITY_THRESHOLD
 
     def __init__(self):
         """
@@ -58,20 +61,20 @@ class ChatbotService:
         if EmbeddingSearchEngine:
             try:
                 self.engine = EmbeddingSearchEngine()
-                print("[Success] ChatbotService: EmbeddingSearchEngine loaded")
+                logger.info("[Success] ChatbotService: EmbeddingSearchEngine loaded")
             except Exception as e:
-                print(f"[Error] ChatbotService: Failed to load EmbeddingSearchEngine: {e}")
+                logger.error(f"[Error] ChatbotService: Failed to load EmbeddingSearchEngine: {e}")
                 self.engine = None
         else:
             self.engine = None
-        
+
         # Step 2: Google Gemini API 클라이언트 설정
         # 답변 생성을 위한 LLM 클라이언트 초기화
         if settings.GOOGLE_API_KEY:
             self.client = genai.Client(api_key=settings.GOOGLE_API_KEY)
         else:
             self.client = None
-            print("Warning: GOOGLE_API_KEY not set. LLM functionality will be disabled.")
+            logger.warning("GOOGLE_API_KEY not set. LLM functionality will be disabled.")
     
     def find_similar_chunks(
         self,
@@ -98,18 +101,23 @@ class ChatbotService:
             try:
                 # 파일명에서 확장자 제거 (예: "alice.txt" → "alice")
                 search_term = novel_filter.replace('.txt', '')
-                
+
                 # 데이터베이스에서 제목으로 소설 검색 (대소문자 무시)
                 novel = db.query(Novel).filter(Novel.title.ilike(f"%{search_term}%")).first()
                 if novel:
                     novel_id = novel.id
-                    print(f"[Search] Chatbot: Resolved novel_filter '{novel_filter}' to ID {novel_id} ({novel.title})")
+                    logger.info(f"[Search] Chatbot: Resolved novel_filter '{novel_filter}' to ID {novel_id} ({novel.title})")
                 else:
-                    print(f"[Warning] Chatbot: novel_filter '{novel_filter}' not found in DB")
+                    logger.warning(f"[Search] Chatbot: novel_filter '{novel_filter}' not found in DB. 크로스 소설 검색 방지를 위해 검색을 중단합니다.")
+                    return []
             finally:
                 db.close()
         elif novel_id:
-            print(f"[Search] Chatbot: Using direct novel_id {novel_id}")
+            logger.debug(f"[Search] Chatbot: Using direct novel_id {novel_id}")
+        else:
+            # novel_id도 novel_filter도 없으면 크로스 소설 검색이 발생하므로 차단
+            logger.warning("[Search] Chatbot: novel_id와 novel_filter가 모두 없습니다. 크로스 소설 검색 방지를 위해 검색을 중단합니다.")
+            return []
         
         # Step 2: Pinecone 벡터 검색 실행
         try:
@@ -122,21 +130,21 @@ class ChatbotService:
                 keywords=keywords,
                 original_query=original_query or question
             )
-            print(f"[Search] Chatbot: Found {len(results)} results (Novel: {novel_id}, Chapter Context: {chapter_id})")
-            
+            logger.info(f"[Search] Chatbot: Found {len(results)} results (Novel: {novel_id}, Chapter Context: {chapter_id})")
+
             # Step 3: 결과 포맷 변환 및 필터링
             formatted_results = []
             for res in results:
                 similarity = res['similarity']
                 doc = res['document']
                 scene_idx = doc.get('scene_index', '?')
-                
+
                 # 유사도가 임계값 미만이면 제외
                 if similarity < similarity_threshold:
-                    print(f"  - [DROP] Scene {scene_idx}: similarity {similarity:.4f} < {similarity_threshold}")
+                    logger.debug(f"  - [DROP] Scene {scene_idx}: similarity {similarity:.4f} < {similarity_threshold}")
                     continue
-                
-                print(f"  - [KEEP] Scene {scene_idx}: similarity {similarity:.4f}")
+
+                logger.debug(f"  - [KEEP] Scene {scene_idx}: similarity {similarity:.4f}")
                     
                 formatted_results.append({
                     'text': doc.get('original_text', ''),
@@ -151,70 +159,57 @@ class ChatbotService:
             return formatted_results
             
         except Exception as e:
-            print(f"Error during search: {e}")
+            logger.error(f"Error during search: {e}")
             return []
     
-    def generate_answer(self, question: str, context: str) -> str:
+    def generate_answer(self, question: str, context: str, bible: str = "") -> str:
         """
         Google Gemini를 사용하여 질문에 대한 답변을 생성합니다.
-        
+
         RAG (Retrieval-Augmented Generation) 방식:
         1. 검색된 씬들을 컨텍스트로 제공
         2. Gemini가 컨텍스트를 참고하여 답변 생성
         3. 컨텍스트에 정보가 부족하면 LLM의 지식 활용
-        
-        프롬프트 구조:
-        - 역할 정의: 소설 내용을 바탕으로 답변하는 어시스턴트
-        - 답변 형식: [핵심 요약] + [상세 설명] 2단 구조
-        - 컨텍스트: 검색된 씬들 (최대 3,500자)
-        
+
+        Method C: bible 파라미터로 소설 바이블 요약을 프롬프트에 직접 주입.
+
         Args:
             question (str): 사용자 질문
             context (str): 검색된 씬들의 텍스트 (여러 씬이 결합된 형태)
-            
-        Returns:
-            str: 생성된 답변 (마크다운 형식)
-                 형식: [핵심 요약]\n...\n\n[상세 설명]\n...
-                 
-        Example:
-            >>> service = ChatbotService()
-            >>> context = "앨리스는 토끼를 따라 구멍으로 떨어졌다..."
-            >>> answer = service.generate_answer(
-            ...     question="앨리스는 어디로 떨어졌나요?",
-            ...     context=context
-            ... )
-            >>> print(answer)
+            bible (str): Analysis DB에서 추출한 바이블 요약 (선택)
         """
         # Gemini 클라이언트가 초기화되지 않은 경우
         if not self.client:
             return "LLM이 설정되지 않았습니다. GOOGLE_API_KEY를 확인해주세요."
-        
+
+        bible_block = f"\n\n[소설 바이블 (등장인물/관계/사건)]:\n{bible}" if bible else ""
+
         # 프롬프트 구성
-        # - 컨텍스트는 3,500자로 제한 (Gemini 토큰 제한 고려)
+        # - 컨텍스트는 SEARCH_CONTEXT_MAX_CHARS로 제한 (Gemini 토큰 제한 고려)
         # - 답변 형식을 명확히 지정하여 일관된 출력 유도
         # - 할루시네이션 방지: 컨텍스트 외부 지식 사용 금지
-        prompt = f"""다음 문맥을 바탕으로 질문에 답변하세요.
+        prompt = f"""당신은 소설 내용 전용 질의응답 시스템입니다.
+반드시 아래 [소설 문맥]에 있는 내용만 사용하여 답변하세요.
 
-[답변 가이드라인]
-1. **제공된 문맥을 최우선으로 참고하세요.**
-2. **문맥에 직접적인 정답이 없다면, 문맥의 단서들을 종합하여 가장 합리적인 답변을 추론하세요.**
-3. **추론된 답변일 경우, "~로 추정됩니다" 또는 "문맥상 ~인 것으로 보입니다"와 같이 표현하세요.**
-4. **답변에 [Context N]과 같은 출처 표시는 절대 포함하지 마세요.**
+[핵심 규칙]
+1. **[소설 문맥]에 있는 정보만 사용하세요. 사전 학습 지식, 추론, 상상은 절대 사용하지 마세요.**
+2. **[소설 문맥]에 답이 없으면 반드시 "소설에서 해당 내용을 찾을 수 없습니다."라고만 답하세요. 일반 지식이나 추측으로 채우지 마세요.**
+3. **[Context N]과 같은 출처 표시는 포함하지 마세요.**
 
 [답변 형식]
-반드시 다음 형식을 지켜주세요. 두 섹션 사이에는 빈 줄을 두세요.
+두 섹션 사이에는 빈 줄을 두세요.
 
 [핵심 요약]
-(질문에 대한 핵심 답변을 1~2문장으로 요약)
+(소설 문맥에서 찾은 핵심 답변을 1~2문장으로 요약. 문맥에 없으면 "찾을 수 없습니다."로 시작)
 
 [상세 설명]
-(문맥을 바탕으로 한 구체적인 설명과 근거, 추론 내용 포함)
+(소설 문맥에 있는 구체적인 내용과 근거만 서술){bible_block}
 
-문맥:
-{context[:3500]}
-        
+[소설 문맥]:
+{context[:settings.SEARCH_CONTEXT_MAX_CHARS]}
+
 질문: {question}
-        
+
 답변:"""
         
         # Gemini API 호출
@@ -224,12 +219,12 @@ class ChatbotService:
         # - top_k=20: 후보 토큰 제한
         try:
             response = self.client.models.generate_content(
-                model=settings.GEMINI_CHAT_MODEL,  # 예: "gemini-2.5-flash"
+                model=settings.GEMINI_CHAT_MODEL,
                 contents=prompt,
                 config={
-                    'temperature': 0.1,  # 낮은 temperature로 할루시네이션 감소
-                    'top_p': 0.8,        # 확률 분포 제한
-                    'top_k': 20,         # 후보 토큰 제한
+                    'temperature': settings.GEMINI_RESPONSE_TEMPERATURE,
+                    'top_p': settings.GEMINI_RESPONSE_TOP_P,
+                    'top_k': settings.GEMINI_RESPONSE_TOP_K,
                     'max_output_tokens': 1024
                 }
             )
@@ -237,6 +232,120 @@ class ChatbotService:
         except Exception as e:
             return f"답변 생성 중 오류가 발생했습니다: {str(e)}"
     
+    def stream_answer(self, question: str, context: str, bible: str = ""):
+        """Gemini 스트리밍으로 답변을 텍스트 청크 단위로 yield (동기 제너레이터)."""
+        if not self.client:
+            yield "LLM이 설정되지 않았습니다."
+            return
+
+        bible_block = f"\n\n[소설 바이블 (등장인물/관계/사건)]:\n{bible}" if bible else ""
+        prompt = f"""당신은 소설 내용 전용 질의응답 시스템입니다.
+반드시 아래 [소설 문맥]에 있는 내용만 사용하여 답변하세요.
+
+[핵심 규칙]
+1. **[소설 문맥]에 있는 정보만 사용하세요. 사전 학습 지식, 추론, 상상은 절대 사용하지 마세요.**
+2. **[소설 문맥]에 답이 없으면 반드시 "소설에서 해당 내용을 찾을 수 없습니다."라고만 답하세요. 일반 지식이나 추측으로 채우지 마세요.**
+3. **[Context N]과 같은 출처 표시는 포함하지 마세요.**
+
+[답변 형식]
+두 섹션 사이에는 빈 줄을 두세요.
+
+[핵심 요약]
+(소설 문맥에서 찾은 핵심 답변을 1~2문장으로 요약. 문맥에 없으면 "찾을 수 없습니다."로 시작)
+
+[상세 설명]
+(소설 문맥에 있는 구체적인 내용과 근거만 서술){bible_block}
+
+[소설 문맥]:
+{context[:settings.SEARCH_CONTEXT_MAX_CHARS]}
+
+질문: {question}
+
+답변:"""
+
+        try:
+            for chunk in self.client.models.generate_content_stream(
+                model=settings.GEMINI_CHAT_MODEL,
+                contents=prompt,
+                config={
+                    'temperature': settings.GEMINI_RESPONSE_TEMPERATURE,
+                    'top_p': settings.GEMINI_RESPONSE_TOP_P,
+                    'top_k': settings.GEMINI_RESPONSE_TOP_K,
+                    'max_output_tokens': 1024
+                }
+            ):
+                if chunk.text:
+                    yield chunk.text
+        except Exception as e:
+            yield f"오류: {str(e)}"
+
+    def _prepare_context(
+        self,
+        question: str,
+        alpha: float = DEFAULT_ALPHA,
+        similarity_threshold: float = DEFAULT_SIMILARITY_THRESHOLD,
+        novel_id: Optional[int] = None,
+        chapter_id: Optional[int] = None,
+        novel_filter: Optional[str] = None,
+        db=None
+    ) -> Dict:
+        """검색 + 컨텍스트 준비. 스트리밍 엔드포인트에서 분리 사용."""
+        top_chunks = self.hybrid_search(
+            question=question, alpha=alpha, similarity_threshold=similarity_threshold,
+            novel_id=novel_id, chapter_id=chapter_id, novel_filter=novel_filter
+        )
+        if not top_chunks:
+            top_chunks = self.find_similar_chunks(
+                question=question, top_k=5, alpha=alpha,
+                similarity_threshold=similarity_threshold,
+                novel_id=novel_id, chapter_id=chapter_id, novel_filter=novel_filter
+            )
+        if not top_chunks:
+            return {"found_context": False, "context": "", "source": None, "similarity": 0.0, "bible": ""}
+
+        context_texts = []
+        for i, chunk in enumerate(top_chunks):
+            header = f"[Context {i+1}]"
+            if chunk.get('scene_index') is not None:
+                header += f" Scene {chunk['scene_index']}"
+            if chunk.get('summary'):
+                header += f" (Summary: {chunk['summary']})"
+            context_texts.append(f"{header}\n{chunk['text']}")
+        context = "\n\n".join(context_texts)
+
+        best_chunk = top_chunks[0]
+        novel_title = "Unknown Novel"
+        if best_chunk.get('novel_id'):
+            db_local = SessionLocal()
+            try:
+                novel = db_local.query(Novel).filter(Novel.id == best_chunk['novel_id']).first()
+                if novel:
+                    novel_title = novel.title
+            finally:
+                db_local.close()
+
+        bible_summary = ""
+        if db and novel_id:
+            try:
+                from backend.services.analysis_service import AnalysisService
+                bible_summary = AnalysisService.get_bible_summary(db, novel_id, chapter_id)
+            except Exception as e:
+                logger.warning(f"바이블 요약 조회 실패 (novel={novel_id}): {e}")
+
+        return {
+            "found_context": True,
+            "context": context,
+            "source": {
+                "filename": novel_title,
+                "chapter_id": best_chunk.get('chapter_id'),
+                "scene_index": best_chunk.get('scene_index'),
+                "summary": best_chunk.get('summary'),
+                "total_scenes": len(top_chunks)
+            },
+            "similarity": best_chunk.get('similarity', 0.0),
+            "bible": bible_summary
+        }
+
     def warmup(self):
         """
         챗봇 서비스 웜업 (엔진 모델 프리로딩)
@@ -244,7 +353,7 @@ class ChatbotService:
         if self.engine:
             self.engine.warmup()
         else:
-            print("[Warning] ChatbotService: Engine not initialized, skipping warmup.")
+            logger.warning("[Warning] ChatbotService: Engine not initialized, skipping warmup.")
 
     def augment_query(self, question: str) -> str:
         """
@@ -286,10 +395,10 @@ class ChatbotService:
             # 원본 질문과 결합 (원본 질문 보존 보장)
             augmented = f"{question} {keywords}"
             
-            print(f"[Augment] Query Expanded: '{question}' -> '{augmented}'")
+            logger.info(f"[Augment] Query Expanded: '{question}' -> '{augmented}'")
             return augmented
         except Exception as e:
-            print(f"[Warning] Query Augmentation Failed: {e}")
+            logger.warning(f"[Warning] Query Augmentation Failed: {e}")
             return question
 
     def _extract_keywords(self, text: str) -> List[str]:
@@ -308,10 +417,10 @@ class ChatbotService:
             
             # 중복 제거 및 너무 짧은 단어 필터링 (한 글자 명사 제외 등, 상황에 따라 조절)
             unique_keywords = list(dict.fromkeys(keywords))
-            print(f"[Keyword] Keywords Extracted: {unique_keywords}")
+            logger.debug(f"[Keyword] Keywords Extracted: {unique_keywords}")
             return unique_keywords
         except Exception as e:
-            print(f"[Warning] Keyword Extraction Failed: {e}")
+            logger.warning(f"[Warning] Keyword Extraction Failed: {e}")
             return text.split()
 
     def hybrid_search(
@@ -352,17 +461,20 @@ class ChatbotService:
         similarity_threshold: float = DEFAULT_SIMILARITY_THRESHOLD,
         novel_id: Optional[int] = None,
         chapter_id: Optional[int] = None,
-        novel_filter: Optional[str] = None
+        novel_filter: Optional[str] = None,
+        db=None
     ) -> Dict:
         """
         질문에 대한 답변 생성 (전체 파이프라인)
-        
+
         검색 전략:
         1. 하이브리드 검색 (LLM 확장 + Dense + Sparse)
         2. 실패 시 원본 쿼리로 2차 검색 (폴백)
+
+        Method C: db와 novel_id가 있으면 바이블 요약을 조회해 LLM에 주입.
         """
         # 1. 하이브리드 검색 실행
-        print(f"[Search] 원본 질문: '{question}'")
+        logger.info(f"[Search] 원본 질문: '{question}'")
         top_chunks = self.hybrid_search(
             question=question,
             alpha=alpha,
@@ -374,7 +486,7 @@ class ChatbotService:
         
         # 2. 실패 시 원본 쿼리로 2차 검색 (폴백)
         if not top_chunks:
-            print("[Warning] 하이브리드 검색 실패, 원본 쿼리로 재시도...")
+            logger.warning("[Warning] 하이브리드 검색 실패, 원본 쿼리로 재시도...")
             top_chunks = self.find_similar_chunks(
                 question=question,  # 원본 쿼리
                 top_k=5,
@@ -412,8 +524,15 @@ class ChatbotService:
         
         context = "\n\n".join(context_texts)
         
-        # 4. LLM으로 답변 생성
-        answer = self.generate_answer(question, context)
+        # 4. LLM으로 답변 생성 (Method C: 바이블 주입)
+        bible_summary = ""
+        if db and novel_id:
+            try:
+                from backend.services.analysis_service import AnalysisService
+                bible_summary = AnalysisService.get_bible_summary(db, novel_id, chapter_id)
+            except Exception as e:
+                logger.warning(f"바이블 요약 조회 실패 (novel={novel_id}): {e}")
+        answer = self.generate_answer(question, context, bible=bible_summary)
         
         # 가장 높은 유사도 정보
         best_chunk = top_chunks[0]

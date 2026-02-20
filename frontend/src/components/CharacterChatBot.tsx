@@ -7,7 +7,7 @@ import {
 import { toast } from 'sonner';
 import {
     CharacterChatRoom, CharacterChatMessage,
-    generatePersona, createRoom, getRooms, sendMessage, getMessages, updateRoom, deleteRoom
+    generatePersona, createRoom, getRooms, sendMessageStream, getMessages, updateRoom, deleteRoom
 } from '../api/characterChat';
 
 // ------------------------------------------------------------------
@@ -383,31 +383,42 @@ function ChatRoom({ room }: ChatRoomProps) {
         if (!inputText.trim() || loading) return;
 
         const text = inputText;
-        setInputText(''); // Optimistic clear
+        setInputText('');
         setLoading(true);
 
-        // Optimistic UI update
-        const tempMsg: CharacterChatMessage = {
-            id: Date.now(), // Temp ID
-            room_id: room.id,
-            role: 'user',
-            content: text,
-            created_at: new Date().toISOString()
-        };
-        setMessages(prev => [...prev, tempMsg]);
+        // 임시 유저 메시지 + AI 스트리밍 플레이스홀더 동시 추가
+        const tempUserId = Date.now();
+        const streamingId = tempUserId + 1;
+        setMessages(prev => [
+            ...prev,
+            { id: tempUserId, room_id: room.id, role: 'user', content: text, created_at: new Date().toISOString() },
+            { id: streamingId, room_id: room.id, role: 'assistant', content: '', created_at: new Date().toISOString() }
+        ]);
 
         try {
-            const newMessages = await sendMessage(room.id, text);
-            setMessages(prev => {
-                const filtered = prev.filter(m => m.id !== tempMsg.id);
-                return [...filtered, ...newMessages];
-            });
+            await sendMessageStream(
+                room.id,
+                text,
+                // onUserSaved: 임시 유저 메시지 → 실제 메시지로 교체
+                (userMsg) => {
+                    setMessages(prev => prev.map(m => m.id === tempUserId ? userMsg : m));
+                },
+                // onToken: AI 플레이스홀더에 토큰 누적
+                (token) => {
+                    setMessages(prev => prev.map(m =>
+                        m.id === streamingId ? { ...m, content: m.content + token } : m
+                    ));
+                },
+                // onDone: AI 플레이스홀더 → 최종 메시지로 교체
+                (aiMsg) => {
+                    setMessages(prev => prev.map(m => m.id === streamingId ? aiMsg : m));
+                }
+            );
         } catch (error) {
             console.error("Failed to send message:", error);
-            // Revert optimistic update
-            setMessages(prev => prev.filter(m => m.id !== tempMsg.id));
+            setMessages(prev => prev.filter(m => m.id !== tempUserId && m.id !== streamingId));
             toast.error("메시지 전송 실패");
-            setInputText(text); // Restore text
+            setInputText(text);
         } finally {
             setLoading(false);
         }
