@@ -80,6 +80,9 @@ class ChatbotService:
         # augment_query TTL 캐시 (키: question, 값: (augmented_query, timestamp))
         self._augment_cache: Dict[str, tuple] = {}
         self._augment_cache_ttl = 3600  # 1시간
+
+        # multi-query 캐시 (키: question, 값: (queries_list, timestamp))
+        self._multi_query_cache: Dict[str, tuple] = {}
     
     def find_similar_chunks(
         self,
@@ -251,9 +254,10 @@ class ChatbotService:
             novel_id=novel_id, chapter_id=chapter_id, novel_filter=novel_filter
         )
         if not top_chunks:
+            lowered = max(similarity_threshold - 0.1, 0.0)
             top_chunks = self.find_similar_chunks(
-                question=question, top_k=5, alpha=alpha,
-                similarity_threshold=similarity_threshold,
+                question=question, top_k=settings.SEARCH_DEFAULT_TOP_K, alpha=alpha,
+                similarity_threshold=lowered,
                 novel_id=novel_id, chapter_id=chapter_id, novel_filter=novel_filter
             )
         if not top_chunks:
@@ -367,6 +371,59 @@ class ChatbotService:
             logger.warning(f"[Warning] Query Augmentation Failed: {e}")
             return question
 
+    def _generate_multi_queries(self, question: str) -> List[str]:
+        """
+        한 번의 LLM 호출로 원본 질문을 3가지 다른 검색 쿼리로 변환합니다.
+        각 쿼리는 다른 관점/어휘를 사용하여 검색 재현율(recall)을 극대화합니다.
+        TTL 캐시 적용.
+        """
+        # 캐시 확인
+        now = time.time()
+        cached = self._multi_query_cache.get(question)
+        if cached and (now - cached[1]) < self._augment_cache_ttl:
+            logger.info(f"[MultiQuery] Cache hit: '{question}'")
+            return cached[0]
+
+        if not self.client:
+            return [question]
+
+        prompt = f"""당신은 소설 검색 시스템의 쿼리 최적화 전문가입니다.
+사용자의 질문을 검색 엔진에서 관련 장면을 더 잘 찾을 수 있도록 3가지 다른 검색 쿼리로 변환하세요.
+
+[사용자 질문]
+"{question}"
+
+[변환 규칙]
+1번: 원본 질문의 핵심 키워드를 유지하면서 동의어와 관련 키워드를 추가하여 확장
+2번: 질문의 의도를 다른 어휘와 표현으로 재구성
+3번: 답이 포함될 소설 장면의 특징(인물 행동, 대사, 상황)을 묘사하는 형태로 변환
+
+[출력 형식]
+각 쿼리를 한 줄씩, 번호 없이 출력하세요. 설명은 쓰지 마세요.
+
+출력:"""
+        try:
+            response = self.client.models.generate_content(
+                model=settings.GEMINI_CHAT_MODEL,
+                contents=prompt,
+                config={'temperature': 0.3, 'max_output_tokens': 300}
+            )
+            lines = [l.strip().lstrip('0123456789.-) ') for l in response.text.strip().split('\n') if l.strip()]
+            queries = [l for l in lines if len(l) > 3][:3]
+
+            if not queries:
+                queries = [question]
+
+            # 캐시 저장
+            self._multi_query_cache[question] = (queries, now)
+            logger.info(f"[MultiQuery] '{question}' → {len(queries)} queries generated")
+            for i, q in enumerate(queries):
+                logger.info(f"  Query {i+1}: {q}")
+            return queries
+        except Exception as e:
+            logger.warning(f"[MultiQuery] Generation failed: {e}")
+            return [question]
+
     def _extract_keywords(self, text: str) -> List[str]:
         """
         텍스트에서 검색에 유용한 명사 및 핵심 키워드를 추출합니다.
@@ -390,35 +447,51 @@ class ChatbotService:
             return text.split()
 
     def hybrid_search(
-        self, 
-        question: str, 
+        self,
+        question: str,
         novel_id: Optional[int] = None,
         chapter_id: Optional[int] = None,
         novel_filter: Optional[str] = None,
         **kwargs
     ) -> List[Dict]:
         """
-        하이브리드 검색: LLM 가공 + 벡터 검색 + 키워드 검색
+        Multi-Query Hybrid Search: 여러 쿼리 관점으로 검색하여 재현율(recall) 극대화
+
+        1. LLM으로 질문을 3가지 다른 검색 쿼리로 변환
+        2. 각 쿼리로 독립적인 하이브리드 검색 (Dense + Sparse) 실행
+        3. 결과를 (chapter_id, scene_index) 기준으로 병합, 최고 유사도 보존
         """
-        # 1. LLM으로 쿼리 확장
-        augmented = self.augment_query(question)
-        
-        # 2. 확장된 쿼리에서 키워드 추출 (Sparse 검색용)
-        keywords = self._extract_keywords(augmented)
-        
-        # 3. 통합 검색 (Dense + Sparse)
-        # find_similar_chunks 내부의 engine.search가 hybrid score를 계산함
-        results = self.find_similar_chunks(
-            question=augmented,
-            novel_id=novel_id,
-            chapter_id=chapter_id,
-            novel_filter=novel_filter,
-            keywords=keywords,
-            original_query=question,  # 리랭커를 위해 원본 질문 전달
-            **kwargs
-        )
-        
-        return results
+        top_k = kwargs.pop('top_k', settings.SEARCH_DEFAULT_TOP_K)
+
+        # 1. Multi-query 생성 (1회 LLM 호출)
+        queries = self._generate_multi_queries(question)
+
+        # 2. 각 쿼리로 검색 실행 및 결과 병합
+        all_results: Dict[tuple, Dict] = {}
+
+        for q in queries:
+            keywords = self._extract_keywords(q)
+            results = self.find_similar_chunks(
+                question=q,
+                top_k=top_k,
+                novel_id=novel_id,
+                chapter_id=chapter_id,
+                novel_filter=novel_filter,
+                keywords=keywords,
+                original_query=question,  # 리랭커는 항상 원본 질문 사용
+                **kwargs
+            )
+
+            for r in results:
+                key = (r.get('chapter_id'), r.get('scene_index'))
+                if key not in all_results or r['similarity'] > all_results[key]['similarity']:
+                    all_results[key] = r
+
+        # 3. 유사도 기준 정렬
+        merged = sorted(all_results.values(), key=lambda x: x['similarity'], reverse=True)
+        logger.info(f"[MultiQuery] 병합 결과: {len(merged)}건 (쿼리 {len(queries)}개 × top_k={top_k})")
+
+        return merged[:top_k]
 
     def ask(
         self,
@@ -456,7 +529,7 @@ class ChatbotService:
             logger.warning(f"하이브리드 검색 결과 없음. 임계값 {similarity_threshold}→{lowered_threshold}으로 원본 쿼리 재시도")
             top_chunks = self.find_similar_chunks(
                 question=question,
-                top_k=5,
+                top_k=settings.SEARCH_DEFAULT_TOP_K,
                 alpha=alpha,
                 similarity_threshold=lowered_threshold,
                 novel_id=novel_id,

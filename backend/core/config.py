@@ -82,9 +82,10 @@ class Settings(BaseSettings):
     RERANKER_MODEL: str = "BAAI/bge-reranker-v2-m3"
 
     # ===== 검색 설정 =====
-    SEARCH_DEFAULT_ALPHA: float = 0.825          # Vector 82.5%, BM25 17.5%
+    SEARCH_DEFAULT_ALPHA: float = 0.7            # Vector 70%, BM25 30% (한국어 키워드 매칭 강화)
     SEARCH_DEFAULT_SIMILARITY_THRESHOLD: float = 0.2  # Reranker 도입으로 기준 하향
-    SEARCH_CONTEXT_MAX_CHARS: int = 3500         # Gemini 컨텍스트 최대 길이
+    SEARCH_DEFAULT_TOP_K: int = 8                # 검색 후보 수 (더 많은 컨텍스트)
+    SEARCH_CONTEXT_MAX_CHARS: int = 5000         # Gemini 컨텍스트 최대 길이
     GEMINI_RESPONSE_TEMPERATURE: float = 0.1
     GEMINI_RESPONSE_TOP_P: float = 0.8
     GEMINI_RESPONSE_TOP_K: int = 20

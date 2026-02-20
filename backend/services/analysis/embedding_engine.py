@@ -115,7 +115,13 @@ class EmbeddingSearchEngine:
             for doc in docs:
                 text = doc.chunk_text
                 if not text: continue
-                
+
+                # 요약이 있으면 텍스트에 포함 (BM25 키워드 커버리지 확대)
+                metadata = doc.metadata_json or {}
+                summary = metadata.get('summary', '')
+                if summary:
+                    text = f"{summary} {text}"
+
                 # Kiwi 형태소 분석기 적용
                 tokens = [t.form for t in kiwi.tokenize(text)]
                 corpus.append(tokens)
