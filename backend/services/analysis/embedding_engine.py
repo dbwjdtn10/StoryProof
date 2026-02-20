@@ -5,6 +5,8 @@ BAAI/bge-m3 모델을 사용한 임베딩 생성 및 Pinecone 벡터 검색
 
 
 import re
+import time
+import logging
 from typing import List, Dict, Any, Optional
 import numpy as np
 from rank_bm25 import BM25Okapi
@@ -12,6 +14,8 @@ from rank_bm25 import BM25Okapi
 from backend.core.config import settings
 from backend.db.session import SessionLocal
 from backend.db.models import VectorDocument
+
+logger = logging.getLogger(__name__)
 
 # 전역 모델 및 인덱스 캐시 (싱글톤)
 _global_model = None
@@ -55,44 +59,39 @@ class EmbeddingSearchEngine:
         self.bm25_map = _global_bm25_map
         self.corpus_indices_map = _global_corpus_indices_map
 
-    def _init_pinecone(self):
-        """Pinecone 클라이언트 및 인덱스 초기화"""
+    def _init_pinecone(self, max_retries: int = 3):
+        """Pinecone 클라이언트 및 인덱스 초기화 (재시도 포함)"""
         import sys
-        import os
-        try:
-            # 런타임 진단 정보 출력 (개발 시에만 유용)
+        for attempt in range(max_retries):
             try:
-                import pinecone
-                # print(f"[DEBUG] Pinecone Module: {getattr(pinecone, '__file__', 'Unknown')}")
-                # print(f"[DEBUG] Pinecone Version: {getattr(pinecone, '__version__', 'Unknown')}")
-            except:
-                pass
+                from pinecone import Pinecone
+                self.pc = Pinecone(api_key=self.pinecone_api_key)
 
-            from pinecone import Pinecone
-            self.pc = Pinecone(api_key=self.pinecone_api_key)
-            
-            # 인덱스 확인
-            available_indexes = []
-            try:
-                # v3.0.0+ 방식
-                available_indexes = [idx.name for idx in self.pc.list_indexes()]
-            except AttributeError:
-                # v2.x 하위 호환성 (list_indexes가 문자열 리스트 반환)
-                available_indexes = self.pc.list_indexes()
+                available_indexes = []
+                try:
+                    available_indexes = [idx.name for idx in self.pc.list_indexes()]
+                except AttributeError:
+                    available_indexes = self.pc.list_indexes()
 
-            if self.index_name not in available_indexes:
-                print(f"[Warning] Pinecone 인덱스 '{self.index_name}'가 존재하지 않습니다.")
-                print(f"[Index List] 사용 가능한 인덱스: {available_indexes}")
-            else:
-                self.index = self.pc.Index(self.index_name)
-                print(f"[Success] Pinecone 인덱스 연결: {self.index_name}")
-        except Exception as e:
-            error_msg = str(e)
-            print(f"[Error] Pinecone 초기화 실패: {error_msg}")
-            # 만약 패키지 명칭 변경 관련 오류라면 더 명확한 해결 가이드 출력
-            if "renamed" in error_msg.lower():
-                print("💡 해결 방법: 터미널에서 'pip uninstall pinecone-client pinecone' 후 'pip install pinecone'을 실행하세요.")
-                print(f"현재 Python: {sys.executable}")
+                if self.index_name not in available_indexes:
+                    logger.warning(f"Pinecone 인덱스 '{self.index_name}' 없음. 사용 가능: {available_indexes}")
+                else:
+                    self.index = self.pc.Index(self.index_name)
+                    logger.info(f"Pinecone 인덱스 연결 성공: {self.index_name}")
+                return  # 성공 시 종료
+            except Exception as e:
+                error_msg = str(e)
+                if "renamed" in error_msg.lower():
+                    logger.error(f"Pinecone 패키지 충돌: {error_msg}. "
+                                 f"'pip uninstall pinecone-client pinecone && pip install pinecone' 실행 필요. "
+                                 f"Python: {sys.executable}")
+                    return  # 패키지 문제는 재시도 무의미
+                if attempt < max_retries - 1:
+                    wait = 2 ** attempt  # 1s, 2s, 4s
+                    logger.warning(f"Pinecone 초기화 실패 (시도 {attempt+1}/{max_retries}): {e}. {wait}초 후 재시도...")
+                    time.sleep(wait)
+                else:
+                    logger.error(f"Pinecone 초기화 최종 실패 ({max_retries}회 시도): {e}")
     
     def _init_bm25(self, novel_id: int):
         """
@@ -103,7 +102,7 @@ class EmbeddingSearchEngine:
         if novel_id in _global_bm25_map:
             return
             
-        print(f"[Info] Building BM25 Index for Novel {novel_id} (with Kiwi)...")
+        logger.info(f"Building BM25 Index for Novel {novel_id} (with Kiwi)...")
         kiwi = self._get_kiwi()
         db = SessionLocal()
         try:
@@ -126,12 +125,12 @@ class EmbeddingSearchEngine:
                 bm25 = BM25Okapi(corpus)
                 _global_bm25_map[novel_id] = bm25
                 _global_corpus_indices_map[novel_id] = corpus_indices
-                print(f"[Success] BM25 Index built for Novel {novel_id} with {len(corpus)} documents")
+                logger.info(f"BM25 Index built for Novel {novel_id} with {len(corpus)} documents")
             else:
-                print(f"[Warning] No documents found for BM25 (Novel {novel_id})")
+                logger.warning(f"No documents found for BM25 (Novel {novel_id})")
                 
         except Exception as e:
-            print(f"[Error] Failed to build BM25 Index for Novel {novel_id}: {e}")
+            logger.error(f"Failed to build BM25 Index for Novel {novel_id}: {e}")
         finally:
             db.close()
 
@@ -141,9 +140,9 @@ class EmbeddingSearchEngine:
         global _global_model
         
         if _global_model is None:
-            print(f"[Info] 모델 로딩 시작: {self.model_name}")
+            logger.info(f"모델 로딩 시작: {self.model_name}")
             _global_model = SentenceTransformer(self.model_name)
-            print(f"[Success] 모델 로딩 완료: {self.model_name}")
+            logger.info(f"모델 로딩 완료: {self.model_name}")
             
         self.model = _global_model
         return self.model
@@ -156,9 +155,9 @@ class EmbeddingSearchEngine:
         reranker_name = settings.RERANKER_MODEL
 
         if _global_reranker is None:
-            print(f"[Info] Reranker 로딩 시작: {reranker_name}")
+            logger.info(f"Reranker 로딩 시작: {reranker_name}")
             _global_reranker = CrossEncoder(reranker_name, max_length=512)
-            print(f"[Success] Reranker 로딩 완료: {reranker_name}")
+            logger.info(f"Reranker 로딩 완료: {reranker_name}")
             
         self.reranker = _global_reranker
         return self.reranker
@@ -169,9 +168,9 @@ class EmbeddingSearchEngine:
         global _global_kiwi
         
         if _global_kiwi is None:
-            print(f"[Info] Kiwi Tokenizer 로딩 시작...")
+            logger.info("Kiwi Tokenizer 로딩 시작...")
             _global_kiwi = Kiwi()
-            print(f"[Success] Kiwi Tokenizer 로딩 완료")
+            logger.info("Kiwi Tokenizer 로딩 완료")
             
         self.kiwi = _global_kiwi
         return self.kiwi
@@ -183,17 +182,17 @@ class EmbeddingSearchEngine:
         import os
         # os.environ 직접 확인 (pydantic .env 로딩 우회, 기본값 False)
         _enable_reranker = os.environ.get('ENABLE_RERANKER', 'false').strip().lower() in ('true', '1', 'yes')
-        print("[Warmup] EmbeddingSearchEngine: Preloading models...")
+        logger.info("EmbeddingSearchEngine: Preloading models...")
         try:
             self._get_model()    # SentenceTransformer 로드
             if _enable_reranker:
                 self._get_reranker() # CrossEncoder 로드
             else:
-                print("[Warmup] Reranker 비활성화")
+                logger.info("Reranker 비활성화")
             self._get_kiwi()     # Kiwi 형태소 분석기 로드
-            print("[Warmup] EmbeddingSearchEngine: All models loaded successfully.")
+            logger.info("EmbeddingSearchEngine: All models loaded successfully.")
         except Exception as e:
-            print(f"[Error] EmbeddingSearchEngine Warmup Failed: {e}")
+            logger.error(f"EmbeddingSearchEngine Warmup Failed: {e}")
 
     def _split_into_child_chunks(self, text: str) -> List[str]:
         """Parent Scene을 지정된 크기의 Child Chunk로 분할 (Sliding Window)"""
@@ -233,9 +232,9 @@ class EmbeddingSearchEngine:
                     "novel_id": {"$eq": novel_id},
                     "chapter_id": {"$eq": chapter_id}
                 })
-                print(f"[Cleanup] Deleted Pinecone vectors for novel={novel_id}, chapter={chapter_id}")
+                logger.info(f"Deleted Pinecone vectors for novel={novel_id}, chapter={chapter_id}")
             except Exception as e:
-                print(f"[Warning] Pinecone 벡터 삭제 실패 (novel={novel_id}, chapter={chapter_id}): {e}")
+                logger.warning(f"Pinecone 벡터 삭제 실패 (novel={novel_id}, chapter={chapter_id}): {e}")
 
         # BM25 캐시 무효화 (해당 소설 전체 재빌드 유도)
         if novel_id in _global_bm25_map:
@@ -248,7 +247,7 @@ class EmbeddingSearchEngine:
         1. DB에는 Parent Scene 전체 저장 (Bible/View용)
         2. Pinecone에는 Child Chunk 저장 (Search용)
         """
-        print(f"\n📥 {len(documents)}개 씬(Parent) 처리 중... (Parent-Child Strategy)")
+        logger.info(f"{len(documents)}개 씬(Parent) 처리 중... (Parent-Child Strategy)")
         
         db = SessionLocal()
         vectors_to_upsert = []
@@ -322,27 +321,27 @@ class EmbeddingSearchEngine:
                     })
  
                 if (scene_index + 1) % 5 == 0:
-                    print(f"  Parent 씬 처리 중: {scene_index + 1}/{len(documents)}")
+                    logger.info(f"Parent 씬 처리 중: {scene_index + 1}/{len(documents)}")
             
             # Pinecone 업로드 (배치 처리)
             if vectors_to_upsert:
                 # 인덱스 연결 확인 및 재시도
                 if self.index is None:
-                    print("[Warning] Pinecone 인덱스가 연결되지 않았습니다. 재연결을 시도합니다...")
+                    logger.warning("Pinecone 인덱스가 연결되지 않았습니다. 재연결을 시도합니다...")
                     self._init_pinecone()
                     
                 if self.index is None:
                     raise RuntimeError(f"Pinecone 인덱스 '{self.index_name}'에 연결할 수 없습니다. 설정을 확인하세요.")
 
                 batch_size = 100
-                print(f"[Action] 총 {len(vectors_to_upsert)}개의 Child Chunk를 Pinecone에 업로드합니다...")
+                logger.info(f"총 {len(vectors_to_upsert)}개의 Child Chunk를 Pinecone에 업로드합니다...")
                 
                 for i in range(0, len(vectors_to_upsert), batch_size):
                     batch = vectors_to_upsert[i:i + batch_size]
                     self.index.upsert(vectors=batch)
             
             db.commit()
-            print("[Success] Pinecone 업로드 및 DB 저장 완료")
+            logger.info("Pinecone 업로드 및 DB 저장 완료")
             
             # BM25 인덱스 재구축 (문서 추가 시 해당 소설 인덱스 삭제 유도)
             if novel_id in _global_bm25_map:
@@ -352,7 +351,7 @@ class EmbeddingSearchEngine:
             
         except Exception as e:
             db.rollback()
-            print(f"[Error] 문서 저장 실패: {e}")
+            logger.error(f"문서 저장 실패: {e}")
             raise e
         finally:
             db.close()
@@ -385,7 +384,8 @@ class EmbeddingSearchEngine:
         if self.index is None:
             self._init_pinecone()
             if self.index is None:
-                raise RuntimeError(f"Pinecone 인덱스 '{self.index_name}' 연결 실패. 인덱스가 존재하는지 확인하세요.")
+                logger.warning("Pinecone 사용 불가. BM25-only 폴백 검색 수행")
+                return self._bm25_only_search(query, novel_id, top_k, keywords)
 
         # --- 1. Dense Search (Pinecone) ---
         query_embedding = self.embed_text(query)
@@ -451,7 +451,7 @@ class EmbeddingSearchEngine:
                 sparse_parent_ids_to_fetch.add(p_id)
         
         if sparse_parent_ids_to_fetch:
-            print(f"[Hybrid] Fetching {len(sparse_parent_ids_to_fetch)} sparse candidates from Pinecone...")
+            logger.debug(f"Fetching {len(sparse_parent_ids_to_fetch)} sparse candidates from Pinecone...")
             for p_id in sparse_parent_ids_to_fetch:
                 try:
                     parts = p_id.split('_')
@@ -505,7 +505,7 @@ class EmbeddingSearchEngine:
                 else:
                     final_results = rerank_candidates
             except Exception as e:
-                print(f"[Warning] Reranker failed: {e}. Fallback to Hybrid scores.")
+                logger.warning(f"Reranker failed: {e}. Fallback to Hybrid scores.")
                 final_results = rerank_candidates
         else:
             final_results = rerank_candidates
@@ -549,9 +549,68 @@ class EmbeddingSearchEngine:
         
         return hits
 
+    def _bm25_only_search(
+        self,
+        query: str,
+        novel_id: Optional[int],
+        top_k: int = 5,
+        keywords: Optional[List[str]] = None
+    ) -> List[Dict]:
+        """
+        Pinecone 사용 불가 시 BM25(키워드)만으로 검색하는 폴백.
+        DB의 VectorDocument에서 Parent Scene을 직접 조회합니다.
+        """
+        if not novel_id:
+            return []
+
+        self._init_bm25(novel_id)
+        bm25 = _global_bm25_map.get(novel_id)
+        corpus_indices = _global_corpus_indices_map.get(novel_id)
+
+        if not bm25 or not corpus_indices:
+            logger.warning(f"BM25 인덱스 없음 (novel={novel_id}). 폴백 검색 불가")
+            return []
+
+        if keywords:
+            tokenized_query = keywords
+        else:
+            kiwi = self._get_kiwi()
+            tokenized_query = [t.form for t in kiwi.tokenize(query)]
+
+        scores = bm25.get_scores(tokenized_query)
+        top_indices = np.argsort(scores)[::-1][:top_k]
+
+        hits = []
+        db = SessionLocal()
+        try:
+            for idx in top_indices:
+                if scores[idx] <= 0:
+                    continue
+                parent_vector_id = corpus_indices[idx]
+                doc = db.query(VectorDocument).filter(
+                    VectorDocument.vector_id == parent_vector_id
+                ).first()
+                if doc and doc.metadata_json:
+                    scene_data = doc.metadata_json
+                    # BM25 점수를 0~1 범위로 정규화
+                    max_score = float(np.max(scores)) if np.max(scores) > 0 else 1.0
+                    norm_score = float(scores[idx]) / max_score
+                    scene_data['similarity'] = norm_score
+                    hits.append({
+                        'document': scene_data,
+                        'chapter_id': doc.chapter_id,
+                        'similarity': norm_score,
+                        'vector_id': parent_vector_id
+                    })
+        finally:
+            db.close()
+
+        logger.info(f"BM25-only 폴백 검색 완료: {len(hits)}건 (novel={novel_id})")
+        return hits
+
     def _merge_results(
-        self, 
-        dense_matches: Dict[str, Any], 
+        self,
+        dense_matches: Dict[str, Any],
         sparse_scores_dict: Dict[str, float],
         dense_weight: float = 0.7,
         sparse_weight: float = 0.3
@@ -564,11 +623,11 @@ class EmbeddingSearchEngine:
             parent_id = c_id.rsplit('_chunk_', 1)[0]
             dense_score = match.score
             sparse_score = sparse_scores_dict.get(parent_id, 0.0)
-            
+
             # 최종 하이브리드 점수 계산
             match.score = (dense_weight * dense_score) + (sparse_weight * sparse_score)
             combined.append(match)
-            
+
         # 점수 기준 내림차순 정렬
         combined.sort(key=lambda x: x.score, reverse=True)
         return combined

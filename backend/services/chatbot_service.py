@@ -163,8 +163,12 @@ class ChatbotService:
             
             return formatted_results
             
+        except RuntimeError as e:
+            # Pinecone 연결 실패 등 명시적 에러
+            logger.error(f"검색 엔진 오류 (복구 불가): {e}")
+            return []
         except Exception as e:
-            logger.error(f"Error during search: {e}")
+            logger.error(f"검색 중 예기치 않은 오류: {e}", exc_info=True)
             return []
     
     def _build_rag_prompt(self, question: str, context: str, bible: str = "") -> str:
@@ -445,15 +449,16 @@ class ChatbotService:
             chapter_id=chapter_id,
             novel_filter=novel_filter
         )
-        
-        # 2. 실패 시 원본 쿼리로 2차 검색 (폴백)
+
+        # 2. 결과 없으면 임계값을 낮춰 원본 쿼리로 재시도
         if not top_chunks:
-            logger.warning("[Warning] 하이브리드 검색 실패, 원본 쿼리로 재시도...")
+            lowered_threshold = max(similarity_threshold - 0.1, 0.0)
+            logger.warning(f"하이브리드 검색 결과 없음. 임계값 {similarity_threshold}→{lowered_threshold}으로 원본 쿼리 재시도")
             top_chunks = self.find_similar_chunks(
-                question=question,  # 원본 쿼리
+                question=question,
                 top_k=5,
                 alpha=alpha,
-                similarity_threshold=similarity_threshold,
+                similarity_threshold=lowered_threshold,
                 novel_id=novel_id,
                 chapter_id=chapter_id,
                 novel_filter=novel_filter
@@ -464,6 +469,8 @@ class ChatbotService:
             error_msg = "죄송합니다. 관련 내용을 찾을 수 없습니다."
             if not self.engine:
                 error_msg += " (검색 엔진이 초기화되지 않았습니다)"
+            elif self.engine and self.engine.index is None:
+                error_msg += " (Pinecone 연결 실패 - BM25 폴백도 결과 없음)"
             
             return {
                 "answer": error_msg,
