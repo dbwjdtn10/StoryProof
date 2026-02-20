@@ -476,7 +476,7 @@
 
 /* Sidebar Dark Mode Fixes */
 [data-theme="dark"] .dictionary-sidebar {
-    background-color: #1a1614;
+    background-color: #1a1a1a;
     border-right: 1px solid #333;
 }
 
