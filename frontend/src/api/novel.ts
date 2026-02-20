@@ -193,3 +193,45 @@ export const mergeChapters = async (novelId: number, targetId: number, sourceIds
         body: JSON.stringify({ target_id: targetId, source_ids: sourceIds }),
     });
 };
+
+export const exportBible = async (
+    novelId: number,
+    chapterId: number,
+    format: 'txt' | 'pdf' | 'docx',
+    search?: string
+): Promise<void> => {
+    const params = new URLSearchParams({ format });
+    if (search) params.append('search', search);
+
+    const token = localStorage.getItem('token');
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const response = await fetch(`/api/v1/novels/${novelId}/chapters/${chapterId}/bible/export?${params}`, {
+        method: 'GET',
+        headers,
+    });
+
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Export failed');
+    }
+
+    // Content-Disposition 헤더에서 파일명 추출
+    const disposition = response.headers.get('Content-Disposition') || '';
+    let filename = `bible_${novelId}_${chapterId}.${format}`;
+    const filenameMatch = disposition.match(/filename\*=UTF-8''(.+?)(?:;|$)/);
+    if (filenameMatch) {
+        filename = decodeURIComponent(filenameMatch[1]);
+    }
+
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+};

@@ -252,6 +252,251 @@
     }
 }
 
+/* Bible Search & Export Toolbar */
+.bible-toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 12px;
+    background: var(--sidebar);
+    border-bottom: 1px solid var(--sidebar-border);
+}
+
+.bible-search-wrapper {
+    flex: 1;
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.bible-search-icon {
+    position: absolute;
+    left: 8px;
+    color: var(--muted-foreground);
+    pointer-events: none;
+}
+
+.bible-search-input {
+    width: 100%;
+    padding: 6px 28px 6px 28px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--background);
+    color: var(--foreground);
+    font-size: 0.8rem;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.bible-search-input:focus {
+    border-color: var(--primary);
+}
+
+.bible-search-input::placeholder {
+    color: var(--muted-foreground);
+    opacity: 0.7;
+}
+
+.bible-search-clear {
+    position: absolute;
+    right: 4px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--muted-foreground);
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    border-radius: 50%;
+}
+
+.bible-search-clear:hover {
+    background: var(--secondary);
+}
+
+.export-dropdown-wrapper {
+    position: relative;
+}
+
+.bible-export-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--background);
+    color: var(--foreground);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.bible-export-btn:hover {
+    background: var(--secondary);
+    border-color: var(--primary);
+    color: var(--primary);
+}
+
+.bible-export-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.export-dropdown {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 4px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 100;
+    min-width: 160px;
+    overflow: hidden;
+}
+
+.export-dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 10px 14px;
+    border: none;
+    background: transparent;
+    color: var(--foreground);
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: background 0.15s;
+    text-align: left;
+}
+
+.export-dropdown-item:hover {
+    background: var(--secondary);
+}
+
+.export-dropdown-item:not(:last-child) {
+    border-bottom: 1px solid var(--border);
+}
+
+/* Bible search highlight */
+.bible-search-highlight {
+    background-color: rgba(255, 200, 0, 0.4);
+    border-radius: 2px;
+    padding: 0 1px;
+}
+
+/* Bible scene search result */
+.bible-scene-result {
+    transition: background 0.15s;
+}
+
+.bible-scene-result:hover {
+    background: var(--secondary);
+}
+
+/* Dark Mode for Bible Toolbar */
+[data-theme="dark"] .bible-toolbar {
+    background: #1a1a1a;
+    border-bottom-color: #444444;
+}
+
+[data-theme="dark"] .bible-search-input {
+    background: #262626;
+    border-color: #444444;
+    color: #e0e0e0;
+}
+
+[data-theme="dark"] .bible-search-input:focus {
+    border-color: #fafaf9;
+}
+
+[data-theme="dark"] .bible-export-btn {
+    background: #262626;
+    border-color: #444444;
+    color: #e0e0e0;
+}
+
+[data-theme="dark"] .bible-export-btn:hover {
+    background: #333333;
+    border-color: #fafaf9;
+    color: #fafaf9;
+}
+
+[data-theme="dark"] .export-dropdown {
+    background: #262626;
+    border-color: #444444;
+}
+
+[data-theme="dark"] .export-dropdown-item {
+    color: #e0e0e0;
+}
+
+[data-theme="dark"] .export-dropdown-item:hover {
+    background: #333333;
+}
+
+[data-theme="dark"] .export-dropdown-item:not(:last-child) {
+    border-bottom-color: #444444;
+}
+
+[data-theme="dark"] .bible-search-highlight {
+    background-color: rgba(255, 215, 0, 0.35);
+}
+
+/* Sepia Mode for Bible Toolbar */
+[data-theme="sepia"] .bible-toolbar {
+    background: #f5ebe0;
+    border-bottom-color: rgba(107, 79, 58, 0.15);
+}
+
+[data-theme="sepia"] .bible-search-input {
+    background: #fdf6e3;
+    border-color: rgba(107, 79, 58, 0.2);
+    color: #311900;
+}
+
+[data-theme="sepia"] .bible-search-input:focus {
+    border-color: var(--botanical-brown-rich);
+}
+
+[data-theme="sepia"] .bible-export-btn {
+    background: #fdf6e3;
+    border-color: rgba(107, 79, 58, 0.2);
+    color: #311900;
+}
+
+[data-theme="sepia"] .bible-export-btn:hover {
+    background: rgba(107, 79, 58, 0.08);
+    border-color: var(--botanical-brown-rich);
+    color: var(--botanical-brown-rich);
+}
+
+[data-theme="sepia"] .export-dropdown {
+    background: #fdf6e3;
+    border-color: rgba(107, 79, 58, 0.2);
+}
+
+[data-theme="sepia"] .export-dropdown-item {
+    color: #311900;
+}
+
+[data-theme="sepia"] .export-dropdown-item:hover {
+    background: rgba(107, 79, 58, 0.05);
+}
+
+[data-theme="sepia"] .export-dropdown-item:not(:last-child) {
+    border-bottom-color: rgba(107, 79, 58, 0.1);
+}
+
+[data-theme="sepia"] .bible-search-highlight {
+    background-color: rgba(181, 137, 0, 0.35);
+}
+
 /* Collapsible Sections */
 .sidebar-section {
     border-top: 1px solid var(--sidebar-border);

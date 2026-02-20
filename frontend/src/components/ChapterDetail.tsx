@@ -1,4 +1,4 @@
-import { ArrowLeft, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Users, Package, Clock, Save, MapPin } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Users, Package, Clock, Save, MapPin, Search, Download, FileText, File as FileIcon, X } from 'lucide-react';
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Editor } from '@tiptap/react';
 import { NovelEditor } from './NovelEditor';
@@ -7,7 +7,7 @@ import { ReaderToolbar } from './ReaderToolbar';
 import { FloatingMenu } from './FloatingMenu';
 import { ThemeToggle } from './ThemeToggle';
 import { Settings } from './Settings';
-import { getChapter, getChapters, getStoryboardStatus, updateChapter, getChapterBible, reanalyzeChapter, BibleData, Chapter, ChapterListItem, Character, Item, Location } from '../api/novel';
+import { getChapter, getChapters, getStoryboardStatus, updateChapter, getChapterBible, reanalyzeChapter, exportBible, BibleData, Chapter, ChapterListItem, Character, Item, Location } from '../api/novel';
 import { AnalysisSidebar, AnalysisResult } from './AnalysisSidebar';
 import { PredictionSidebar, Message } from './predictions/PredictionSidebar';
 import { requestPrediction, getPredictionTaskStatus, getPredictionHistory, clearPredictionHistory } from '../api/prediction';
@@ -47,6 +47,14 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
     const [sceneTexts, setSceneTexts] = useState<string[]>([]);
 
     const [chapterStatus, setChapterStatus] = useState<'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | undefined>(undefined);
+
+    // Bible search & export
+    const [bibleSearchInput, setBibleSearchInput] = useState('');
+    const [bibleSearchQuery, setBibleSearchQuery] = useState('');
+    const [isExportDropdownOpen, setIsExportDropdownOpen] = useState(false);
+    const [isExporting, setIsExporting] = useState(false);
+    const exportDropdownRef = useRef<HTMLDivElement>(null);
+    const searchDebounceRef = useRef<ReturnType<typeof setTimeout>>();
 
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [isImageGenerating, setIsImageGenerating] = useState(false);
@@ -706,6 +714,123 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
             { name: '토끼 굴', description: '토끼가 들어간 긴 굴', scenes: [2] },
         ], [bibleData]);
 
+    // Bible search filtering
+    const bibleQuery = bibleSearchQuery.trim().toLowerCase();
+
+    const filteredCharacters = useMemo(() => {
+        if (!bibleQuery) return characters;
+        return characters.filter(c =>
+            c.name.toLowerCase().includes(bibleQuery) ||
+            ((c as any).description || '').toLowerCase().includes(bibleQuery) ||
+            (c.traits || []).some(t => t.toLowerCase().includes(bibleQuery))
+        );
+    }, [characters, bibleQuery]);
+
+    const filteredItems = useMemo(() => {
+        if (!bibleQuery) return items;
+        return items.filter(i =>
+            i.name.toLowerCase().includes(bibleQuery) ||
+            ((i as any).description || '').toLowerCase().includes(bibleQuery)
+        );
+    }, [items, bibleQuery]);
+
+    const filteredLocations = useMemo(() => {
+        if (!bibleQuery) return locations;
+        return locations.filter(loc =>
+            loc.name.toLowerCase().includes(bibleQuery) ||
+            ((loc as any).description || '').toLowerCase().includes(bibleQuery)
+        );
+    }, [locations, bibleQuery]);
+
+    const filteredKeyEvents = useMemo(() => {
+        if (!bibleQuery) return key_events;
+        return key_events.filter(e =>
+            (e.summary || '').toLowerCase().includes(bibleQuery)
+        );
+    }, [key_events, bibleQuery]);
+
+    const matchingScenes = useMemo(() => {
+        if (!bibleQuery || !bibleData?.scenes) return [];
+        return bibleData.scenes.filter(s =>
+            (s.original_text || '').toLowerCase().includes(bibleQuery) ||
+            (s.summary || '').toLowerCase().includes(bibleQuery)
+        );
+    }, [bibleData, bibleQuery]);
+
+    // Debounce search input → bibleSearchQuery (300ms)
+    useEffect(() => {
+        if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+        searchDebounceRef.current = setTimeout(() => {
+            setBibleSearchQuery(bibleSearchInput);
+        }, 300);
+        return () => { if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current); };
+    }, [bibleSearchInput]);
+
+    // Auto-expand sections when search has matches
+    useEffect(() => {
+        if (!bibleQuery) return;
+        if (filteredCharacters.length > 0) setIsCharactersOpen(true);
+        if (filteredItems.length > 0) setIsItemsOpen(true);
+        if (filteredLocations.length > 0) setIsLocationsOpen(true);
+        if (filteredKeyEvents.length > 0) setIsKeyEventsOpen(true);
+    }, [bibleQuery, filteredCharacters.length, filteredItems.length, filteredLocations.length, filteredKeyEvents.length]);
+
+    // Close export dropdown on outside click or Escape
+    useEffect(() => {
+        const handleClick = (e: MouseEvent) => {
+            if (exportDropdownRef.current && !exportDropdownRef.current.contains(e.target as Node)) {
+                setIsExportDropdownOpen(false);
+            }
+        };
+        const handleKey = (e: KeyboardEvent) => {
+            if (e.key === 'Escape' && isExportDropdownOpen) {
+                setIsExportDropdownOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClick);
+        document.addEventListener('keydown', handleKey);
+        return () => {
+            document.removeEventListener('mousedown', handleClick);
+            document.removeEventListener('keydown', handleKey);
+        };
+    }, [isExportDropdownOpen]);
+
+    const highlightMatch = (text: string, query: string, maxLen: number = 80): JSX.Element => {
+        if (!query) return <span>{text.length > maxLen ? text.slice(0, maxLen) + '...' : text}</span>;
+        const lowerText = text.toLowerCase();
+        const idx = lowerText.indexOf(query.toLowerCase());
+        if (idx === -1) return <span>{text.length > maxLen ? text.slice(0, maxLen) + '...' : text}</span>;
+
+        // Extract a window around the match
+        const start = Math.max(0, idx - 20);
+        const end = Math.min(text.length, idx + query.length + 40);
+        const prefix = start > 0 ? '...' : '';
+        const suffix = end < text.length ? '...' : '';
+        const before = text.slice(start, idx);
+        const match = text.slice(idx, idx + query.length);
+        const after = text.slice(idx + query.length, end);
+
+        return (
+            <span>
+                {prefix}{before}<mark className="bible-search-highlight">{match}</mark>{after}{suffix}
+            </span>
+        );
+    };
+
+    const handleExport = async (format: 'txt' | 'pdf' | 'docx') => {
+        if (!novelId || !chapterId) return;
+        setIsExporting(true);
+        setIsExportDropdownOpen(false);
+        try {
+            await exportBible(novelId, chapterId, format, bibleSearchQuery || undefined);
+            toast.success(`${format.toUpperCase()} 파일이 다운로드되었습니다.`);
+        } catch (error) {
+            toast.error('내보내기에 실패했습니다.');
+        } finally {
+            setIsExporting(false);
+        }
+    };
+
     // ... (rest of items/timeline)
 
     if (isLoading && !initialLoadDone) {
@@ -933,6 +1058,93 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
             <div className="chapter-detail-layout">
                 {/* Sidebar */}
                 <div className={`dictionary-sidebar ${isSidebarOpen ? 'open' : 'closed'}`}>
+                    {/* Bible Search & Export Toolbar */}
+                    <div className="bible-toolbar">
+                        <div className="bible-search-wrapper">
+                            <Search size={14} className="bible-search-icon" />
+                            <input
+                                type="text"
+                                className="bible-search-input"
+                                placeholder="바이블 검색..."
+                                value={bibleSearchInput}
+                                onChange={(e) => setBibleSearchInput(e.target.value)}
+                            />
+                            {bibleSearchInput && (
+                                <button
+                                    className="bible-search-clear"
+                                    onClick={() => { setBibleSearchInput(''); setBibleSearchQuery(''); }}
+                                >
+                                    <X size={12} />
+                                </button>
+                            )}
+                        </div>
+                        <div className="export-dropdown-wrapper" ref={exportDropdownRef}>
+                            <button
+                                className="bible-export-btn"
+                                onClick={() => setIsExportDropdownOpen(!isExportDropdownOpen)}
+                                disabled={isExporting}
+                                title={bibleSearchInput ? '검색결과 내보내기' : '바이블 내보내기'}
+                            >
+                                {isExporting ? (
+                                    <Clock size={14} className="spin-animation" />
+                                ) : (
+                                    <Download size={14} />
+                                )}
+                            </button>
+                            {isExportDropdownOpen && (
+                                <div className="export-dropdown">
+                                    <button onClick={() => handleExport('txt')} className="export-dropdown-item">
+                                        <FileText size={14} />
+                                        <span>TXT (텍스트)</span>
+                                    </button>
+                                    <button onClick={() => handleExport('pdf')} className="export-dropdown-item">
+                                        <FileIcon size={14} />
+                                        <span>PDF</span>
+                                    </button>
+                                    <button onClick={() => handleExport('docx')} className="export-dropdown-item">
+                                        <FileText size={14} />
+                                        <span>DOCX (워드)</span>
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Matching Scenes (search results) */}
+                    {bibleQuery && matchingScenes.length > 0 && (
+                        <div className="sidebar-section">
+                            <div className="section-header active" style={{ cursor: 'default' }}>
+                                <div className="section-header-content">
+                                    <Search size={18} />
+                                    <h3 className="section-title">본문 검색결과 ({matchingScenes.length}건)</h3>
+                                </div>
+                            </div>
+                            <div className="section-content">
+                                {matchingScenes.map((scene, idx) => (
+                                    <div
+                                        key={idx}
+                                        className="section-item bible-scene-result interactable"
+                                        onClick={() => scrollToScene(scene.scene_index)}
+                                        style={{ cursor: 'pointer' }}
+                                    >
+                                        <div className="item-name" style={{ fontSize: '0.85rem' }}>
+                                            Scene {scene.scene_index + 1}
+                                        </div>
+                                        <div className="item-description" style={{ fontSize: '0.8rem' }}>
+                                            {highlightMatch(scene.original_text, bibleQuery, 100)}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {bibleQuery && matchingScenes.length === 0 && filteredCharacters.length === 0 && filteredItems.length === 0 && filteredLocations.length === 0 && filteredKeyEvents.length === 0 && (
+                        <div style={{ padding: '16px', textAlign: 'center', color: 'var(--muted-foreground)', fontSize: '0.875rem' }}>
+                            검색 결과가 없습니다.
+                        </div>
+                    )}
+
                     {/* Characters Section */}
                     <div className="sidebar-section">
                         <button
@@ -941,7 +1153,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                         >
                             <div className="section-header-content">
                                 <Users size={18} />
-                                <h3 className="section-title">인물</h3>
+                                <h3 className="section-title">인물 {bibleQuery && `(${filteredCharacters.length})`}</h3>
                             </div>
                             {isCharactersOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                         </button>
@@ -949,8 +1161,10 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                             <div className="section-content">
                                 {isBibleLoading ? (
                                     <div style={{ padding: '10px', fontSize: '12px', color: '#999' }}>로딩 중...</div>
+                                ) : filteredCharacters.length === 0 && bibleQuery ? (
+                                    <div style={{ padding: '10px', fontSize: '12px', color: '#999' }}>매칭 결과 없음</div>
                                 ) : (
-                                    characters.map((character, index) => (
+                                    filteredCharacters.map((character, index) => (
                                         <div
                                             key={index}
                                             className="section-item interactable"
@@ -989,13 +1203,15 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                         >
                             <div className="section-header-content">
                                 <Package size={18} />
-                                <h3 className="section-title">아이템</h3>
+                                <h3 className="section-title">아이템 {bibleQuery && `(${filteredItems.length})`}</h3>
                             </div>
                             {isItemsOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                         </button>
                         {isItemsOpen && (
                             <div className="section-content">
-                                {items.map((item, index) => (
+                                {filteredItems.length === 0 && bibleQuery ? (
+                                    <div style={{ padding: '10px', fontSize: '12px', color: '#999' }}>매칭 결과 없음</div>
+                                ) : filteredItems.map((item, index) => (
                                     <div
                                         key={index}
                                         className="section-item interactable"
@@ -1022,13 +1238,15 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                         >
                             <div className="section-header-content">
                                 <MapPin size={18} />
-                                <h3 className="section-title">장소</h3>
+                                <h3 className="section-title">장소 {bibleQuery && `(${filteredLocations.length})`}</h3>
                             </div>
                             {isLocationsOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                         </button>
                         {isLocationsOpen && (
                             <div className="section-content">
-                                {locations.map((location, index) => (
+                                {filteredLocations.length === 0 && bibleQuery ? (
+                                    <div style={{ padding: '10px', fontSize: '12px', color: '#999' }}>매칭 결과 없음</div>
+                                ) : filteredLocations.map((location, index) => (
                                     <div
                                         key={index}
                                         className="section-item interactable"
@@ -1054,13 +1272,15 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                         >
                             <div className="section-header-content">
                                 <Clock size={18} />
-                                <h3 className="section-title">주요 사건</h3>
+                                <h3 className="section-title">주요 사건 {bibleQuery && `(${filteredKeyEvents.length})`}</h3>
                             </div>
                             {isKeyEventsOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                         </button>
                         {isKeyEventsOpen && (
                             <div className="section-content">
-                                {key_events.map((event, index) => (
+                                {filteredKeyEvents.length === 0 && bibleQuery ? (
+                                    <div style={{ padding: '10px', fontSize: '12px', color: '#999' }}>매칭 결과 없음</div>
+                                ) : filteredKeyEvents.map((event, index) => (
                                     <div
                                         key={index}
                                         className="section-item interactable"

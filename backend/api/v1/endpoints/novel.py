@@ -4,13 +4,16 @@
 """
 
 from fastapi import APIRouter, Depends, status, Query, UploadFile, File, Form
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from typing import List, Optional
+from urllib.parse import quote
 
 from backend.db.session import get_db
 from backend.core.security import get_current_user
 from backend.services.novel_service import NovelService
 from backend.services.analysis_service import AnalysisService
+from backend.services.export_service import BibleExportService
 from backend.schemas.novel_schema import (
     NovelCreate, NovelUpdate, NovelResponse, NovelListResponse,
     ChapterResponse, ChapterListItem, ChapterUpdate, ChapterMergeRequest
@@ -186,6 +189,54 @@ def get_storyboard_status(
         "message": chapter.storyboard_message,
         "error": chapter.storyboard_error
     }
+
+@router.get("/{novel_id}/chapters/{chapter_id}/bible/export")
+def export_bible(
+    novel_id: int,
+    chapter_id: int,
+    format: str = Query(..., pattern="^(txt|pdf|docx)$"),
+    search: str = Query("", description="검색 필터"),
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """바이블 데이터를 TXT/PDF/DOCX 파일로 내보내기"""
+    is_admin = _is_admin(current_user)
+    bible_data = AnalysisService.get_chapter_bible(db, novel_id, chapter_id, current_user.id, is_admin)
+
+    # 소설 제목 가져오기
+    novel = NovelService.get_novel(db, novel_id, current_user.id)
+    title = getattr(novel, "title", "")
+
+    # 검색 필터 적용
+    if search.strip():
+        bible_data = BibleExportService.filter_bible_data(bible_data, search)
+
+    # 포맷별 내보내기
+    if format == "txt":
+        content_bytes = BibleExportService.export_txt(bible_data, title)
+        media_type = "text/plain; charset=utf-8"
+        ext = "txt"
+    elif format == "pdf":
+        content_bytes = BibleExportService.export_pdf(bible_data, title)
+        media_type = "application/pdf"
+        ext = "pdf"
+    else:  # docx
+        content_bytes = BibleExportService.export_docx(bible_data, title)
+        media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        ext = "docx"
+
+    # 소설 제목을 파일명에 포함 (안전한 문자만)
+    safe_title = "".join(c for c in title if c.isalnum() or c in " _-").strip()[:30]
+    filename = f"{safe_title}_바이블.{ext}" if safe_title else f"bible_{novel_id}_{chapter_id}.{ext}"
+    encoded_filename = quote(filename)
+
+    return Response(
+        content=content_bytes,
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f"attachment; filename=\"{filename}\"; filename*=UTF-8''{encoded_filename}"
+        },
+    )
 
 @router.get("/{novel_id}/chapters/{chapter_id}/bible")
 def get_chapter_bible(
