@@ -36,7 +36,7 @@
     background-image: url('/static/images/loginbackground.png');
     background-size: cover;
     background-position: center;
-    opacity: 0.45;
+    opacity: 0.6;
     z-index: 0;
 }
 
@@ -352,7 +352,7 @@
 
 /* Light Mode (White) Specific Styles */
 [data-theme="light"] .login-container::before {
-    opacity: 0.45;
+    opacity: 0.6;
 }
 
 /* Dark Mode Styles for Brand (adapted to maintain warm aesthetic) */
@@ -397,5 +397,6 @@
 
 /* Sepia Mode Specific Styles */
 [data-theme="sepia"] .login-container::before {
-    opacity: 0.95;
+    opacity: 0.8;
+    filter: saturate(2);
 }

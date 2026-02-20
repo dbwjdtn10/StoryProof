@@ -20,7 +20,7 @@
     background-image: url('/static/images/loginbackground.png');
     background-size: cover;
     background-position: center;
-    opacity: 0.45;
+    opacity: 0.6;
     z-index: 0;
 }
 
@@ -314,7 +314,7 @@
 
 [data-theme="dark"] .upload-container::before {
     opacity: 0.1;
-    filter: brightness(0.8) contrast(1.1);
+    filter: brightness(0.85) contrast(1.1);
 }
 
 /* File Merge Theme (Dark Mode) Overrides */
@@ -356,8 +356,8 @@
 
 /* Sepia Mode Override */
 [data-theme="sepia"] .upload-container::before {
-    opacity: 0.95;
-    filter: contrast(0.95);
+    opacity: 0.8;
+    filter: saturate(2);
 }
 
 /* File Merge Button Dark Mode */
