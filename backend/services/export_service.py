@@ -246,7 +246,7 @@ class BibleExportService:
                 body_text(s.get("original_text", ""))
                 pdf.ln(5)
 
-        return pdf.output()
+        return bytes(pdf.output())
 
     @staticmethod
     def export_docx(bible_data: Dict[str, Any], title: str = "") -> bytes:
