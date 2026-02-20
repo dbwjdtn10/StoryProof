@@ -8,6 +8,7 @@ import { FloatingMenu } from './FloatingMenu';
 import { ThemeToggle } from './ThemeToggle';
 import { Settings } from './Settings';
 import { getChapter, getChapters, getStoryboardStatus, updateChapter, getChapterBible, reanalyzeChapter, exportBible, BibleData, Chapter, ChapterListItem, Character, Item, Location } from '../api/novel';
+import { API_BASE_URL } from '../api/client';
 import { AnalysisSidebar, AnalysisResult } from './AnalysisSidebar';
 import { PredictionSidebar, Message } from './predictions/PredictionSidebar';
 import { requestPrediction, getPredictionTaskStatus, getPredictionHistory, clearPredictionHistory } from '../api/prediction';
@@ -411,7 +412,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                 ? sceneTexts.join('\n\n')
                 : content;
 
-            const response = await fetch(`/api/v1/analysis/consistency`, {
+            const response = await fetch(`${API_BASE_URL}/analysis/consistency`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -436,7 +437,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                     return;
                 }
                 try {
-                    const statusRes = await fetch(`/api/v1/analysis/task/${task_id}`);
+                    const statusRes = await fetch(`${API_BASE_URL}/analysis/task/${task_id}`);
                     const data = await statusRes.json();
 
                     if (data.status === "COMPLETED") {

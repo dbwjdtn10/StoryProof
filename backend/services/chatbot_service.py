@@ -84,9 +84,12 @@ class ChatbotService:
         self._novel_title_cache: Dict[int, str] = {}
     
     def _get_novel_title(self, novel_id: int) -> str:
-        """소설 제목 조회 (인메모리 캐시, 최대 50건)."""
+        """소설 제목 조회 (인메모리 캐시, 최대 50건, LRU eviction)."""
         if novel_id in self._novel_title_cache:
-            return self._novel_title_cache[novel_id]
+            # LRU: 접근된 항목을 dict 끝으로 이동 (OrderedDict 효과)
+            title = self._novel_title_cache.pop(novel_id)
+            self._novel_title_cache[novel_id] = title
+            return title
         db = SessionLocal()
         try:
             novel = db.query(Novel).filter(Novel.id == novel_id).first()
@@ -94,26 +97,26 @@ class ChatbotService:
         finally:
             db.close()
         if len(self._novel_title_cache) >= 50:
-            # 캐시 절반 제거
-            keys = list(self._novel_title_cache.keys())
-            for k in keys[:len(keys) // 2]:
-                del self._novel_title_cache[k]
+            # LRU: 가장 먼저 삽입된(가장 오래 미사용) 항목 제거
+            oldest_key = next(iter(self._novel_title_cache))
+            del self._novel_title_cache[oldest_key]
         self._novel_title_cache[novel_id] = title
         return title
 
     def _trim_cache(self, cache: Dict[str, tuple]) -> None:
-        """캐시 크기가 최대치를 초과하면 만료 항목 제거 후, 여전히 초과 시 가장 오래된 절반 제거."""
+        """LRU 캐시 관리: 만료 항목 제거 → 초과 시 최근 미사용 25% 제거."""
         if len(cache) <= self._cache_max_size:
             return
         now = time.time()
         # 1차: 만료된 항목 제거
-        expired = [k for k, v in cache.items() if (now - v[1]) >= self._augment_cache_ttl]
+        expired = [k for k, v in cache.items() if (now - v[-1]) >= self._augment_cache_ttl]
         for k in expired:
             del cache[k]
-        # 2차: 여전히 초과 시 가장 오래된 절반 제거
+        # 2차: 여전히 초과 시 LRU 25% 제거 (절반 대신 1/4만 제거하여 캐시 활용률 향상)
         if len(cache) > self._cache_max_size:
-            sorted_keys = sorted(cache.keys(), key=lambda k: cache[k][1])
-            for k in sorted_keys[:len(cache) // 2]:
+            sorted_keys = sorted(cache.keys(), key=lambda k: cache[k][-1])
+            remove_count = max(len(cache) // 4, len(cache) - self._cache_max_size)
+            for k in sorted_keys[:remove_count]:
                 del cache[k]
 
     def find_similar_chunks(
@@ -287,10 +290,12 @@ class ChatbotService:
         )
         if not top_chunks:
             lowered = max(similarity_threshold - 0.1, 0.0)
+            fallback_kw = self._extract_keywords(question)
             top_chunks = self.find_similar_chunks(
                 question=question, top_k=settings.SEARCH_DEFAULT_TOP_K, alpha=alpha,
                 similarity_threshold=lowered,
-                novel_id=novel_id, chapter_id=chapter_id, novel_filter=novel_filter
+                novel_id=novel_id, chapter_id=chapter_id, novel_filter=novel_filter,
+                keywords=fallback_kw, original_query=question
             )
         if not top_chunks:
             return {"found_context": False, "context": "", "source": None, "similarity": 0.0, "bible": ""}
@@ -345,11 +350,13 @@ class ChatbotService:
         각 쿼리는 다른 관점/어휘를 사용하여 검색 재현율(recall)을 극대화합니다.
         TTL 캐시 적용.
         """
-        # 캐시 확인
+        # 캐시 확인 (LRU: 접근 시 타임스탬프 갱신)
         now = time.time()
         cached = self._multi_query_cache.get(question)
         if cached and (now - cached[1]) < self._augment_cache_ttl:
             logger.info(f"[MultiQuery] Cache hit: '{question}'")
+            # 접근 시간 갱신 (LRU)
+            self._multi_query_cache[question] = (cached[0], cached[1], now)
             return cached[0]
 
         if not self.client:
@@ -382,9 +389,9 @@ class ChatbotService:
             if not queries:
                 queries = [question]
 
-            # 캐시 저장 (크기 제한)
+            # 캐시 저장 (크기 제한, LRU: created_at, last_access 포함)
             self._trim_cache(self._multi_query_cache)
-            self._multi_query_cache[question] = (queries, now)
+            self._multi_query_cache[question] = (queries, now, now)
             logger.info(f"[MultiQuery] '{question}' → {len(queries)} queries generated")
             for i, q in enumerate(queries):
                 logger.info(f"  Query {i+1}: {q}")
@@ -395,20 +402,15 @@ class ChatbotService:
 
     def _extract_keywords(self, text: str) -> List[str]:
         """
-        텍스트에서 검색에 유용한 명사 및 핵심 키워드를 추출합니다.
-        Kiwi 형태소 분석기를 사용합니다.
+        텍스트에서 검색에 유용한 내용어 키워드를 추출합니다.
+        EmbeddingSearchEngine._tokenize_for_bm25와 동일한 POS 필터를 사용하여 일관성 보장.
         """
-        if not self.engine or not hasattr(self.engine, '_get_kiwi'):
+        if not self.engine or not hasattr(self.engine, '_tokenize_for_bm25'):
             return text.split()
-            
+
         try:
-            kiwi = self.engine._get_kiwi()
-            # NNG(일반 명사), NNP(고유 명사), SL(외국어) 위주로 추출
-            tokens = kiwi.tokenize(text)
-            keywords = [t.form for t in tokens if t.tag in ['NNG', 'NNP', 'SL'] or len(t.form) > 1]
-            
-            # 중복 제거 및 너무 짧은 단어 필터링 (한 글자 명사 제외 등, 상황에 따라 조절)
-            unique_keywords = list(dict.fromkeys(keywords))
+            tokens = self.engine._tokenize_for_bm25(text)
+            unique_keywords = list(dict.fromkeys(tokens))
             logger.debug(f"[Keyword] Keywords Extracted: {unique_keywords}")
             return unique_keywords
         except Exception as e:
@@ -448,21 +450,26 @@ class ChatbotService:
                 **kwargs
             )
 
-        # 1. Multi-query 생성 (1회 LLM 호출)
+        # 1. 원본 질문에서 키워드 1회 추출 (모든 쿼리에서 재사용)
+        base_keywords = self._extract_keywords(question)
+
+        # 2. Multi-query 생성 (1회 LLM 호출)
         queries = self._generate_multi_queries(question)
 
-        # 2. 각 쿼리로 검색 실행 및 결과 병합
+        # 3. 각 쿼리로 검색 실행 및 결과 병합
         all_results: Dict[tuple, Dict] = {}
 
         for q in queries:
-            keywords = self._extract_keywords(q)
+            # 생성된 쿼리 고유 키워드 추출 후 원본 키워드와 합침
+            q_keywords = self._extract_keywords(q)
+            merged_keywords = list(dict.fromkeys(base_keywords + q_keywords))
             results = self.find_similar_chunks(
                 question=q,
                 top_k=top_k,
                 novel_id=novel_id,
                 chapter_id=chapter_id,
                 novel_filter=novel_filter,
-                keywords=keywords,
+                keywords=merged_keywords,
                 original_query=question,  # 리랭커는 항상 원본 질문 사용
                 **kwargs
             )
@@ -508,10 +515,11 @@ class ChatbotService:
             novel_filter=novel_filter
         )
 
-        # 2. 결과 없으면 임계값을 낮춰 원본 쿼리로 재시도
+        # 2. 결과 없으면 임계값을 낮춰 원본 쿼리로 재시도 (키워드 포함)
         if not top_chunks:
             lowered_threshold = max(similarity_threshold - 0.1, 0.0)
             logger.warning(f"하이브리드 검색 결과 없음. 임계값 {similarity_threshold}→{lowered_threshold}으로 원본 쿼리 재시도")
+            fallback_keywords = self._extract_keywords(question)
             top_chunks = self.find_similar_chunks(
                 question=question,
                 top_k=settings.SEARCH_DEFAULT_TOP_K,
@@ -519,7 +527,9 @@ class ChatbotService:
                 similarity_threshold=lowered_threshold,
                 novel_id=novel_id,
                 chapter_id=chapter_id,
-                novel_filter=novel_filter
+                novel_filter=novel_filter,
+                keywords=fallback_keywords,
+                original_query=question
             )
 
         # 3. 여전히 유사한 스토리보드가 없는 경우

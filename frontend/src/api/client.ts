@@ -1,4 +1,4 @@
-const API_BASE_URL = `${window.location.protocol}//${window.location.host}/api/v1`;
+export const API_BASE_URL = `${window.location.protocol}//${window.location.host}/api/v1`;
 
 export async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
     const url = `${API_BASE_URL}${endpoint}`;

@@ -117,8 +117,7 @@ class EmbeddingSearchEngine:
             if novel_id in _global_bm25_map:
                 return
 
-        logger.info(f"Building BM25 Index for Novel {novel_id} (with Kiwi)...")
-        kiwi = self._get_kiwi()
+        logger.info(f"Building BM25 Index for Novel {novel_id} (with Kiwi POS filtering)...")
         db = SessionLocal()
         try:
             # 해당 소설의 Parent Scene 텍스트만 로드
@@ -137,8 +136,8 @@ class EmbeddingSearchEngine:
                 if summary:
                     text = f"{summary} {text}"
 
-                # Kiwi 형태소 분석기 적용
-                tokens = [t.form for t in kiwi.tokenize(text)]
+                # Kiwi 형태소 분석기 적용 (POS 필터링: 내용어만)
+                tokens = self._tokenize_for_bm25(text)
                 corpus.append(tokens)
                 corpus_indices.append(doc.vector_id)
 
@@ -184,18 +183,26 @@ class EmbeddingSearchEngine:
         self.reranker = _global_reranker
         return self.reranker
 
+    # BM25에 사용할 품사 태그 (내용어만 선별)
+    _BM25_POS_TAGS = frozenset({'NNG', 'NNP', 'NNB', 'VV', 'VA', 'SL', 'SH'})
+
     def _get_kiwi(self):
         """Kiwi 형태소 분석기 로드 및 반환 (Lazy Loading & Singleton)"""
         from kiwipiepy import Kiwi
         global _global_kiwi
-        
+
         if _global_kiwi is None:
             logger.info("Kiwi Tokenizer 로딩 시작...")
             _global_kiwi = Kiwi()
             logger.info("Kiwi Tokenizer 로딩 완료")
-            
+
         self.kiwi = _global_kiwi
         return self.kiwi
+
+    def _tokenize_for_bm25(self, text: str) -> List[str]:
+        """BM25용 토큰화: 내용어(명사/동사/형용사/외국어)만 추출하여 검색 정밀도 향상"""
+        kiwi = self._get_kiwi()
+        return [t.form for t in kiwi.tokenize(text) if t.tag in self._BM25_POS_TAGS]
 
     def warmup(self):
         """
@@ -442,8 +449,7 @@ class EmbeddingSearchEngine:
                 if keywords:
                     tokenized_query = keywords
                 else:
-                    kiwi = self._get_kiwi()
-                    tokenized_query = [t.form for t in kiwi.tokenize(query)]
+                    tokenized_query = self._tokenize_for_bm25(query)
             
                 sparse_scores = bm25.get_scores(tokenized_query)
                 
@@ -532,40 +538,43 @@ class EmbeddingSearchEngine:
         else:
             final_results = rerank_candidates
 
-        # --- 5. Result Formatting & Parent Aggregation ---
+        # --- 5. Result Formatting & Parent Aggregation (Batch DB query) ---
         seen_keys = set()
+        unique_matches = []  # (match, parent_vector_id)
+        for match in final_results:
+            scene_index = int(match.metadata.get('scene_index'))
+            match_chapter_id = match.metadata.get('chapter_id') or chapter_id
+            key = (match_chapter_id, scene_index)
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
+            parent_vector_id = f"novel_{match.metadata.get('novel_id')}_chap_{match_chapter_id}_scene_{scene_index}"
+            unique_matches.append((match, parent_vector_id))
+            if len(unique_matches) >= top_k:
+                break
+
         hits = []
         db = SessionLocal()
-        
         try:
-            for match in final_results:
-                scene_index = int(match.metadata.get('scene_index'))
-                match_chapter_id = match.metadata.get('chapter_id') or chapter_id
-                
-                key = (match_chapter_id, scene_index)
-                if key in seen_keys: continue
-                seen_keys.add(key)
-                
-                parent_vector_id = f"novel_{match.metadata.get('novel_id')}_chap_{match_chapter_id}_scene_{scene_index}"
-                    
-                doc = db.query(VectorDocument).filter(
-                    VectorDocument.vector_id == parent_vector_id
-                ).first()
-                
+            # 배치 DB 조회 (N+1 → 1 쿼리)
+            parent_ids = [pid for _, pid in unique_matches]
+            docs = db.query(VectorDocument).filter(
+                VectorDocument.vector_id.in_(parent_ids)
+            ).all()
+            doc_map = {d.vector_id: d for d in docs}
+
+            for match, parent_vector_id in unique_matches:
+                doc = doc_map.get(parent_vector_id)
                 if doc:
                     scene_data = doc.metadata_json
                     scene_data['matched_chunk'] = match.metadata.get('text', '')
                     scene_data['similarity'] = match.score
-                    
                     hits.append({
                         'document': scene_data,
-                        'chapter_id': match_chapter_id,
+                        'chapter_id': match.metadata.get('chapter_id') or chapter_id,
                         'similarity': match.score,
                         'vector_id': match.id
                     })
-                
-                if len(hits) >= top_k:
-                    break
         finally:
             db.close()
         
@@ -596,8 +605,7 @@ class EmbeddingSearchEngine:
         if keywords:
             tokenized_query = keywords
         else:
-            kiwi = self._get_kiwi()
-            tokenized_query = [t.form for t in kiwi.tokenize(query)]
+            tokenized_query = self._tokenize_for_bm25(query)
 
         scores = bm25.get_scores(tokenized_query)
         top_indices = np.argsort(scores)[::-1][:top_k]

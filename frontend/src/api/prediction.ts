@@ -2,7 +2,9 @@
  * Story Prediction API Service
  */
 
-const API_BASE_URL = `${window.location.protocol}//${window.location.host}/api/v1/prediction`;
+import { API_BASE_URL } from './client';
+
+const PREDICTION_URL = `${PREDICTION_URL}/prediction`;
 
 export interface PredictionTaskResponse {
     task_id: string;
@@ -19,7 +21,7 @@ export interface PredictionHistoryItem {
 }
 
 export const requestPrediction = async (novelId: number, text: string): Promise<PredictionTaskResponse> => {
-    const response = await fetch(`${API_BASE_URL}/request`, {
+    const response = await fetch(`${PREDICTION_URL}/request`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ novel_id: novelId, text })
@@ -33,7 +35,7 @@ export const requestPrediction = async (novelId: number, text: string): Promise<
 };
 
 export const getPredictionTaskStatus = async (taskId: string): Promise<PredictionTaskResponse> => {
-    const response = await fetch(`${API_BASE_URL}/task/${taskId}`);
+    const response = await fetch(`${PREDICTION_URL}/task/${taskId}`);
 
     if (!response.ok) {
         throw new Error("Failed to get task status");
@@ -43,7 +45,7 @@ export const getPredictionTaskStatus = async (taskId: string): Promise<Predictio
 };
 
 export const getPredictionHistory = async (novelId: number): Promise<{ history: PredictionHistoryItem[] }> => {
-    const response = await fetch(`${API_BASE_URL}/history/${novelId}`);
+    const response = await fetch(`${PREDICTION_URL}/history/${novelId}`);
 
     if (!response.ok) {
         throw new Error("Failed to get prediction history");
@@ -53,7 +55,7 @@ export const getPredictionHistory = async (novelId: number): Promise<{ history: 
 };
 
 export const clearPredictionHistory = async (novelId: number): Promise<{ deleted: number }> => {
-    const response = await fetch(`${API_BASE_URL}/history/${novelId}`, {
+    const response = await fetch(`${PREDICTION_URL}/history/${novelId}`, {
         method: 'DELETE'
     });
 

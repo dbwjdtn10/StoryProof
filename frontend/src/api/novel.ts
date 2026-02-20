@@ -1,5 +1,5 @@
 
-import { request } from './client';
+import { request, API_BASE_URL } from './client';
 
 export interface Novel {
     id: number;
@@ -82,7 +82,7 @@ export const uploadChapter = async (
     }
     // Note: Content-Type for FormData is automatically set by browser
 
-    const response = await fetch(`/api/v1/novels/${novelId}/chapters/upload`, {
+    const response = await fetch(`${API_BASE_URL}/novels/${novelId}/chapters/upload`, {
         method: 'POST',
         headers: headers,
         body: formData,
@@ -207,7 +207,7 @@ export const exportBible = async (
     const headers: Record<string, string> = {};
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
-    const response = await fetch(`/api/v1/novels/${novelId}/chapters/${chapterId}/bible/export?${params}`, {
+    const response = await fetch(`${API_BASE_URL}/novels/${novelId}/chapters/${chapterId}/bible/export?${params}`, {
         method: 'GET',
         headers,
     });

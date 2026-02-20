@@ -1,6 +1,7 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
 import { toast } from 'sonner';
 import { Mail, Lock, Eye, EyeOff, User, ArrowLeft } from 'lucide-react';
+import { API_BASE_URL } from './api/client';
 import logoImg from './assets/logo.png';
 import splashImg1 from './assets/KakaoTalk_20260219_151600086_01.png';
 import splashImg2 from './assets/KakaoTalk_20260219_151600086_02.png';
@@ -41,7 +42,7 @@ export default function App() {
 
     const checkReady = async () => {
       try {
-        const res = await fetch('/api/v1/health/ready');
+        const res = await fetch(`${API_BASE_URL}/health/ready`);
         if (res.ok && mounted) {
           const data = await res.json();
           if (data.ready) {
