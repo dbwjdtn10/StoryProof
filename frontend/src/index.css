@@ -1066,6 +1066,57 @@ html {
   font-size: var(--font-size);
 }
 
+/* Theme transition */
+body {
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Loading skeleton */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.skeleton-loader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  gap: 16px;
+  animation: fadeIn 0.3s ease;
+}
+
+.skeleton-bar {
+  border-radius: 8px;
+  background-color: var(--muted);
+  animation: pulse 1.5s infinite;
+}
+
+.skeleton-wide {
+  width: 256px;
+  height: 32px;
+}
+
+.skeleton-narrow {
+  width: 192px;
+  height: 16px;
+  border-radius: 4px;
+}
+
+/* Accessibility: Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 @property --tw-border-style {
   syntax: "*";
   inherits: false;

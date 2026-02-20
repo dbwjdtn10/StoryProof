@@ -10,6 +10,7 @@ class ImageGenerationRequest(BaseModel):
     entity_type: str  # 'characters', 'items', 'locations'
     entity_name: str
     description: Optional[str] = None
+    force_regenerate: bool = False
 
 
 class ImageGenerationResponse(BaseModel):

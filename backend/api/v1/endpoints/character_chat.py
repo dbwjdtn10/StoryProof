@@ -353,6 +353,22 @@ def _fetch_character_bible(
     return "\n\n".join(parts)[:400]
 
 
+_SIMPLE_MESSAGE_PATTERNS = frozenset({
+    '안녕', '네', '응', '어', '예', '고마워', '감사', '잘가', '뭐해',
+    '그래', '그래?', '진짜?', '정말?', '헐', '오', '와', '대박', 'ㅋㅋ',
+    'hi', 'hello', 'bye', 'ok', 'yes', 'no', 'thanks', 'thx',
+    'ㅎㅎ', 'ㅋ', 'ㅠㅠ', 'ㅎ', '굿', '좋아', '싫어', '몰라',
+})
+
+
+def _is_simple_message(text: str) -> bool:
+    """인사/단답 등 RAG 검색이 불필요한 단순 메시지 판별."""
+    stripped = text.strip()
+    if len(stripped) <= 5:
+        return True
+    return stripped.lower() in _SIMPLE_MESSAGE_PATTERNS
+
+
 async def _perform_rag_search(
     db: Session, chatbot_service, room: CharacterChatRoom, message_content: str
 ) -> str:
@@ -456,9 +472,13 @@ async def _prepare_message_context(
         CharacterChatMessage.room_id == room.id
     ).order_by(CharacterChatMessage.created_at).all()
 
-    # 3. RAG + 바이블
+    # 3. RAG + 바이블 (단순 메시지는 RAG 스킵)
     chatbot_service = get_chatbot_service()
-    rag_context = await _perform_rag_search(db, chatbot_service, room, message_content)
+    if _is_simple_message(message_content):
+        logger.info(f"[CharacterChat] RAG skipped (simple message): '{message_content}'")
+        rag_context = ""
+    else:
+        rag_context = await _perform_rag_search(db, chatbot_service, room, message_content)
     char_bible = _fetch_character_bible(db, room.novel_id, room.chapter_id, room.character_name)
     bible_prefix = f"### [캐릭터 설정] ###\n{char_bible}\n\n" if char_bible else ""
     memory_block = rag_context if rag_context else "[이 질문과 관련된 소설 장면을 찾지 못했습니다.]"

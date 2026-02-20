@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { toast } from 'sonner';
 import { Mail, Lock, Eye, EyeOff, User, ArrowLeft } from 'lucide-react';
 import logoImg from './assets/logo.png';
@@ -7,14 +7,16 @@ import splashImg2 from './assets/KakaoTalk_20260219_151600086_02.png';
 import splashImg3 from './assets/KakaoTalk_20260219_151600086_03.png';
 import splashImg4 from './assets/KakaoTalk_20260219_151600086_04.png';
 import splashImg5 from './assets/KakaoTalk_20260219_151600086.png';
-import { ChapterDetail } from './components/ChapterDetail';
-import { FileUpload } from './components/FileUpload';
 import { ThemeToggle } from './components/ThemeToggle';
-import { CharacterChatBot } from './components/CharacterChatBot';
-import { LandingPage } from './components/LandingPage';
 import { register, login } from './api/auth';
 import { getNovels, createNovel, Novel } from './api/novel';
 import { SplashScreen } from './components/SplashScreen';
+
+// Lazy-loaded 화면 컴포넌트 (코드 스플리팅)
+const ChapterDetail = lazy(() => import('./components/ChapterDetail').then(m => ({ default: m.ChapterDetail })));
+const FileUpload = lazy(() => import('./components/FileUpload').then(m => ({ default: m.FileUpload })));
+const CharacterChatBot = lazy(() => import('./components/CharacterChatBot').then(m => ({ default: m.CharacterChatBot })));
+const LandingPage = lazy(() => import('./components/LandingPage').then(m => ({ default: m.LandingPage })));
 
 const SPLASH_IMAGES = [splashImg1, splashImg2, splashImg3, splashImg4, splashImg5];
 
@@ -161,32 +163,51 @@ export default function App() {
   // Landing Screen
   if (currentScreen === 'landing') {
     return (
-      <LandingPage
-        onLogin={() => setCurrentScreen('login')}
-        onSignup={() => setCurrentScreen('signup')}
-      />
+      <Suspense fallback={
+        <div className="skeleton-loader">
+          <div className="skeleton-bar skeleton-wide" />
+          <div className="skeleton-bar skeleton-narrow" />
+        </div>
+      }>
+        <LandingPage
+          onLogin={() => setCurrentScreen('login')}
+          onSignup={() => setCurrentScreen('signup')}
+        />
+      </Suspense>
     );
   }
 
   // Upload Screen
   if (currentScreen === 'upload') {
     return (
-      <FileUpload
-        onFileClick={(chapter) => {
-          setSelectedFile(chapter.title);
-          setSelectedChapterId(chapter.id);
-          setCurrentScreen('chapterDetail');
-        }}
-        novelId={currentNovel?.id}
-        mode={userMode}
-      />
+      <Suspense fallback={
+        <div className="skeleton-loader">
+          <div className="skeleton-bar skeleton-wide" />
+          <div className="skeleton-bar skeleton-narrow" />
+        </div>
+      }>
+        <FileUpload
+          onFileClick={(chapter) => {
+            setSelectedFile(chapter.title);
+            setSelectedChapterId(chapter.id);
+            setCurrentScreen('chapterDetail');
+          }}
+          novelId={currentNovel?.id}
+          mode={userMode}
+        />
+      </Suspense>
     );
   }
 
   // Chapter Detail Screen
   if (currentScreen === 'chapterDetail') {
     return (
-      <>
+      <Suspense fallback={
+        <div className="skeleton-loader">
+          <div className="skeleton-bar skeleton-wide" />
+          <div className="skeleton-bar skeleton-narrow" />
+        </div>
+      }>
         <ChapterDetail
           fileName={selectedFile}
           onBack={() => setCurrentScreen('upload')}
@@ -194,6 +215,12 @@ export default function App() {
           chapterId={selectedChapterId}
           mode={userMode}
           onOpenCharacterChat={() => setShowChatBot(true)}
+          onCloseCharacterChat={() => setShowChatBot(false)}
+          showCharacterChat={showChatBot}
+          onNavigateChapter={(newChapterId, newTitle) => {
+            setSelectedChapterId(newChapterId);
+            setSelectedFile(newTitle);
+          }}
         />
         {currentNovel && showChatBot && (
           <CharacterChatBot
@@ -202,7 +229,7 @@ export default function App() {
             onClose={() => setShowChatBot(false)}
           />
         )}
-      </>
+      </Suspense>
     );
   }
 

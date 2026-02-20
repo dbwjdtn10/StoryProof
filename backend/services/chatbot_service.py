@@ -23,7 +23,7 @@ from backend.core.config import settings
 logger = logging.getLogger(__name__)
 from backend.db.session import SessionLocal
 from backend.db.models import Novel
-from backend.services.analysis import EmbeddingSearchEngine
+from backend.services.analysis import EmbeddingSearchEngine, get_embedding_search_engine
 
 
 class ChatbotService:
@@ -59,14 +59,11 @@ class ChatbotService:
         """
         # Step 1: 벡터 검색 엔진 초기화
         # EmbeddingSearchEngine은 Pinecone 연결 및 BGE-M3 모델을 로드합니다
-        if EmbeddingSearchEngine:
-            try:
-                self.engine = EmbeddingSearchEngine()
-                logger.info("[Success] ChatbotService: EmbeddingSearchEngine loaded")
-            except Exception as e:
-                logger.error(f"[Error] ChatbotService: Failed to load EmbeddingSearchEngine: {e}")
-                self.engine = None
-        else:
+        try:
+            self.engine = get_embedding_search_engine()
+            logger.info("[Success] ChatbotService: EmbeddingSearchEngine loaded (singleton)")
+        except Exception as e:
+            logger.error(f"[Error] ChatbotService: Failed to load EmbeddingSearchEngine: {e}")
             self.engine = None
 
         # Step 2: Google Gemini API 클라이언트 설정
@@ -77,13 +74,48 @@ class ChatbotService:
             self.client = None
             logger.warning("GOOGLE_API_KEY not set. LLM functionality will be disabled.")
 
-        # augment_query TTL 캐시 (키: question, 값: (augmented_query, timestamp))
-        self._augment_cache: Dict[str, tuple] = {}
         self._augment_cache_ttl = 3600  # 1시간
+        self._cache_max_size = 500  # 캐시 최대 항목 수
 
         # multi-query 캐시 (키: question, 값: (queries_list, timestamp))
         self._multi_query_cache: Dict[str, tuple] = {}
+
+        # 소설 제목 인메모리 캐시 (novel_id → title)
+        self._novel_title_cache: Dict[int, str] = {}
     
+    def _get_novel_title(self, novel_id: int) -> str:
+        """소설 제목 조회 (인메모리 캐시, 최대 50건)."""
+        if novel_id in self._novel_title_cache:
+            return self._novel_title_cache[novel_id]
+        db = SessionLocal()
+        try:
+            novel = db.query(Novel).filter(Novel.id == novel_id).first()
+            title = novel.title if novel else "Unknown Novel"
+        finally:
+            db.close()
+        if len(self._novel_title_cache) >= 50:
+            # 캐시 절반 제거
+            keys = list(self._novel_title_cache.keys())
+            for k in keys[:len(keys) // 2]:
+                del self._novel_title_cache[k]
+        self._novel_title_cache[novel_id] = title
+        return title
+
+    def _trim_cache(self, cache: Dict[str, tuple]) -> None:
+        """캐시 크기가 최대치를 초과하면 만료 항목 제거 후, 여전히 초과 시 가장 오래된 절반 제거."""
+        if len(cache) <= self._cache_max_size:
+            return
+        now = time.time()
+        # 1차: 만료된 항목 제거
+        expired = [k for k, v in cache.items() if (now - v[1]) >= self._augment_cache_ttl]
+        for k in expired:
+            del cache[k]
+        # 2차: 여전히 초과 시 가장 오래된 절반 제거
+        if len(cache) > self._cache_max_size:
+            sorted_keys = sorted(cache.keys(), key=lambda k: cache[k][1])
+            for k in sorted_keys[:len(cache) // 2]:
+                del cache[k]
+
     def find_similar_chunks(
         self,
         question: str,
@@ -274,15 +306,7 @@ class ChatbotService:
         context = "\n\n".join(context_texts)
 
         best_chunk = top_chunks[0]
-        novel_title = "Unknown Novel"
-        if best_chunk.get('novel_id'):
-            db_local = SessionLocal()
-            try:
-                novel = db_local.query(Novel).filter(Novel.id == best_chunk['novel_id']).first()
-                if novel:
-                    novel_title = novel.title
-            finally:
-                db_local.close()
+        novel_title = self._get_novel_title(best_chunk['novel_id']) if best_chunk.get('novel_id') else "Unknown Novel"
 
         bible_summary = ""
         if db and novel_id:
@@ -314,62 +338,6 @@ class ChatbotService:
             self.engine.warmup()
         else:
             logger.warning("[Warning] ChatbotService: Engine not initialized, skipping warmup.")
-
-    def augment_query(self, question: str) -> str:
-        """
-        사용자 질문을 검색에 최적화된 형태로 확장합니다.
-        TTL 캐시 적용: 동일 질문은 1시간 동안 LLM 호출 없이 캐시에서 반환.
-        """
-        if not self.client:
-            return question
-
-        # 캐시 확인
-        now = time.time()
-        cached = self._augment_cache.get(question)
-        if cached and (now - cached[1]) < self._augment_cache_ttl:
-            logger.info(f"[Augment] Cache hit: '{question}'")
-            return cached[0]
-
-        prompt = f"""당신은 소설 검색 전문가입니다. 다음 질문에 대해 검색 정확도를 높이기 위한 **추가 검색 키워드**만 공백으로 구분하여 나열하세요.
-
-[사용자 질문]
-"{question}"
-
-[확장 가이드]
-1. 질문의 핵심 소재, 인물, 장소, 시간적 배경(처음, 끝 등)에 대한 관련 키워드를 추출하세요.
-2. "장소"에 대해서는 "위치, 배경, 공간" 등 다양한 동의어를 추가하세요.
-3. 질문에 "처음", "시작" 등이 포함되면 "최초, 등장, Scene 1" 등의 키워드를 추가하세요.
-4. 질문 내용은 다시 적지 말고, **오직 추가 키워드들만** 공백으로 구분하여 한 줄로 출력하세요.
-
-[출력 형식]
-추가 키워드1 키워드2 키워드3 ... (설명 없이 키워드만)
-
-출력:"""
-        try:
-            response = self.client.models.generate_content(
-                model=settings.GEMINI_CHAT_MODEL,
-                contents=prompt,
-                config={
-                    'temperature': 0.2,
-                    'max_output_tokens': 100
-                }
-            )
-            keywords = response.text.strip()
-
-            # 따옴표 제거
-            keywords = keywords.strip('"').strip("'")
-
-            # 원본 질문과 결합 (원본 질문 보존 보장)
-            augmented = f"{question} {keywords}"
-
-            # 캐시 저장
-            self._augment_cache[question] = (augmented, now)
-
-            logger.info(f"[Augment] Query Expanded: '{question}' -> '{augmented}'")
-            return augmented
-        except Exception as e:
-            logger.warning(f"[Warning] Query Augmentation Failed: {e}")
-            return question
 
     def _generate_multi_queries(self, question: str) -> List[str]:
         """
@@ -414,7 +382,8 @@ class ChatbotService:
             if not queries:
                 queries = [question]
 
-            # 캐시 저장
+            # 캐시 저장 (크기 제한)
+            self._trim_cache(self._multi_query_cache)
             self._multi_query_cache[question] = (queries, now)
             logger.info(f"[MultiQuery] '{question}' → {len(queries)} queries generated")
             for i, q in enumerate(queries):
@@ -462,6 +431,22 @@ class ChatbotService:
         3. 결과를 (chapter_id, scene_index) 기준으로 병합, 최고 유사도 보존
         """
         top_k = kwargs.pop('top_k', settings.SEARCH_DEFAULT_TOP_K)
+
+        # 짧은 질문 바이패스: 단순 질문은 multi-query 스킵하여 Gemini 호출 절약
+        words = question.strip().split()
+        if len(question) < 20 and len(words) <= 4:
+            logger.info(f"[MultiQuery] Skipped (short question): '{question}'")
+            keywords = self._extract_keywords(question)
+            return self.find_similar_chunks(
+                question=question,
+                top_k=top_k,
+                novel_id=novel_id,
+                chapter_id=chapter_id,
+                novel_filter=novel_filter,
+                keywords=keywords,
+                original_query=question,
+                **kwargs
+            )
 
         # 1. Multi-query 생성 (1회 LLM 호출)
         queries = self._generate_multi_queries(question)
@@ -579,16 +564,8 @@ class ChatbotService:
         # 가장 높은 유사도 정보
         best_chunk = top_chunks[0]
         
-        # novel title 가져오기
-        novel_title = "Unknown Novel"
-        if best_chunk.get('novel_id'):
-            db_local = SessionLocal()
-            try:
-                novel = db_local.query(Novel).filter(Novel.id == best_chunk['novel_id']).first()
-                if novel:
-                    novel_title = novel.title
-            finally:
-                db_local.close()
+        # novel title 가져오기 (캐시 사용)
+        novel_title = self._get_novel_title(best_chunk['novel_id']) if best_chunk.get('novel_id') else "Unknown Novel"
 
         return {
             "answer": answer,

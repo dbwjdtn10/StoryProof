@@ -2,16 +2,16 @@ import { Upload, X, FileText, Merge, CheckSquare, Square } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { toast } from 'sonner';
 import { ThemeToggle } from './ThemeToggle';
-import { getChapters, uploadChapter, deleteChapter, getStoryboardStatus, Chapter, StoryboardProgress } from '../api/novel';
+import { getChapters, uploadChapter, deleteChapter, getStoryboardStatus, ChapterListItem, StoryboardProgress } from '../api/novel';
 import { useFileMerge } from '../hooks/useFileMerge';
 
 interface FileUploadProps {
-    onFileClick: (chapter: Chapter) => void;
+    onFileClick: (chapter: ChapterListItem) => void;
     novelId?: number;
     mode?: 'reader' | 'writer';
 }
 
-interface ChapterWithProgress extends Chapter {
+interface ChapterWithProgress extends ChapterListItem {
     storyboardProgress?: StoryboardProgress;
 }
 
@@ -48,8 +48,8 @@ export function FileUpload({ onFileClick, novelId, mode = 'writer' }: FileUpload
             // COMPLETED 또는 FAILED 상태면 폴링 중지
             const statusUpper = status.status?.toUpperCase();
             if (statusUpper === 'COMPLETED' || statusUpper === 'FAILED') {
-                if (progressIntervalRef.current[chapterId]) {
-                    clearInterval(progressIntervalRef.current[chapterId]);
+                if (progressIntervalRef.current[chapterId] !== undefined) {
+                    clearTimeout(progressIntervalRef.current[chapterId]);
                     delete progressIntervalRef.current[chapterId];
                 }
             }
@@ -58,20 +58,24 @@ export function FileUpload({ onFileClick, novelId, mode = 'writer' }: FileUpload
         }
     };
 
-    // 진행 상황 폴링 시작
+    // 진행 상황 폴링 시작 (지수 백오프: 2초 시작, ×1.5, 최대 15초)
     const startProgressPolling = (chapterId: number) => {
         // 기존 폴링이 있으면 중지
         if (progressIntervalRef.current[chapterId]) {
-            clearInterval(progressIntervalRef.current[chapterId]);
+            clearTimeout(progressIntervalRef.current[chapterId]);
+            delete progressIntervalRef.current[chapterId];
         }
 
-        // 1초마다 상태 조회 (더 빠른 실시간 업데이트)
-        progressIntervalRef.current[chapterId] = setInterval(() => {
-            fetchStoryboardStatus(chapterId);
-        }, 1000);
-
-        // 초기 조회
-        fetchStoryboardStatus(chapterId);
+        let interval = 2000;
+        const poll = async () => {
+            await fetchStoryboardStatus(chapterId);
+            // COMPLETED/FAILED면 fetchStoryboardStatus 내에서 이미 정리됨
+            if (progressIntervalRef.current[chapterId] !== undefined) {
+                interval = Math.min(interval * 1.5, 15000);
+                progressIntervalRef.current[chapterId] = setTimeout(poll, interval);
+            }
+        };
+        poll();
     };
 
     // Fetch existing chapters

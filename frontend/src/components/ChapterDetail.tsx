@@ -1,5 +1,5 @@
 import { ArrowLeft, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Users, Package, Clock, Save, MapPin } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Editor } from '@tiptap/react';
 import { NovelEditor } from './NovelEditor';
 import { AuthorToolbar } from './AuthorToolbar';
@@ -7,7 +7,7 @@ import { ReaderToolbar } from './ReaderToolbar';
 import { FloatingMenu } from './FloatingMenu';
 import { ThemeToggle } from './ThemeToggle';
 import { Settings } from './Settings';
-import { getChapter, updateChapter, getChapterBible, reanalyzeChapter, BibleData, Character, Item, Location } from '../api/novel';
+import { getChapter, getChapters, getStoryboardStatus, updateChapter, getChapterBible, reanalyzeChapter, BibleData, Chapter, ChapterListItem, Character, Item, Location } from '../api/novel';
 import { AnalysisSidebar, AnalysisResult } from './AnalysisSidebar';
 import { PredictionSidebar, Message } from './predictions/PredictionSidebar';
 import { requestPrediction, getPredictionTaskStatus, getPredictionHistory, clearPredictionHistory } from '../api/prediction';
@@ -24,9 +24,12 @@ interface ChapterDetailProps {
     chapterId?: number;
     mode?: 'reader' | 'writer';
     onOpenCharacterChat?: () => void;
+    onCloseCharacterChat?: () => void;
+    onNavigateChapter?: (chapterId: number, title: string) => void;
+    showCharacterChat?: boolean;
 }
 
-export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'writer', onOpenCharacterChat }: ChapterDetailProps) {
+export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'writer', onOpenCharacterChat, onCloseCharacterChat, onNavigateChapter, showCharacterChat }: ChapterDetailProps) {
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const [isCharactersOpen, setIsCharactersOpen] = useState(true);
     const [isItemsOpen, setIsItemsOpen] = useState(false);
@@ -62,6 +65,18 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
 
     // Tiptap Editor State
     const [activeEditor, setActiveEditor] = useState<Editor | null>(null);
+
+    // Auto-save & unsaved changes
+    const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+    const [charCount, setCharCount] = useState(0);
+    const [wordCount, setWordCount] = useState(0);
+
+    // Chapter navigation
+    const [chapters, setChapters] = useState<ChapterListItem[]>([]);
+
+    // Refs for auto-save interval (avoid stale closures)
+    const hasUnsavedChangesRef = useRef(false);
+    const handleSaveRef = useRef<() => Promise<void>>(() => Promise.resolve());
 
     // Global Theme Sync
     const { theme: globalTheme, setTheme: setGlobalTheme } = useTheme();
@@ -137,42 +152,45 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
         }
     }, [novelId, chapterId]);
 
-    // Polling for status updates
+    // Polling for status updates (지수 백오프: 3초 시작, ×1.5, 최대 20초)
     useEffect(() => {
-        let intervalId: NodeJS.Timeout;
+        let timerId: ReturnType<typeof setTimeout>;
+        let cancelled = false;
 
         if (chapterStatus === 'PROCESSING' || chapterStatus === 'PENDING') {
-            intervalId = setInterval(async () => {
-                if (!novelId || !chapterId) return;
+            let interval = 3000;
+            const poll = async () => {
+                if (cancelled || !novelId || !chapterId) return;
                 try {
-                    const chapterData = await getChapter(novelId, chapterId);
-                    console.log(`[Polling] Current Status: ${chapterData.storyboard_status}`);
+                    const statusData = await getStoryboardStatus(novelId, chapterId);
+                    const currentStatus = (statusData.status || '').toUpperCase();
 
-                    const terminalStatuses = ['COMPLETED', 'FAILED'];
-                    const rawStatus = chapterData.storyboard_status || '';
-                    const currentStatus = rawStatus.toUpperCase();
-
-                    if (terminalStatuses.includes(currentStatus)) {
-                        console.log(`[Polling] Terminal state reached: ${currentStatus}`);
+                    if (currentStatus === 'COMPLETED' || currentStatus === 'FAILED') {
                         setChapterStatus(currentStatus as any);
                         setIsAnalyzing(false);
-                        // Refresh Bible data when analysis is done
-                        if (chapterData.storyboard_status === 'COMPLETED') {
+                        if (currentStatus === 'COMPLETED') {
                             toast.success("분석이 완료되었습니다! 데이터를 새로고침합니다.");
                             loadChapterContent();
                             loadBibleData();
-                        } else if (chapterData.storyboard_status === 'FAILED') {
-                            toast.error(`분석 실패: ${chapterData.storyboard_message || '알 수 없는 오류'}`);
+                        } else {
+                            toast.error(`분석 실패: ${statusData.message || '알 수 없는 오류'}`);
                         }
+                        return; // 완료/실패 시 폴링 중단
                     }
-                } catch (error) {
-                    console.error("Status check failed", error);
+                } catch {
+                    // 상태 확인 실패 시 무시
                 }
-            }, 3000); // Check every 3 seconds
+                if (!cancelled) {
+                    interval = Math.min(interval * 1.5, 20000);
+                    timerId = setTimeout(poll, interval);
+                }
+            };
+            poll();
         }
 
         return () => {
-            if (intervalId) clearInterval(intervalId);
+            cancelled = true;
+            if (timerId) clearTimeout(timerId);
         };
     }, [chapterStatus, novelId, chapterId]);
 
@@ -222,6 +240,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                 ? sceneTexts.map(s => s.trim()).join("\n\n")
                 : content;
             await updateChapter(novelId, chapterId, { content: finalContent });
+            setHasUnsavedChanges(false);
             toast.success("저장되었습니다.");
         } catch (error) {
             toast.error("저장에 실패했습니다.");
@@ -246,6 +265,94 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
     const [isAppearancesExpanded, setIsAppearancesExpanded] = useState(false);
     const [isItemAppearancesExpanded, setIsItemAppearancesExpanded] = useState(false);
     const [isLocationAppearancesExpanded, setIsLocationAppearancesExpanded] = useState(false);
+
+    // 캐릭터 채팅이 열리면 분석/예측 사이드바 닫기 (겹침 방지)
+    useEffect(() => {
+        if (showCharacterChat) {
+            setIsAnalysisSidebarOpen(false);
+            setIsPredictionSidebarOpen(false);
+        }
+    }, [showCharacterChat]);
+
+    // Keep refs in sync for auto-save interval
+    useEffect(() => { hasUnsavedChangesRef.current = hasUnsavedChanges; }, [hasUnsavedChanges]);
+    useEffect(() => { handleSaveRef.current = handleSave; });
+
+    // Load chapter list for navigation
+    useEffect(() => {
+        if (!novelId) return;
+        getChapters(novelId).then(chs => {
+            setChapters(chs.sort((a, b) => a.chapter_number - b.chapter_number));
+        }).catch(() => {});
+    }, [novelId]);
+
+    // Auto-save every 30 seconds
+    useEffect(() => {
+        if (mode === 'reader' || !novelId || !chapterId) return;
+        const interval = setInterval(() => {
+            if (hasUnsavedChangesRef.current) {
+                handleSaveRef.current();
+            }
+        }, 30000);
+        return () => clearInterval(interval);
+    }, [novelId, chapterId, mode]);
+
+    // Warn before leaving with unsaved changes
+    useEffect(() => {
+        const handler = (e: BeforeUnloadEvent) => {
+            if (hasUnsavedChangesRef.current) {
+                e.preventDefault();
+                e.returnValue = '';
+            }
+        };
+        window.addEventListener('beforeunload', handler);
+        return () => window.removeEventListener('beforeunload', handler);
+    }, []);
+
+    // Keyboard shortcuts
+    useEffect(() => {
+        const handler = (e: KeyboardEvent) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                e.preventDefault();
+                if (mode !== 'reader' && novelId && chapterId) {
+                    handleSaveRef.current();
+                }
+            }
+            if (e.key === 'Escape') {
+                if (isAnalysisSidebarOpen) setIsAnalysisSidebarOpen(false);
+                else if (isPredictionSidebarOpen) setIsPredictionSidebarOpen(false);
+                else if (isSettingsOpen) setIsSettingsOpen(false);
+            }
+        };
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+    }, [mode, novelId, chapterId, isAnalysisSidebarOpen, isPredictionSidebarOpen, isSettingsOpen]);
+
+    // Calculate char/word count (debounced to avoid re-computing on every keystroke)
+    const countTimerRef = useRef<ReturnType<typeof setTimeout>>();
+    useEffect(() => {
+        if (countTimerRef.current) clearTimeout(countTimerRef.current);
+        countTimerRef.current = setTimeout(() => {
+            const allText = sceneTexts.length > 0 ? sceneTexts.join('\n\n') : content;
+            const plainText = allText.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '');
+            setCharCount(plainText.replace(/\s/g, '').length);
+            const words = plainText.trim().split(/\s+/).filter(Boolean);
+            setWordCount(words.length);
+        }, 500);
+        return () => { if (countTimerRef.current) clearTimeout(countTimerRef.current); };
+    }, [content, sceneTexts]);
+
+    // Chapter navigation helpers
+    const currentChapterIndex = chapters.findIndex(ch => ch.id === chapterId);
+    const prevChapter = currentChapterIndex > 0 ? chapters[currentChapterIndex - 1] : null;
+    const nextChapter = currentChapterIndex < chapters.length - 1 ? chapters[currentChapterIndex + 1] : null;
+
+    const navigateToChapter = async (target: ChapterListItem) => {
+        if (hasUnsavedChanges && novelId && chapterId) {
+            await handleSave();
+        }
+        onNavigateChapter?.(target.id, target.title);
+    };
 
     const scrollToScene = (index: number, highlightText?: string) => {
         // Close all modals first
@@ -307,29 +414,41 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
 
             const { task_id } = await response.json();
 
-            const intervalId = setInterval(async () => {
+            // 지수 백오프 폴링 (2초 시작, ×1.5, 최대 15초, 최대 60회)
+            let pollInterval = 2000;
+            let pollCount = 0;
+            const pollTask = async () => {
+                pollCount++;
+                if (pollCount > 60) {
+                    setIsAnalysisLoading(false);
+                    setAnalysisResult({ status: "타임아웃", message: "분석 시간이 너무 오래 걸립니다. 나중에 다시 시도하세요." });
+                    return;
+                }
                 try {
                     const statusRes = await fetch(`/api/v1/analysis/task/${task_id}`);
                     const data = await statusRes.json();
 
                     if (data.status === "COMPLETED") {
-                        clearInterval(intervalId);
                         setAnalysisResult(data.result);
                         setIsAnalysisLoading(false);
                         toast.success("분석이 완료되었습니다.");
+                        return;
                     } else if (data.status === "FAILED") {
-                        clearInterval(intervalId);
                         setIsAnalysisLoading(false);
                         setAnalysisResult({ status: "실패", message: data.error || "분석 작업이 실패했습니다." });
                         toast.error("분석 중 오류가 발생했습니다.");
+                        return;
                     }
                 } catch (err) {
                     console.error("Polling error:", err);
-                    clearInterval(intervalId);
                     setIsAnalysisLoading(false);
                     setAnalysisResult({ status: "오류", message: "상태 확인 중 서버 통신 오류가 발생했습니다." });
+                    return;
                 }
-            }, 2000);
+                pollInterval = Math.min(pollInterval * 1.5, 15000);
+                setTimeout(pollTask, pollInterval);
+            };
+            setTimeout(pollTask, pollInterval);
         } catch (error) {
             console.error("Analysis error:", error);
             setAnalysisResult({ status: "오류 발생", message: "서버와 통신 중 오류가 발생했습니다." });
@@ -340,6 +459,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
     const handleCheckConsistency = async () => {
         setIsAnalysisSidebarOpen(true);
         setIsPredictionSidebarOpen(false);
+        onCloseCharacterChat?.();
 
         // 캐시 확인
         if (novelId && chapterId) {
@@ -362,6 +482,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
     const handlePredictionSidebarOpen = async () => {
         setIsPredictionSidebarOpen(true);
         setIsAnalysisSidebarOpen(false);
+        onCloseCharacterChat?.();
 
         // DB에서 이전 대화 히스토리 로드 (현재 메시지가 비어 있을 때만)
         if (novelId && chatMessages.length === 0) {
@@ -396,13 +517,13 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
         try {
             const { task_id } = await requestPrediction(novelId, inputMessage);
 
-            // Poll for result
-            const pollInterval = setInterval(async () => {
+            // Poll for result (지수 백오프: 2초 시작, ×1.5, 최대 15초)
+            let predPollInterval = 2000;
+            const pollPrediction = async () => {
                 try {
                     const data = await getPredictionTaskStatus(task_id);
 
                     if (data.status === "COMPLETED") {
-                        clearInterval(pollInterval);
                         // @ts-ignore
                         const resultText = data.result.prediction || data.result.text || (typeof data.result === 'string' ? data.result : JSON.stringify(data.result));
 
@@ -421,16 +542,19 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                                 icon: "/favicon.ico"
                             });
                         }
-
+                        return;
                     } else if (data.status === "FAILED") {
-                        clearInterval(pollInterval);
                         setIsPredictionLoading(false);
                         toast.error("답변 생성 중 오류가 발생했습니다.");
+                        return;
                     }
                 } catch (e) {
                     // Continue polling
                 }
-            }, 2000);
+                predPollInterval = Math.min(predPollInterval * 1.5, 15000);
+                setTimeout(pollPrediction, predPollInterval);
+            };
+            setTimeout(pollPrediction, predPollInterval);
 
         } catch (error) {
             setIsPredictionLoading(false);
@@ -449,8 +573,6 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
         const superNormalize = (str: string) => str.replace(/[^a-zA-Z0-9가-힣]/g, '');
         const targetClean = superNormalize(quote);
 
-        console.log(`[Navigation] Searching for quote: "${quote}"`);
-        console.log(`[Navigation] Cleaned target: "${targetClean}"`);
 
         // 1. Scene Mode Navigation (sceneTexts exists)
         if (sceneTexts.length > 0) {
@@ -464,7 +586,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
             if (foundIndex === -1 && targetClean.length > 40) {
                 const head = targetClean.substring(0, 30);
                 const tail = targetClean.substring(targetClean.length - 30);
-                console.log(`[Navigation] Fallback partial search: head("${head}"), tail("${tail}")`);
+
                 foundIndex = sceneTexts.findIndex(s => {
                     const cleanS = superNormalize(s);
                     return cleanS.includes(head) && cleanS.includes(tail);
@@ -472,10 +594,8 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
             }
 
             if (foundIndex !== -1) {
-                console.log(`[Navigation] Found in scene ${foundIndex + 1}`);
                 scrollToScene(foundIndex, quote);
             } else {
-                console.warn(`[Navigation] Quote not found in any scene. Sample scene 1 start: ${superNormalize(sceneTexts[0]).substring(0, 50)}`);
                 toast.error('해당 문장을 본문에서 찾을 수 없습니다. (문장이 일부 다르거나 다른 회차의 내용일 수 있습니다)');
             }
         }
@@ -526,29 +646,29 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
     // ... (rest of the setup)
 
     // 바이블 데이터 또는 기본 샘플 데이터
-    const characters = bibleData?.characters && bibleData.characters.length > 0
+    const characters = useMemo(() => bibleData?.characters && bibleData.characters.length > 0
         ? bibleData.characters
         : [
             { name: '앨리스', first_appearance: 0, appearance_count: 5, appearances: [0, 1, 2, 3, 4], traits: ['호기심 많음', '상상력 풍부'] },
             { name: '흰 토끼', first_appearance: 0, appearance_count: 3, appearances: [0, 1, 3], traits: ['바쁨', '걱정 많음'] },
             { name: '언니', first_appearance: 0, appearance_count: 1, appearances: [0] },
-        ];
+        ], [bibleData]);
 
-    const items = bibleData?.items && bibleData.items.length > 0
+    const items = useMemo(() => bibleData?.items && bibleData.items.length > 0
         ? bibleData.items
         : [
             { name: '시계', first_appearance: 0 },
             { name: '책', first_appearance: 0 },
             { name: '데이지 화환', first_appearance: 0 },
-        ];
+        ], [bibleData]);
 
-    const key_events = bibleData?.key_events && bibleData.key_events.length > 0
+    const key_events = useMemo(() => bibleData?.key_events && bibleData.key_events.length > 0
         ? bibleData.key_events
         : [
             { summary: '앨리스가 언니 옆 강둑에 앉아 있음', scene_index: 0, importance: '하' },
             { summary: '흰 토끼가 지나가는 것을 목격', scene_index: 1, importance: '중' },
             { summary: '토끼를 따라 토끼 굴로 들어감', scene_index: 2, importance: '상' },
-        ];
+        ], [bibleData]);
 
     const handleReanalyze = () => {
         if (!novelId || !chapterId) return;
@@ -568,8 +688,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                     try {
                         await reanalyzeChapter(novelId, chapterId);
                         toast.success("재분석 요청이 완료되었습니다. 백그라운드에서 분석이 진행됩니다.");
-                    } catch (error) {
-                        console.error(error);
+                    } catch {
                         toast.error("재분석 요청 실패");
                         setChapterStatus('FAILED');
                         setIsAnalyzing(false);
@@ -580,12 +699,12 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
         });
     };
 
-    const locations = bibleData?.locations && bibleData.locations.length > 0
+    const locations = useMemo(() => bibleData?.locations && bibleData.locations.length > 0
         ? bibleData.locations
         : [
             { name: '강둑', description: '언니와 함께 앉아있던 곳', scenes: [0] },
             { name: '토끼 굴', description: '토끼가 들어간 긴 굴', scenes: [2] },
-        ];
+        ], [bibleData]);
 
     // ... (rest of items/timeline)
 
@@ -682,16 +801,65 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                 }}>
                     <ArrowLeft size={24} color="var(--muted-foreground)" />
                 </button>
-                <div style={{ flex: 1, display: 'flex', alignItems: 'center' }}>
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    {chapters.length > 1 && prevChapter && (
+                        <button
+                            onClick={() => navigateToChapter(prevChapter)}
+                            title="이전 챕터"
+                            style={{
+                                padding: '4px',
+                                borderRadius: '50%',
+                                border: 'none',
+                                backgroundColor: 'transparent',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                color: 'var(--muted-foreground)'
+                            }}
+                        >
+                            <ChevronLeft size={20} />
+                        </button>
+                    )}
                     <h1 className="chapter-detail-title" style={{
                         fontSize: '1.25rem',
                         fontWeight: 600,
                         color: 'var(--foreground)',
                         margin: 0
                     }}>{fileName}</h1>
+                    {chapters.length > 1 && nextChapter && (
+                        <button
+                            onClick={() => navigateToChapter(nextChapter)}
+                            title="다음 챕터"
+                            style={{
+                                padding: '4px',
+                                borderRadius: '50%',
+                                border: 'none',
+                                backgroundColor: 'transparent',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                color: 'var(--muted-foreground)'
+                            }}
+                        >
+                            <ChevronRight size={20} />
+                        </button>
+                    )}
                 </div>
                 {novelId && chapterId && mode !== 'reader' && (
-                    <div style={{ display: 'flex', gap: '8px' }}>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.8rem', color: 'var(--muted-foreground)', whiteSpace: 'nowrap' }}>
+                            {charCount.toLocaleString()}자 · {wordCount.toLocaleString()}어절
+                        </span>
+                        <span style={{
+                            fontSize: '0.75rem',
+                            color: hasUnsavedChanges ? '#D97706' : 'var(--muted-foreground)',
+                            whiteSpace: 'nowrap',
+                            padding: '2px 8px',
+                            borderRadius: '4px',
+                            backgroundColor: hasUnsavedChanges ? 'rgba(217, 119, 6, 0.1)' : 'transparent'
+                        }}>
+                            {isSaving ? '저장 중...' : hasUnsavedChanges ? '변경사항 있음' : '저장됨'}
+                        </span>
                         <button
                             className="reanalyze-button"
                             onClick={handleReanalyze}
@@ -1012,6 +1180,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                                                     const newScenes = [...sceneTexts];
                                                     newScenes[index] = html;
                                                     setSceneTexts(newScenes);
+                                                    setHasUnsavedChanges(true);
                                                 }}
                                                 onFocus={(editor) => setActiveEditor(editor)}
                                                 onCreated={(editor) => {
@@ -1041,7 +1210,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                             }}>
                                 <NovelEditor
                                     content={content.replace(/\n/g, '<br>')}
-                                    onUpdate={(html) => setContent(html)}
+                                    onUpdate={(html) => { setContent(html); setHasUnsavedChanges(true); }}
                                     onFocus={(editor) => setActiveEditor(editor)}
                                     onCreated={(editor) => {
                                         if (!activeEditor) {
