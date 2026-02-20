@@ -6,10 +6,11 @@ import { AuthorToolbar } from './AuthorToolbar';
 import { ReaderToolbar } from './ReaderToolbar';
 import { FloatingMenu } from './FloatingMenu';
 import { ThemeToggle } from './ThemeToggle';
-import { getChapter, updateChapter, getChapterBible, reanalyzeChapter, BibleData, Character, Item, Location } from '../api/novel';
+import { getChapter, updateChapter, getChapterBible, reanalyzeChapter, getStoryboardStatus, BibleData, Character, Item, Location } from '../api/novel';
 import { AnalysisSidebar, AnalysisResult } from './AnalysisSidebar';
 import { PredictionSidebar, Message } from './predictions/PredictionSidebar';
 import { requestPrediction, getPredictionTaskStatus } from '../api/prediction';
+import { requestConsistencyCheck, getTaskResult } from '../api/analysis';
 import { toast } from 'sonner';
 import { generateImage } from '../api/images';
 import '../novel-toolbar.css';
@@ -121,30 +122,24 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
             intervalId = setInterval(async () => {
                 if (!novelId || !chapterId) return;
                 try {
-                    const chapterData = await getChapter(novelId, chapterId);
-                    console.log(`[Polling] Current Status: ${chapterData.storyboard_status}`);
+                    const statusData = await getStoryboardStatus(novelId, chapterId);
+                    const currentStatus = statusData.status?.toUpperCase() || '';
 
-                    const terminalStatuses = ['COMPLETED', 'FAILED'];
-                    const rawStatus = chapterData.storyboard_status || '';
-                    const currentStatus = rawStatus.toUpperCase();
-
-                    if (terminalStatuses.includes(currentStatus)) {
-                        console.log(`[Polling] Terminal state reached: ${currentStatus}`);
+                    if (currentStatus === 'COMPLETED' || currentStatus === 'FAILED') {
                         setChapterStatus(currentStatus as any);
                         setIsAnalyzing(false);
-                        // Refresh Bible data when analysis is done
-                        if (chapterData.storyboard_status === 'COMPLETED') {
-                            alert("분석이 완료되었습니다! 데이터를 새로고침합니다.");
+                        if (currentStatus === 'COMPLETED') {
+                            toast.success("분석이 완료되었습니다! 데이터를 새로고침합니다.");
                             loadChapterContent();
                             loadBibleData();
-                        } else if (chapterData.storyboard_status === 'FAILED') {
-                            alert(`분석 실패: ${chapterData.storyboard_message || '알 수 없는 오류'}`);
+                        } else {
+                            toast.error(`분석 실패: ${statusData.message || '알 수 없는 오류'}`);
                         }
                     }
                 } catch (error) {
                     console.error("Status check failed", error);
                 }
-            }, 3000); // Check every 3 seconds
+            }, 3000);
         }
 
         return () => {
@@ -162,7 +157,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
             setContent(chapter.content);
             setChapterStatus(chapter.storyboard_status);
         } catch (error) {
-            alert("소설 내용을 불러오는데 실패했습니다.");
+            toast.error("소설 내용을 불러오는데 실패했습니다.");
         } finally {
             setIsLoading(false);
             setInitialLoadDone(true);
@@ -198,9 +193,9 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                 ? sceneTexts.map(s => s.trim()).join("\n\n")
                 : content;
             await updateChapter(novelId, chapterId, { content: finalContent });
-            alert("저장되었습니다.");
+            toast.success("저장되었습니다.");
         } catch (error) {
-            alert("저장에 실패했습니다.");
+            toast.error("저장에 실패했습니다.");
         } finally {
             setIsSaving(false);
         }
@@ -271,29 +266,20 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                 ? sceneTexts.join('\n\n')
                 : content;
 
-            const response = await fetch(`http://localhost:8000/api/v1/analysis/consistency`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    novel_id: novelId,
-                    chapter_id: chapterId,
-                    text: allText
-                })
+            const { task_id } = await requestConsistencyCheck({
+                novel_id: novelId!,
+                chapter_id: chapterId,
+                text: allText
             });
-
-            if (!response.ok) throw new Error('분석 요청 실패');
-
-            const { task_id } = await response.json();
 
             // 폴링 시작
             const intervalId = setInterval(async () => {
                 try {
-                    const statusRes = await fetch(`http://localhost:8000/api/v1/analysis/task/${task_id}`);
-                    const data = await statusRes.json();
+                    const data = await getTaskResult(task_id);
 
                     if (data.status === "COMPLETED") {
                         clearInterval(intervalId);
-                        setAnalysisResult(data.result);
+                        setAnalysisResult(data.result as AnalysisResult);
                         setIsAnalysisLoading(false);
                         toast.success("분석이 완료되었습니다.");
                     } else if (data.status === "FAILED") {
@@ -419,7 +405,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                 scrollToScene(foundIndex, quote);
             } else {
                 console.warn(`[Navigation] Quote not found in any scene. Sample scene 1 start: ${superNormalize(sceneTexts[0]).substring(0, 50)}`);
-                alert('해당 문장을 본문에서 찾을 수 없습니다. (문장이 일부 다르거나 다른 회차의 내용일 수 있습니다)');
+                toast.warning('해당 문장을 본문에서 찾을 수 없습니다. (문장이 일부 다르거나 다른 회차의 내용일 수 있습니다)');
             }
         }
         // 2. Single Textarea Mode (content)
@@ -440,10 +426,10 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                         textArea.scrollTop = (lines - 1) * 24;
                     } else {
                         // 정규화로는 찾았으나 원본에서 못 찾은 경우
-                        alert('문장을 찾았으나, 정확한 위치 선정이 여려워 이동이 제한됩니다.');
+                        toast.warning('문장을 찾았으나, 정확한 위치 선정이 어려워 이동이 제한됩니다.');
                     }
                 } else {
-                    alert('해당 문장을 본문에서 찾을 수 없습니다.');
+                    toast.warning('해당 문장을 본문에서 찾을 수 없습니다.');
                 }
             }
         }
@@ -497,11 +483,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
         if (!novelId || !chapterId) return;
 
         if (chapterStatus === 'PROCESSING') {
-            alert("현재 분석이 진행 중입니다. 잠시만 기다려주세요.");
-            return;
-        }
-
-        if (!confirm("재분석을 진행하시겠습니까?\n기존 분석 데이터(인물, 사건 등)가 덮어씌워질 수 있습니다.")) {
+            toast.info("현재 분석이 진행 중입니다. 잠시만 기다려주세요.");
             return;
         }
 
@@ -509,10 +491,10 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
         setChapterStatus('PROCESSING');
         try {
             await reanalyzeChapter(novelId, chapterId);
-            alert("재분석 요청이 완료되었습니다. 백그라운드에서 분석이 진행됩니다.\n(완료 시까지 버튼이 비활성화됩니다)");
+            toast.success("재분석 요청이 완료되었습니다. 백그라운드에서 분석이 진행됩니다.");
         } catch (error) {
             console.error(error);
-            alert("재분석 요청 실패");
+            toast.error("재분석 요청 실패");
             setChapterStatus('FAILED');
             setIsAnalyzing(false);
         }
@@ -1065,7 +1047,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                             <div style={{ marginBottom: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                                 {selectedCharacter.image ? (
                                     <img
-                                        src={`http://localhost:8000${selectedCharacter.image}`}
+                                        src={selectedCharacter.image}
                                         alt={selectedCharacter.name}
                                         style={{ width: '100%', maxHeight: '300px', objectFit: 'contain', borderRadius: '8px', marginBottom: '8px' }}
                                     />
@@ -1281,7 +1263,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                             <div style={{ marginBottom: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                                 {selectedItem.image ? (
                                     <img
-                                        src={`http://localhost:8000${selectedItem.image}`}
+                                        src={selectedItem.image}
                                         alt={selectedItem.name}
                                         style={{ width: '100%', maxHeight: '300px', objectFit: 'contain', borderRadius: '8px', marginBottom: '8px' }}
                                     />
@@ -1460,7 +1442,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                             <div style={{ marginBottom: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                                 {selectedLocation.image ? (
                                     <img
-                                        src={`http://localhost:8000${selectedLocation.image}`}
+                                        src={selectedLocation.image}
                                         alt={selectedLocation.name}
                                         style={{ width: '100%', maxHeight: '300px', objectFit: 'contain', borderRadius: '8px', marginBottom: '8px' }}
                                     />

@@ -5,6 +5,7 @@
 """
 
 from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Boolean, JSON, Enum
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship, declarative_base
 from sqlalchemy.sql import func
 from datetime import datetime
@@ -67,10 +68,6 @@ class User(Base):
     def __repr__(self):
         return f"<User(id={self.id}, email={self.email}, username={self.username})>"
 
-
-from sqlalchemy.dialects.postgresql import JSONB
-
-# ... (Previous imports)
 
 class Novel(Base):
     """소설 모델"""
@@ -141,8 +138,8 @@ class Analysis(Base):
     novel_id = Column(Integer, ForeignKey("novels.id"), nullable=False)
     chapter_id = Column(Integer, ForeignKey("chapters.id"), nullable=True)
     
-    analysis_type = Column(Enum(AnalysisType), nullable=False)
-    status = Column(Enum(AnalysisStatus), default=AnalysisStatus.PENDING)
+    analysis_type = Column(Enum(AnalysisType, values_callable=lambda obj: [e.value for e in obj]), nullable=False)
+    status = Column(Enum(AnalysisStatus, values_callable=lambda obj: [e.value for e in obj]), default=AnalysisStatus.PENDING)
     
     # 분석 결과 (JSONB 형태로 저장하여 유연한 쿼리 지원)
     result = Column(JSONB, nullable=True)

@@ -43,7 +43,7 @@ export function FloatingMenu({ onNavigateToScene, onCheckConsistency, onPredictS
             <div className="floating-menu-container">
                 {isMenuOpen && (
                     <div className="floating-menu-options">
-                        <button className="menu-option" onClick={() => alert('환경설정')} title="환경설정">
+                        <button className="menu-option" title="환경설정">
                             <Settings size={20} />
                         </button>
                         <button className="menu-option highlight-btn-purple" onClick={() => {

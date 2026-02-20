@@ -224,6 +224,25 @@ class EmbeddingSearchEngine:
         embedding = model.encode(text, normalize_embeddings=True)
         return embedding.tolist()
 
+    def delete_chapter_vectors(self, novel_id: int, chapter_id: int):
+        """챕터 삭제 시 Pinecone 벡터 및 BM25 캐시 정리"""
+        global _global_bm25_map, _global_corpus_indices_map
+
+        if self.index is not None:
+            try:
+                self.index.delete(filter={
+                    "novel_id": {"$eq": novel_id},
+                    "chapter_id": {"$eq": chapter_id}
+                })
+                print(f"[Cleanup] Deleted Pinecone vectors for novel={novel_id}, chapter={chapter_id}")
+            except Exception as e:
+                print(f"[Warning] Pinecone 벡터 삭제 실패 (novel={novel_id}, chapter={chapter_id}): {e}")
+
+        # BM25 캐시 무효화 (해당 소설 전체 재빌드 유도)
+        if novel_id in _global_bm25_map:
+            del _global_bm25_map[novel_id]
+            del _global_corpus_indices_map[novel_id]
+
     def add_documents(self, documents: List[Dict], novel_id: int, chapter_id: int):
         """
         Parent-Child Indexing 전략:

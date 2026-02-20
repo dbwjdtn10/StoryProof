@@ -324,8 +324,12 @@ Output Format (JSON List of Strings):
             if json_text.startswith("```"):
                 json_text = re.sub(r'^```json?\s*|\s*```$', '', json_text, flags=re.MULTILINE)
             
-            start_anchors = json.loads(json_text)
-            
+            try:
+                start_anchors = json.loads(json_text)
+            except json.JSONDecodeError as e:
+                print(f"!!! LLM 앵커 응답 JSON 파싱 실패: {e}")
+                return [text]
+
             if not isinstance(start_anchors, list):
                 print("!!! LLM 응답이 리스트가 아닙니다.")
                 return [text]
@@ -343,12 +347,9 @@ Output Format (JSON List of Strings):
                 if not anchor or len(anchor.strip()) < 2:  # 최소 길이 2로 완화
                     continue
                     
-                # A. 정확히 일치 (Exact Match) - TOC 중복 방지 로직 추가
-                first_idx = text.find(anchor, last_idx + 1)
-                
                 # A. 정확히 일치 (Exact Match)
                 first_idx = text.find(anchor, last_idx + 1)
-                
+
                 if first_idx != -1:
                     idx = first_idx
                 else:
@@ -717,8 +718,12 @@ Output Format (JSON List of Strings):
                     last_brace = json_text.rfind('}')
                     if last_brace > 0:
                         truncated_json = json_text[:last_brace + 1]
-                        batch_result = json.loads(truncated_json)
-                        print("    [Info] 부분 복구 성공")
+                        try:
+                            batch_result = json.loads(truncated_json)
+                            print("    [Info] 부분 복구 성공")
+                        except json.JSONDecodeError:
+                            print("    [Error] 복구 실패, 배치 건너뜀")
+                            continue
                     else:
                         print("    [Error] 복구 실패, 배치 건너뜀")
                         continue

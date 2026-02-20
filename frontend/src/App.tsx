@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { toast } from 'sonner';
 import { Mail, Lock, Eye, EyeOff, User, BookOpen } from 'lucide-react';
 import { ChapterDetail } from './components/ChapterDetail';
 import { FileUpload } from './components/FileUpload';
@@ -132,24 +133,24 @@ export default function App() {
         }
       } catch (error) {
         console.error("Failed to fetch novels:", error);
-        alert("로그인은 성공했으나 소설 정보를 가져오는데 실패했습니다.");
+        toast.error("로그인은 성공했으나 소설 정보를 가져오는데 실패했습니다.");
       }
 
       setCurrentScreen('upload');
     } catch (error) {
       console.error("Login failed:", error);
-      alert("로그인에 실패했습니다. 이메일과 비밀번호를 확인해주세요.");
+      toast.error("로그인에 실패했습니다. 이메일과 비밀번호를 확인해주세요.");
     }
   };
 
   const handleSignupSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (password !== confirmPassword) {
-      alert('비밀번호가 일치하지 않습니다.');
+      toast.error('비밀번호가 일치하지 않습니다.');
       return;
     }
     if (!agreeToTerms) {
-      alert('이용약관 및 개인정보 처리방침에 동의해주세요.');
+      toast.error('이용약관 및 개인정보 처리방침에 동의해주세요.');
       return;
     }
 
@@ -160,7 +161,7 @@ export default function App() {
         password: password,
         user_mode: signupMode
       });
-      alert('회원가입이 완료되었습니다. 로그인해주세요.');
+      toast.success('회원가입이 완료되었습니다. 로그인해주세요.');
       setCurrentScreen('login');
       // Reset form
       setName('');
@@ -170,9 +171,9 @@ export default function App() {
       setAgreeToTerms(false);
     } catch (error) {
       if (error instanceof Error) {
-        alert(`회원가입 실패: ${error.message}`);
+        toast.error(`회원가입 실패: ${error.message}`);
       } else {
-        alert('회원가입 중 오류가 발생했습니다.');
+        toast.error('회원가입 중 오류가 발생했습니다.');
       }
       console.error('Signup failed:', error);
     }

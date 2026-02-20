@@ -23,15 +23,25 @@ class StoryConsistencyAgent:
     def __init__(self, api_key: str = None):
         """
         에이전트 초기화
-        
+
         Args:
             api_key (str, optional): Google API 키. None이면 settings에서 가져옴
         """
         if not api_key:
             api_key = settings.GOOGLE_API_KEY
-            
+
         self.client = genai.Client(api_key=api_key)
-        self.search_engine = EmbeddingSearchEngine()
+
+        # 이미 로드된 ChatbotService의 엔진을 재사용하여 중복 모델 로딩 방지
+        try:
+            from backend.services.chatbot_service import get_chatbot_service
+            chatbot = get_chatbot_service()
+            if chatbot.engine:
+                self.search_engine = chatbot.engine
+            else:
+                self.search_engine = EmbeddingSearchEngine()
+        except Exception:
+            self.search_engine = EmbeddingSearchEngine()
 
     def check_consistency(self, novel_id: int, input_text: str) -> dict:
         """

@@ -1,4 +1,5 @@
 import { Upload, X, FileText, Merge, CheckSquare, Square } from 'lucide-react';
+import { toast } from 'sonner';
 import { useState, useRef, useEffect } from 'react';
 import { ThemeToggle } from './ThemeToggle';
 import { getChapters, uploadChapter, deleteChapter, getStoryboardStatus, Chapter, StoryboardProgress } from '../api/novel';
@@ -64,14 +65,22 @@ export function FileUpload({ onFileClick, novelId, mode = 'writer' }: FileUpload
             clearInterval(progressIntervalRef.current[chapterId]);
         }
 
-        // 1초마다 상태 조회 (더 빠른 실시간 업데이트)
+        // 3초마다 상태 조회
         progressIntervalRef.current[chapterId] = setInterval(() => {
             fetchStoryboardStatus(chapterId);
-        }, 1000);
+        }, 3000);
 
         // 초기 조회
         fetchStoryboardStatus(chapterId);
     };
+
+    // 컴포넌트 언마운트 시 모든 폴링 인터벌 정리
+    useEffect(() => {
+        return () => {
+            Object.values(progressIntervalRef.current).forEach(clearInterval);
+            progressIntervalRef.current = {};
+        };
+    }, []);
 
     // Fetch existing chapters
     useEffect(() => {
@@ -88,8 +97,7 @@ export function FileUpload({ onFileClick, novelId, mode = 'writer' }: FileUpload
 
             // 기존 파일 중 처리 중인 파일이 있으면 폴링 시작
             chapters.forEach(chapter => {
-                // chapter 객체에 storyboard_status가 없는 경우를 대비해 초기화
-                const status = (chapter as any).storyboard_status?.toUpperCase();
+                const status = chapter.storyboard_status?.toUpperCase();
                 if (status === 'PROCESSING' || status === 'PENDING') {
                     startProgressPolling(chapter.id);
                 }
@@ -129,7 +137,7 @@ export function FileUpload({ onFileClick, novelId, mode = 'writer' }: FileUpload
 
     const handleFiles = async (files: FileList) => {
         if (!novelId) {
-            alert("소설 정보가 없습니다. 다시 로그인해주세요.");
+            toast.error("소설 정보가 없습니다. 다시 로그인해주세요.");
             return;
         }
 
@@ -150,7 +158,7 @@ export function FileUpload({ onFileClick, novelId, mode = 'writer' }: FileUpload
                 // 진행 상황 폴링 시작
                 startProgressPolling(newChapter.id);
             } catch (error) {
-                alert(`${file.name} 업로드 실패: ${(error as any).message || '알 수 없는 오류'}`);
+                toast.error(`${file.name} 업로드 실패: ${(error as any).message || '알 수 없는 오류'}`);
                 // Decrease maxChapterNum back if failed, so we don't skip numbers unnecessarily? 
                 // Actually if it failed due to conflict, we might want to skip or retry, but for now just let it be.
                 // But if we continue the loop for next file, we should arguably keep incrementing to avoid same conflict 
@@ -167,12 +175,10 @@ export function FileUpload({ onFileClick, novelId, mode = 'writer' }: FileUpload
         if (!novelId) return;
 
         try {
-            if (confirm("이 파일을 정말 삭제하시겠습니까?")) {
-                await deleteChapter(novelId, id);
-                setUploadedFiles((prev) => prev.filter((file) => file.id !== id));
-            }
+            await deleteChapter(novelId, id);
+            setUploadedFiles((prev) => prev.filter((file) => file.id !== id));
         } catch (error) {
-            alert("파일 삭제 실패");
+            toast.error("파일 삭제 실패");
         }
     };
 
@@ -233,7 +239,7 @@ export function FileUpload({ onFileClick, novelId, mode = 'writer' }: FileUpload
                                 <Upload size={48} className="upload-icon" />
                                 <p className="upload-text-main">
                                     {mode === 'reader'
-                                        ? '자품 파일을 추가하여 읽기 시작하기'
+                                        ? '작품 파일을 추가하여 읽기 시작하기'
                                         : '파일을 드래그하거나 클릭하여 업로드'}
                                 </p>
                                 <p className="upload-text-sub">PDF, HWP, TXT 파일 지원</p>

@@ -27,7 +27,7 @@ from .celery_app import celery_app
 def update_chapter_progress(chapter_id: int, progress: int, status: str = None, message: str = None, error: str = None):
     """
     회차의 스토리보드 처리 진행 상황 업데이트
-    
+
     Args:
         chapter_id: 회차 ID
         progress: 진행률 (0-100)
@@ -35,10 +35,11 @@ def update_chapter_progress(chapter_id: int, progress: int, status: str = None, 
         message: 진행 메시지
         error: 에러 메시지
     """
+    db = None
     try:
         db = SessionLocal()
         chapter = db.query(Chapter).filter(Chapter.id == chapter_id).first()
-        
+
         if chapter:
             chapter.storyboard_progress = progress
             if status:
@@ -47,30 +48,31 @@ def update_chapter_progress(chapter_id: int, progress: int, status: str = None, 
                 chapter.storyboard_message = message
             if error:
                 chapter.storyboard_error = error
-            
+
             db.commit()
-            # print(f"[DB Update] Chapter {chapter_id}: {progress}% - {status} ({message})")
         else:
             print(f"⚠️ [DB Update Fail] Chapter {chapter_id} not found")
-        
-        db.close()
     except Exception as e:
-        pass
+        print(f"⚠️ [DB Update Error] Chapter {chapter_id}: {e}")
+    finally:
+        if db:
+            db.close()
 
 
 @celery_app.task
 def process_chapter_storyboard(novel_id: int, chapter_id: int):
     """
     회차를 스토리보드화하여 Pinecone에 저장하는 백그라운드 작업
-    
+
     Args:
         novel_id: 소설 ID
         chapter_id: 회차 ID
     """
+    db = None
     try:
         # 상태 업데이트: PROCESSING
         update_chapter_progress(chapter_id, 0, "PROCESSING", "초기화 중...")
-        
+
         # 1. 데이터베이스에서 회차 정보 조회
         db = SessionLocal()
         chapter = db.query(Chapter).filter(Chapter.id == chapter_id).first()
@@ -89,10 +91,11 @@ def process_chapter_storyboard(novel_id: int, chapter_id: int):
         
         # 3. 회차 content를 임시 파일로 저장
         import tempfile
+        temp_file_path = None
         with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False, encoding='utf-8') as f:
             f.write(chapter.content)
             temp_file_path = f.name
-        
+
         update_chapter_progress(chapter_id, 10, "PROCESSING", "준비 완료")
         
         # 4. 스토리보드 처리
@@ -186,7 +189,8 @@ def process_chapter_storyboard(novel_id: int, chapter_id: int):
             print(f"⚠️ 전역 엔티티 분석 실패 (무시됨): {e}")
 
         # 6. 임시 파일 삭제
-        os.unlink(temp_file_path)
+        if temp_file_path and os.path.exists(temp_file_path):
+            os.unlink(temp_file_path)
         
         # 6. 처리 완료
         # 6. 처리 완료
@@ -200,10 +204,20 @@ def process_chapter_storyboard(novel_id: int, chapter_id: int):
         update_chapter_progress(chapter_id, 100, "COMPLETED", "✓ 처리 완료")
         
     except Exception as e:
+        import traceback
         error_msg = f"스토리보드 처리 중 오류: {str(e)}"
+        print(f"❌ [Task Error] Chapter {chapter_id}: {error_msg}")
+        print(traceback.format_exc())
         update_chapter_progress(chapter_id, 0, "FAILED", error_msg)
     finally:
-        db.close()
+        if db:
+            db.close()
+        # 임시 파일 보장 삭제 (예외 발생 시에도 정리)
+        if 'temp_file_path' in locals() and temp_file_path and os.path.exists(temp_file_path):
+            try:
+                os.unlink(temp_file_path)
+            except Exception:
+                pass
 
 
 # @celery_app.task(bind=True, max_retries=3)
@@ -345,12 +359,6 @@ def cancel_task(task_id: str) -> bool:
     # TODO: 작업 취소
     pass
 
-
-# backend/worker/tasks.py
-
-
-from .celery_app import celery_app
-from backend.core.config import settings
 
 @celery_app.task(name="detect_inconsistency_task", bind=True, max_retries=2)
 def detect_inconsistency_task(self, novel_id: int, text_fragment: str, chapter_id: Optional[int] = None):

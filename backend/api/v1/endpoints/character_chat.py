@@ -4,8 +4,10 @@ from sqlalchemy import desc
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List, Optional
+import asyncio
 import json
 import logging
+from functools import partial
 from pydantic import BaseModel
 from datetime import datetime
 
@@ -445,9 +447,10 @@ async def generate_persona(
     """
     
     try:
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=meta_prompt
+        loop = asyncio.get_running_loop()
+        response = await loop.run_in_executor(
+            None,
+            partial(client.models.generate_content, model='gemini-2.5-flash', contents=meta_prompt)
         )
         persona_prompt = response.text.strip()
     except Exception as e:
@@ -600,11 +603,16 @@ async def send_message(
             novel_filter = novel.title # Basic attempt
             
         try:
-            chunks = chatbot_service.find_similar_chunks(
-                question=message.content,
-                top_k=3,
-                novel_filter=novel_filter,
-                chapter_id=room.chapter_id
+            loop = asyncio.get_running_loop()
+            chunks = await loop.run_in_executor(
+                None,
+                partial(
+                    chatbot_service.find_similar_chunks,
+                    question=message.content,
+                    top_k=3,
+                    novel_filter=novel_filter,
+                    chapter_id=room.chapter_id
+                )
             )
             if chunks:
                 rag_context = "\n\n[Reference Scenes from Novel]:\n"
@@ -670,25 +678,30 @@ Checklist: 5/5 | Confidence: 4.5/5.0 | Notes: 짧고 캐릭터답게
     """
     
     for msg in history_records:
+        if msg.id == user_msg.id:
+            continue  # 현재 메시지는 RAG 컨텍스트와 함께 아래서 추가
         role = "user" if msg.role == "user" else "model"
         # We don't inject RAG into past history to save tokens and avoid confusion
         contents.append(types.Content(
             role=role,
             parts=[types.Part(text=msg.content)]
         ))
-    
-    # Add current message with RAG
+
+    # Add current message with RAG context
     contents.append(types.Content(
         role="user",
         parts=[types.Part(text=input_text)]
     ))
         
     try:
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=contents,
-            config=types.GenerateContentConfig(
-                system_instruction=system_instruction
+        loop = asyncio.get_running_loop()
+        response = await loop.run_in_executor(
+            None,
+            partial(
+                client.models.generate_content,
+                model='gemini-2.5-flash',
+                contents=contents,
+                config=types.GenerateContentConfig(system_instruction=system_instruction)
             )
         )
         ai_reply = response.text.strip()
@@ -735,10 +748,11 @@ Checklist: 5/5 | Confidence: 4.5/5.0 | Notes: 짧고 캐릭터답게
         content=ai_reply
     )
     db.add(ai_msg)
-    
-    # Update room updated_at
-    room.updated_at = ai_msg.created_at
-    
+
+    # Update room updated_at (ai_msg.created_at은 커밋 전이라 None이므로 현재 시간 사용)
+    from datetime import datetime
+    room.updated_at = datetime.utcnow()
+
     db.commit()
     db.refresh(user_msg)
     db.refresh(ai_msg)

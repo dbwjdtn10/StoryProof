@@ -4,6 +4,7 @@ import {
     X, ArrowLeft, MoreVertical, Trash2, SquarePen,
     Plus, Send, Sparkles
 } from 'lucide-react';
+import { toast } from 'sonner';
 import {
     CharacterChatRoom, CharacterChatMessage,
     generatePersona, createRoom, getRooms, sendMessage, getMessages, updateRoom, deleteRoom
@@ -405,7 +406,7 @@ function ChatRoom({ room }: ChatRoomProps) {
             console.error("Failed to send message:", error);
             // Revert optimistic update
             setMessages(prev => prev.filter(m => m.id !== tempMsg.id));
-            alert("메시지 전송 실패");
+            toast.error("메시지 전송 실패");
             setInputText(text); // Restore text
         } finally {
             setLoading(false);
@@ -558,15 +559,14 @@ export function CharacterChatBot({ onClose, novelId, chapterId }: CharacterChatW
 
     const handleDeleteRoom = async () => {
         if (!activeRoom) return;
-        if (confirm("정말로 이 대화방을 삭제하시겠습니까?")) {
-            try {
-                await deleteRoom(activeRoom.id);
-                setActiveRoom(null);
-                setIsMenuOpen(false);
-            } catch (error) {
-                console.error("Failed to delete room:", error);
-                alert("대화방 삭제 실패");
-            }
+        try {
+            await deleteRoom(activeRoom.id);
+            setActiveRoom(null);
+            setIsMenuOpen(false);
+            toast.success("대화방이 삭제되었습니다.");
+        } catch (error) {
+            console.error("Failed to delete room:", error);
+            toast.error("대화방 삭제 실패");
         }
     };
 

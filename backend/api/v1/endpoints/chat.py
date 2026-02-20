@@ -11,6 +11,9 @@ Note:
     채팅방 세션 관리 기능은 향후 구현 예정입니다.
 """
 
+import asyncio
+from functools import partial
+
 from fastapi import APIRouter
 
 from backend.schemas.chat_schema import (
@@ -64,14 +67,17 @@ async def ask_question(
         HTTPException: 검색 엔진 또는 LLM 오류 발생 시
     """
     chatbot = get_chatbot_service()
-    
-    result = chatbot.ask(
-        question=request.question,
-        alpha=request.alpha,
-        similarity_threshold=request.similarity_threshold,
-        novel_id=request.novel_id,
-        chapter_id=request.chapter_id,
-        novel_filter=request.novel_filter
+    loop = asyncio.get_running_loop()
+    result = await loop.run_in_executor(
+        None,
+        partial(
+            chatbot.ask,
+            question=request.question,
+            alpha=request.alpha,
+            similarity_threshold=request.similarity_threshold,
+            novel_id=request.novel_id,
+            chapter_id=request.chapter_id,
+            novel_filter=request.novel_filter
+        )
     )
-    
     return ChatAnswerResponse(**result)

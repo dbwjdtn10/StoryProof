@@ -12,6 +12,7 @@ RAG (Retrieval-Augmented Generation) 기반 소설 질의응답 시스템
 사용자 질문 → 임베딩 변환 → Pinecone 검색 → 유사 씬 추출 → Gemini 답변 생성
 """
 
+import threading
 from typing import Dict, List, Optional
 
 from google import genai
@@ -290,9 +291,6 @@ class ChatbotService:
         except Exception as e:
             print(f"[Warning] Query Augmentation Failed: {e}")
             return question
-        except Exception as e:
-            print(f"[Warning] Query Augmentation Failed: {e}")
-            return question
 
     def _extract_keywords(self, text: str) -> List[str]:
         """
@@ -445,19 +443,22 @@ class ChatbotService:
         }
 
 
-# 싱글톤 인스턴스
+# 싱글톤 인스턴스 (스레드 안전)
 _chatbot_service = None
+_chatbot_lock = threading.Lock()
 
 
 def get_chatbot_service() -> ChatbotService:
     """
-    챗봇 서비스 싱글톤 인스턴스 반환
-    
+    챗봇 서비스 싱글톤 인스턴스 반환 (스레드 안전)
+
     Returns:
         ChatbotService: 챗봇 서비스 인스턴스
     """
     global _chatbot_service
     if _chatbot_service is None:
-        _chatbot_service = ChatbotService()
+        with _chatbot_lock:
+            if _chatbot_service is None:
+                _chatbot_service = ChatbotService()
     return _chatbot_service
 

@@ -53,10 +53,10 @@ async def login(
 
 # ===== 로그아웃 =====
 
-@router.post("/logout")
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 async def logout():
-    """로그아웃 처리 (TODO: Redis 블랙리스트 구현)"""
-    pass
+    """로그아웃 처리 (클라이언트 토큰 삭제로 처리, TODO: Redis 블랙리스트 구현)"""
+    return None
 
 
 # ===== 토큰 갱신 =====
@@ -64,7 +64,8 @@ async def logout():
 @router.post("/refresh")
 async def refresh_token():
     """JWT 토큰 갱신 (TODO: refresh token 로직 구현)"""
-    pass
+    from fastapi import HTTPException
+    raise HTTPException(status_code=501, detail="토큰 갱신 기능은 아직 구현되지 않았습니다.")
 
 
 # ===== 현재 사용자 조회 =====

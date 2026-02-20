@@ -1,3 +1,6 @@
+import asyncio
+from functools import partial
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import Any, Dict
@@ -107,16 +110,21 @@ async def generate_entity_image(
     if not prompt_text:
         raise HTTPException(status_code=400, detail=f"Description for '{request.entity_name}' not found. Please provide a description.")
         
-    refined_prompt = image_service.refine_prompt(prompt_text)
-    
+    loop = asyncio.get_running_loop()
+    refined_prompt = await loop.run_in_executor(
+        None, partial(image_service.refine_prompt, prompt_text)
+    )
+
     # 5. Generate Image
     # Filename: novel_{id}_{type}_{name}_{timestamp}.png
     import time
     safe_name = "".join(c for c in request.entity_name if c.isalnum() or c in (' ', '_', '-')).strip().replace(' ', '_')
     timestamp = int(time.time())
     filename = f"novel_{request.novel_id}_{request.entity_type}_{safe_name}_{timestamp}.png"
-    
-    image_path = image_service.generate_image(refined_prompt, filename)
+
+    image_path = await loop.run_in_executor(
+        None, partial(image_service.generate_image, refined_prompt, filename)
+    )
     
     if not image_path:
         raise HTTPException(status_code=500, detail="Failed to generate image.")

@@ -85,10 +85,11 @@ class NovelService:
         
         # 권한 확인 (작가 본인 또는 공개 소설)
         if novel.author_id != user_id and not novel.is_public:
-             # 관리자 여부는 컨트롤러에서 확인하거나 여기서 user 객체를 받아 확인해야 함.
-             # 일단 기본적인 로직만 이동
-             pass # 호출부에서 처리하도록 반환만
-             
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="권한이 없습니다."
+            )
+
         return novel
 
     @staticmethod
@@ -154,26 +155,36 @@ class NovelService:
         if novel.author_id != user_id:
             raise HTTPException(status_code=403, detail="권한이 없습니다.")
         
+        # Pinecone 벡터 정리 (모든 챕터)
+        try:
+            from backend.services.analysis.embedding_engine import EmbeddingSearchEngine
+            engine = EmbeddingSearchEngine()
+            chapters = db.query(Chapter).filter(Chapter.novel_id == novel_id).all()
+            for chapter in chapters:
+                engine.delete_chapter_vectors(novel_id, chapter.id)
+        except Exception as e:
+            logger.warning(f"Pinecone 벡터 정리 실패 (novel={novel_id}): {e}")
+
         # 관련 이미지 파일 삭제
         import os
         import glob
-        
+
         base_dir = os.getcwd()
         images_dir = os.path.join(base_dir, "backend", "static", "images")
         pattern = os.path.join(images_dir, f"novel_{novel_id}_*.png")
-        
+
         deleted_count = 0
         for image_path in glob.glob(pattern):
             try:
                 os.remove(image_path)
                 deleted_count += 1
-                print(f"[Cleanup] Deleted image: {os.path.basename(image_path)}")
+                logger.info(f"[Cleanup] Deleted image: {os.path.basename(image_path)}")
             except Exception as e:
-                print(f"[Warning] Failed to delete {os.path.basename(image_path)}: {e}")
-        
+                logger.warning(f"Failed to delete {os.path.basename(image_path)}: {e}")
+
         if deleted_count > 0:
-            print(f"[Cleanup] Deleted {deleted_count} image(s) for novel {novel_id}")
-            
+            logger.info(f"[Cleanup] Deleted {deleted_count} image(s) for novel {novel_id}")
+
         db.delete(novel)
         db.commit()
 
@@ -422,17 +433,22 @@ class NovelService:
         if not chapter:
             raise HTTPException(status_code=404, detail="회차를 찾을 수 없습니다.")
             
+        # Pinecone 벡터 정리 (DB 삭제 전에 수행)
+        try:
+            from backend.services.analysis.embedding_engine import EmbeddingSearchEngine
+            EmbeddingSearchEngine().delete_chapter_vectors(novel_id, chapter_id)
+        except Exception as e:
+            logger.warning(f"Pinecone 벡터 정리 실패 (chapter={chapter_id}): {e}")
+
         # 관련된 캐릭터 채팅방 삭제 (Cascade가 안 걸려 있을 경우 수동 삭제)
         # CharacterChatMessage는 CharacterChatRoom 삭제 시 ORM cascade로 삭제됨
         chat_rooms = db.query(CharacterChatRoom).filter(CharacterChatRoom.chapter_id == chapter_id).all()
         for room in chat_rooms:
-            print(f"[DEBUG] Deleting chat room: {room.id}, Chapter ID: {chapter_id}")
             db.delete(room)
-        
+
         # 채팅방 삭제를 먼저 DB에 반영
         db.flush()
-            
-        print(f"[DEBUG] Deleting chapter: {chapter_id}")
+
         db.delete(chapter)
         db.commit()
 
@@ -523,7 +539,7 @@ class NovelService:
         try:
             from backend.worker.tasks import process_chapter_storyboard
             process_chapter_storyboard.delay(novel_id, target_chapter.id)
-        except:
-            pass
+        except Exception as e:
+            logger.warning(f"병합 후 재분석 트리거 실패: {e}")
             
         return target_chapter

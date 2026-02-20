@@ -109,7 +109,6 @@ def register_routers() -> None:
     app.include_router(character_chat.router, prefix="/api/v1/character-chat", tags=["CharacterChat"])
     app.include_router(images.router, prefix="/api/v1/images", tags=["Images"])
     print("[OK] Routers registered")
-    print(f"Registered routes: {[route.path for route in app.routes]}") # Debugging
 
 
 # 설정 적용 (순서 중요: CORS를 마지막에 - 역순으로 실행되므로 먼저 처리됨)
@@ -147,14 +146,14 @@ async def global_exception_handler(request: Request, exc: Exception):
     글로벌 예외 핸들러
     모든 처리되지 않은 예외를 캐치
     """
+    import logging
+    logging.getLogger("storyproof").error(
+        f"Unhandled exception [{type(exc).__name__}] on {request.method} {request.url.path}: {exc}",
+        exc_info=True
+    )
     return JSONResponse(
         status_code=500,
-        content={
-            "detail": f"Internal server error: {str(exc)}",
-            "error_type": type(exc).__name__,
-            "path": request.url.path,
-            "method": request.method
-        }
+        content={"detail": "Internal server error"}
     )
 
 
@@ -163,14 +162,35 @@ async def health_check():
     """
     헬스 체크 엔드포인트
     서버 상태 및 의존성 연결 상태 확인
-    
+
     Returns:
         dict: 헬스 체크 결과
     """
+    from sqlalchemy import text
+    db_status = "disconnected"
+    try:
+        from backend.db.session import SessionLocal
+        db = SessionLocal()
+        db.execute(text("SELECT 1"))
+        db.close()
+        db_status = "connected"
+    except Exception:
+        pass
+
+    pinecone_status = "disconnected"
+    try:
+        from backend.services.analysis.embedding_engine import EmbeddingSearchEngine
+        engine = EmbeddingSearchEngine()
+        if engine.index is not None:
+            pinecone_status = "connected"
+    except Exception:
+        pass
+
+    overall = "healthy" if db_status == "connected" else "degraded"
     return {
-        "status": "healthy",
-        "database": "connected",
-        "pinecone": "connected"
+        "status": overall,
+        "database": db_status,
+        "pinecone": pinecone_status,
     }
 
 
