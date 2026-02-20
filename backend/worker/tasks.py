@@ -362,25 +362,62 @@ def cancel_task(task_id: str) -> bool:
 
 
 @celery_app.task(name="detect_inconsistency_task", bind=True, max_retries=2)
-def detect_inconsistency_task(self, novel_id: int, text_fragment: str, chapter_id: Optional[int] = None):
+def detect_inconsistency_task(self, novel_id: int, text_fragment: str, chapter_id: Optional[int] = None, analysis_id: Optional[int] = None):
     """
     설정 일관성 검사 비동기 작업
-    
+
     Args:
         novel_id: 소설 ID
         text_fragment: 검사할 텍스트
         chapter_id: 챕터 ID (선택사항)
-    
+        analysis_id: Analysis 레코드 ID (선택사항, DB 저장용)
+
     Returns:
         dict: 분석 결과
     """
+    db = None
     try:
+        # DB 상태 업데이트: PROCESSING
+        if analysis_id:
+            from backend.db.models import Analysis, AnalysisStatus
+            db = SessionLocal()
+            analysis = db.query(Analysis).filter(Analysis.id == analysis_id).first()
+            if analysis:
+                analysis.status = AnalysisStatus.PROCESSING
+                db.commit()
+
         from backend.services.agent import get_consistency_agent
         result = get_consistency_agent().check_consistency(novel_id, text_fragment)
+
+        # DB 상태 업데이트: COMPLETED + 결과 저장
+        if analysis_id and db:
+            analysis = db.query(Analysis).filter(Analysis.id == analysis_id).first()
+            if analysis:
+                analysis.status = AnalysisStatus.COMPLETED
+                analysis.result = result
+                analysis.completed_at = datetime.utcnow()
+                db.commit()
+
         return result
     except Exception as exc:
+        # DB 상태 업데이트: FAILED
+        if analysis_id:
+            try:
+                if not db:
+                    db = SessionLocal()
+                from backend.db.models import Analysis, AnalysisStatus
+                analysis = db.query(Analysis).filter(Analysis.id == analysis_id).first()
+                if analysis:
+                    analysis.status = AnalysisStatus.FAILED
+                    analysis.error_message = str(exc)
+                    db.commit()
+            except Exception:
+                pass
         logger.error(f"설정 일관성 검사 실패: {exc}")
         raise self.retry(exc=exc, countdown=30)
+    finally:
+        if db:
+            db.close()
 
 # ===== Celery Beat 스케줄 (정기 작업) =====
 

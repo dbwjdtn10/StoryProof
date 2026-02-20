@@ -35,10 +35,12 @@ class StoryboardStatus(str, enum.Enum):
 
 class AnalysisType(str, enum.Enum):
     """분석 유형"""
-    CHARACTER = "character"   # 캐릭터 분석
-    PLOT = "plot"            # 플롯 분석
-    STYLE = "style"          # 문체 분석
-    OVERALL = "overall"      # 종합 분석
+    CHARACTER = "character"       # 캐릭터 분석
+    PLOT = "plot"                # 플롯 분석
+    STYLE = "style"              # 문체 분석
+    OVERALL = "overall"          # 종합 분석
+    CONSISTENCY = "consistency"  # 설정 파괴 분석
+    PREDICTION = "prediction"    # 스토리 예측
 
 
 # ===== 모델 정의 =====

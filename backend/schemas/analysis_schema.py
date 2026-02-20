@@ -16,6 +16,8 @@ class AnalysisTypeEnum(str, Enum):
     PLOT = "plot"
     STYLE = "style"
     OVERALL = "overall"
+    CONSISTENCY = "consistency"
+    PREDICTION = "prediction"
 
 
 class AnalysisStatusEnum(str, Enum):

@@ -17,8 +17,6 @@ interface PredictionSidebarProps {
 }
 
 export function PredictionSidebar({ isOpen, onClose, messages, onSendMessage, isLoading, onClearChat }: PredictionSidebarProps) {
-    const [width, setWidth] = useState(400);
-    const [isResizing, setIsResizing] = useState(false);
     const [inputValue, setInputValue] = useState("");
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -28,8 +26,6 @@ export function PredictionSidebar({ isOpen, onClose, messages, onSendMessage, is
 
     // Helper to format assistant messages: Add double line break every 2 sentences
     const formatMessage = (content: string) => {
-        // Simple sentence splitting by . ? !
-        // This regex looks for punctuation followed by space or end of string
         const sentences = content.match(/[^.!?]+[.!?]+(\s|$)/g);
 
         if (!sentences) return content;
@@ -37,7 +33,6 @@ export function PredictionSidebar({ isOpen, onClose, messages, onSendMessage, is
         let formatted = "";
         for (let i = 0; i < sentences.length; i++) {
             formatted += sentences[i];
-            // Add extra break every 2 sentences, but not at the very end
             if ((i + 1) % 2 === 0 && i < sentences.length - 1) {
                 formatted += "\n\n";
             }
@@ -50,37 +45,6 @@ export function PredictionSidebar({ isOpen, onClose, messages, onSendMessage, is
             scrollToBottom();
         }
     }, [messages, isOpen, isLoading]);
-
-    useEffect(() => {
-        const handleMouseMove = (e: MouseEvent) => {
-            if (!isResizing) return;
-            const newWidth = window.innerWidth - e.clientX;
-            if (newWidth >= 300 && newWidth <= 800) {
-                setWidth(newWidth);
-            }
-        };
-
-        const handleMouseUp = () => {
-            setIsResizing(false);
-        };
-
-        if (isResizing) {
-            document.addEventListener('mousemove', handleMouseMove);
-            document.addEventListener('mouseup', handleMouseUp);
-            document.body.style.cursor = 'ew-resize';
-            document.body.style.userSelect = 'none';
-        } else {
-            document.body.style.cursor = 'default';
-            document.body.style.userSelect = 'auto';
-        }
-
-        return () => {
-            document.removeEventListener('mousemove', handleMouseMove);
-            document.removeEventListener('mouseup', handleMouseUp);
-            document.body.style.cursor = 'default';
-            document.body.style.userSelect = 'auto';
-        };
-    }, [isResizing]);
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter' && !e.shiftKey) {
@@ -95,43 +59,26 @@ export function PredictionSidebar({ isOpen, onClose, messages, onSendMessage, is
         setInputValue("");
     };
 
+    if (!isOpen) return null;
+
     return (
         <div
-            className={`prediction-sidebar ${isOpen ? 'open' : 'closed'}`}
             style={{
-                width: isOpen ? `${width}px` : undefined,
                 position: 'fixed',
-                top: 0,
-                right: 0,
-                bottom: 0,
+                bottom: '16px',
+                right: '20px',
+                width: '500px',
+                height: '850px',
                 backgroundColor: 'var(--modal-bg)',
-                boxShadow: '-4px 0 15px rgba(0,0,0,0.1)',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.15)',
                 zIndex: 900,
-                transform: isOpen ? 'translateX(0)' : 'translateX(100%)',
-                transition: isResizing ? 'none' : 'transform 0.3s ease-in-out',
                 display: 'flex',
                 flexDirection: 'column',
-                borderLeft: '1px solid var(--modal-border)'
+                borderRadius: '16px',
+                border: '1px solid var(--modal-border)',
+                animation: 'slideUp 0.3s ease'
             }}
         >
-            {/* Resize Handle */}
-            <div
-                onMouseDown={() => setIsResizing(true)}
-                style={{
-                    position: 'absolute',
-                    left: 0,
-                    top: 0,
-                    bottom: 0,
-                    width: '6px',
-                    cursor: 'ew-resize',
-                    backgroundColor: isResizing ? 'var(--primary)' : 'transparent',
-                    zIndex: 50,
-                    transition: 'background-color 0.2s',
-                    opacity: 0.5
-                }}
-                className="resize-handle"
-            />
-
             {/* Header */}
             <div style={{
                 padding: '16px 20px',
@@ -140,7 +87,8 @@ export function PredictionSidebar({ isOpen, onClose, messages, onSendMessage, is
                 justifyContent: 'space-between',
                 alignItems: 'center',
                 backgroundColor: 'var(--modal-header-bg)',
-                color: 'var(--modal-header-text)'
+                color: 'var(--modal-header-text)',
+                borderRadius: '16px 16px 0 0'
             }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <Sparkles size={20} strokeWidth={2.5} className={isLoading ? 'animate-spin' : ''} style={{ color: 'var(--primary)' }} />
@@ -293,7 +241,8 @@ export function PredictionSidebar({ isOpen, onClose, messages, onSendMessage, is
             <div style={{
                 padding: '16px',
                 backgroundColor: 'var(--modal-bg)',
-                borderTop: '1px solid var(--modal-border)'
+                borderTop: '1px solid var(--modal-border)',
+                borderRadius: '0 0 16px 16px'
             }}>
                 <div style={{
                     display: 'flex',
@@ -316,16 +265,15 @@ export function PredictionSidebar({ isOpen, onClose, messages, onSendMessage, is
                             resize: 'none',
                             height: 'auto',
                             minHeight: '24px',
-                            maxHeight: '120px', // Increased max height
+                            maxHeight: '120px',
                             padding: '8px',
                             fontSize: '0.95rem',
                             outline: 'none',
                             fontFamily: 'inherit',
-                            overflowY: 'auto', // Enable scroll
+                            overflowY: 'auto',
                             color: 'var(--input-text)'
                         }}
                         rows={1}
-                        // Simple auto-height hack
                         onInput={(e) => {
                             e.currentTarget.style.height = 'auto';
                             e.currentTarget.style.height = (e.currentTarget.scrollHeight) + 'px';
@@ -359,11 +307,12 @@ export function PredictionSidebar({ isOpen, onClose, messages, onSendMessage, is
                     from { transform: rotate(0deg); }
                     to { transform: rotate(360deg); }
                 }
+                @keyframes slideUp {
+                    from { opacity: 0; transform: translateY(20px); }
+                    to { opacity: 1; transform: translateY(0); }
+                }
                 .animate-spin {
                     animation: spin 1s linear infinite;
-                }
-                .resize-handle:hover {
-                    background-color: var(--accent) !important;
                 }
             `}</style>
         </div>

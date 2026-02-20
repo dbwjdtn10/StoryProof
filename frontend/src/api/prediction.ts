@@ -11,6 +11,13 @@ export interface PredictionTaskResponse {
     error?: string;
 }
 
+export interface PredictionHistoryItem {
+    id: number;
+    user_input: string;
+    prediction: string;
+    created_at: string | null;
+}
+
 export const requestPrediction = async (novelId: number, text: string): Promise<PredictionTaskResponse> => {
     const response = await fetch(`${API_BASE_URL}/request`, {
         method: 'POST',
@@ -30,6 +37,28 @@ export const getPredictionTaskStatus = async (taskId: string): Promise<Predictio
 
     if (!response.ok) {
         throw new Error("Failed to get task status");
+    }
+
+    return response.json();
+};
+
+export const getPredictionHistory = async (novelId: number): Promise<{ history: PredictionHistoryItem[] }> => {
+    const response = await fetch(`${API_BASE_URL}/history/${novelId}`);
+
+    if (!response.ok) {
+        throw new Error("Failed to get prediction history");
+    }
+
+    return response.json();
+};
+
+export const clearPredictionHistory = async (novelId: number): Promise<{ deleted: number }> => {
+    const response = await fetch(`${API_BASE_URL}/history/${novelId}`, {
+        method: 'DELETE'
+    });
+
+    if (!response.ok) {
+        throw new Error("Failed to clear prediction history");
     }
 
     return response.json();

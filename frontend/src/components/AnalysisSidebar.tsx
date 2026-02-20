@@ -1,4 +1,4 @@
-import { X, AlertTriangle, CheckCircle, Loader2, Navigation } from 'lucide-react';
+import { X, AlertTriangle, CheckCircle, Loader2, Navigation, RefreshCw } from 'lucide-react';
 
 export interface AnalysisResult {
     status: string;
@@ -17,61 +17,83 @@ interface AnalysisSidebarProps {
     result: AnalysisResult | null;
     isLoading: boolean;
     onNavigateToQuote?: (quote: string) => void;
+    onReanalyze?: () => void;
 }
 
-export function AnalysisSidebar({ isOpen, onClose, result, isLoading, onNavigateToQuote }: AnalysisSidebarProps) {
+export function AnalysisSidebar({ isOpen, onClose, result, isLoading, onNavigateToQuote, onReanalyze }: AnalysisSidebarProps) {
     if (!isOpen) return null;
 
     return (
         <div
             style={{
                 position: 'fixed',
-                top: 0,
-                right: 0,
+                bottom: '16px',
+                right: '20px',
                 width: '450px',
-                height: '100vh',
+                height: '750px',
                 backgroundColor: 'var(--modal-bg)',
                 color: 'var(--modal-text)',
-                boxShadow: '-4px 0 12px rgba(0,0,0,0.1)',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.15)',
                 zIndex: 1000,
                 display: 'flex',
                 flexDirection: 'column',
-                transition: 'transform 0.3s ease',
-                transform: isOpen ? 'translateX(0)' : 'translateX(100%)',
-                borderLeft: '1px solid var(--modal-border)'
+                borderRadius: '16px',
+                border: '1px solid var(--modal-border)',
+                animation: 'slideUp 0.3s ease'
             }}
         >
             {/* Header */}
             <div
                 style={{
-                    padding: '20px',
+                    padding: '16px 20px',
                     borderBottom: '1px solid var(--modal-border)',
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
                     backgroundColor: 'var(--modal-header-bg)',
-                    color: 'var(--modal-header-text)'
+                    color: 'var(--modal-header-text)',
+                    borderRadius: '16px 16px 0 0'
                 }}
             >
-                <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: '600', color: 'inherit' }}>
+                <h2 style={{ margin: 0, fontSize: '1.15rem', fontWeight: '600', color: 'inherit' }}>
                     설정 파괴 분석 결과
                 </h2>
-                <button
-                    onClick={onClose}
-                    style={{
-                        background: 'none',
-                        border: 'none',
-                        cursor: 'pointer',
-                        padding: '4px',
-                        color: 'inherit'
-                    }}
-                >
-                    <X size={24} strokeWidth={2.5} />
-                </button>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    {/* 재분석 버튼: 결과가 있고 로딩 중이 아닐 때 표시 */}
+                    {onReanalyze && result && !isLoading && (
+                        <button
+                            onClick={onReanalyze}
+                            title="재분석"
+                            style={{
+                                background: 'none',
+                                border: 'none',
+                                cursor: 'pointer',
+                                padding: '4px',
+                                color: 'inherit',
+                                display: 'flex',
+                                alignItems: 'center'
+                            }}
+                        >
+                            <RefreshCw size={18} strokeWidth={2.5} />
+                        </button>
+                    )}
+                    <button
+                        onClick={onClose}
+                        style={{
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            padding: '4px',
+                            color: 'inherit'
+                        }}
+                    >
+                        <X size={22} strokeWidth={2.5} />
+                    </button>
+                </div>
             </div>
 
             {/* Content */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '20px', backgroundColor: 'var(--modal-bg)' }}>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '20px', backgroundColor: 'var(--modal-bg)', borderRadius: '0 0 16px 16px' }}>
                 {isLoading ? (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: '16px' }}>
                         <Loader2 size={48} strokeWidth={2.5} style={{ animation: 'spin 1s linear infinite', color: 'var(--primary)' }} />
@@ -204,11 +226,15 @@ export function AnalysisSidebar({ isOpen, onClose, result, isLoading, onNavigate
                 )}
             </div>
 
-            {/* Add CSS for spinner animation */}
+            {/* CSS animations */}
             <style>{`
                 @keyframes spin {
                     from { transform: rotate(0deg); }
                     to { transform: rotate(360deg); }
+                }
+                @keyframes slideUp {
+                    from { opacity: 0; transform: translateY(20px); }
+                    to { opacity: 1; transform: translateY(0); }
                 }
             `}</style>
         </div>

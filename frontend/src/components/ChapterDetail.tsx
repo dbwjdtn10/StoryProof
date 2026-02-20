@@ -10,7 +10,8 @@ import { Settings } from './Settings';
 import { getChapter, updateChapter, getChapterBible, reanalyzeChapter, BibleData, Character, Item, Location } from '../api/novel';
 import { AnalysisSidebar, AnalysisResult } from './AnalysisSidebar';
 import { PredictionSidebar, Message } from './predictions/PredictionSidebar';
-import { requestPrediction, getPredictionTaskStatus } from '../api/prediction';
+import { requestPrediction, getPredictionTaskStatus, getPredictionHistory, clearPredictionHistory } from '../api/prediction';
+import { getCachedConsistency } from '../api/analysis';
 import { toast } from 'sonner';
 import { generateImage } from '../api/images';
 import { useTheme } from '../contexts/ThemeContext';
@@ -282,15 +283,12 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
         }, 100);
     };
 
-    // 설정 파괴 분석 실행
-    const handleCheckConsistency = async () => {
-        setIsAnalysisSidebarOpen(true);
-        setIsPredictionSidebarOpen(false); // Mutual exclusion
+    // 설정 파괴 분석 실행 (캐시 확인 → 없으면 새 분석)
+    const runConsistencyAnalysis = async () => {
         setIsAnalysisLoading(true);
         setAnalysisResult(null);
 
         try {
-            // 현재 모든 씬의 텍스트를 합쳐서 분석 요청 (씬 모드 vs 에디터 모드)
             const allText = sceneTexts.length > 0
                 ? sceneTexts.join('\n\n')
                 : content;
@@ -309,7 +307,6 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
 
             const { task_id } = await response.json();
 
-            // 폴링 시작
             const intervalId = setInterval(async () => {
                 try {
                     const statusRes = await fetch(`/api/v1/analysis/task/${task_id}`);
@@ -333,9 +330,6 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                     setAnalysisResult({ status: "오류", message: "상태 확인 중 서버 통신 오류가 발생했습니다." });
                 }
             }, 2000);
-
-            // 컴포넌트 언마운트 시 인터벌 클리어를 위해 (실제로는 state나 ref로 관리하는게 좋지만 우선 이 로직 내에서 처리)
-            // 작업 중 중단 방지 등을 고려해 setInterval의 수명주기를 관리함
         } catch (error) {
             console.error("Analysis error:", error);
             setAnalysisResult({ status: "오류 발생", message: "서버와 통신 중 오류가 발생했습니다." });
@@ -343,9 +337,48 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
         }
     };
 
-    const handlePredictionSidebarOpen = () => {
+    const handleCheckConsistency = async () => {
+        setIsAnalysisSidebarOpen(true);
+        setIsPredictionSidebarOpen(false);
+
+        // 캐시 확인
+        if (novelId && chapterId) {
+            try {
+                setIsAnalysisLoading(true);
+                const cache = await getCachedConsistency(novelId, chapterId);
+                if (cache.cached && cache.result) {
+                    setAnalysisResult(cache.result);
+                    setIsAnalysisLoading(false);
+                    return;
+                }
+            } catch {
+                // 캐시 조회 실패 시 무시하고 새 분석 진행
+            }
+        }
+
+        await runConsistencyAnalysis();
+    };
+
+    const handlePredictionSidebarOpen = async () => {
         setIsPredictionSidebarOpen(true);
-        setIsAnalysisSidebarOpen(false); // Mutual exclusion
+        setIsAnalysisSidebarOpen(false);
+
+        // DB에서 이전 대화 히스토리 로드 (현재 메시지가 비어 있을 때만)
+        if (novelId && chatMessages.length === 0) {
+            try {
+                const { history } = await getPredictionHistory(novelId);
+                if (history.length > 0) {
+                    const restored: Message[] = [];
+                    for (const item of history) {
+                        restored.push({ id: `h-u-${item.id}`, role: 'user', content: item.user_input });
+                        restored.push({ id: `h-a-${item.id}`, role: 'assistant', content: item.prediction });
+                    }
+                    setChatMessages(restored);
+                }
+            } catch {
+                // 히스토리 로드 실패 시 무시
+            }
+        }
     };
 
     const handleSendMessage = async (inputMessage: string) => {
@@ -1770,6 +1803,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                 result={analysisResult}
                 isLoading={isAnalysisLoading}
                 onNavigateToQuote={handleNavigateToQuote}
+                onReanalyze={runConsistencyAnalysis}
             />
 
             {/* 스토리 예측 사이드바 */}
@@ -1779,7 +1813,10 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                 messages={chatMessages}
                 onSendMessage={handleSendMessage}
                 isLoading={isPredictionLoading}
-                onClearChat={() => setChatMessages([])}
+                onClearChat={() => {
+                    setChatMessages([]);
+                    if (novelId) clearPredictionHistory(novelId).catch(() => {});
+                }}
             />
 
             {/* Floating Menu - Settings, Analysis, Prediction, Chatbot */}

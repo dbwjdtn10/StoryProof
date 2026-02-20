@@ -39,6 +39,14 @@ export interface PredictionResult {
 }
 
 /**
+ * 설정 파괴 분석 캐시 조회
+ */
+export async function getCachedConsistency(novelId: number, chapterId: number): Promise<{ cached: boolean; result: any }> {
+    const response = await axios.get(`${API_BASE_URL}/api/v1/analysis/consistency/${novelId}/${chapterId}`);
+    return response.data;
+}
+
+/**
  * 설정 일관성 검사 요청
  */
 export async function requestConsistencyCheck(data: ConsistencyRequest): Promise<{ task_id: string; status: string }> {
