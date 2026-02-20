@@ -225,16 +225,17 @@ def export_bible(
         media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         ext = "docx"
 
-    # 소설 제목을 파일명에 포함 (안전한 문자만)
+    # 파일명: filename*에 한글 포함, filename에는 ASCII 폴백
     safe_title = "".join(c for c in title if c.isalnum() or c in " _-").strip()[:30]
-    filename = f"{safe_title}_바이블.{ext}" if safe_title else f"bible_{novel_id}_{chapter_id}.{ext}"
-    encoded_filename = quote(filename)
+    display_name = f"{safe_title}_바이블.{ext}" if safe_title else f"bible_{novel_id}_{chapter_id}.{ext}"
+    ascii_fallback = f"bible_{novel_id}_{chapter_id}.{ext}"
+    encoded_name = quote(display_name)
 
     return Response(
         content=content_bytes,
         media_type=media_type,
         headers={
-            "Content-Disposition": f"attachment; filename=\"{filename}\"; filename*=UTF-8''{encoded_filename}"
+            "Content-Disposition": f"attachment; filename=\"{ascii_fallback}\"; filename*=UTF-8''{encoded_name}"
         },
     )
 
