@@ -1,5 +1,5 @@
 import { ArrowLeft, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Users, Package, Clock, Save, MapPin, Search, Download, FileText, File as FileIcon, X } from 'lucide-react';
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Editor } from '@tiptap/react';
 import { NovelEditor } from './NovelEditor';
 import { AuthorToolbar } from './AuthorToolbar';
@@ -186,7 +186,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                         return; // 완료/실패 시 폴링 중단
                     }
                 } catch {
-                    // 상태 확인 실패 시 무시
+                    toast.error("분석 상태 확인에 실패했습니다.");
                 }
                 if (!cancelled) {
                     interval = Math.min(interval * 1.5, 20000);
@@ -273,6 +273,8 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
     const [isAppearancesExpanded, setIsAppearancesExpanded] = useState(false);
     const [isItemAppearancesExpanded, setIsItemAppearancesExpanded] = useState(false);
     const [isLocationAppearancesExpanded, setIsLocationAppearancesExpanded] = useState(false);
+    const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+    const scrollHighlightRef = useRef<ReturnType<typeof setTimeout>>();
 
     // 캐릭터 채팅이 열리면 분석/예측 사이드바 닫기 (겹침 방지)
     useEffect(() => {
@@ -384,14 +386,15 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
         }
 
         // Wait for state updates and then scroll
-        setTimeout(() => {
+        if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+        if (scrollHighlightRef.current) clearTimeout(scrollHighlightRef.current);
+        scrollTimeoutRef.current = setTimeout(() => {
             const element = document.getElementById(`scene-block-${index}`);
             if (element) {
                 element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                // Optional: Highlight effect for the block itself
                 element.style.transition = 'background-color 0.5s';
                 element.style.backgroundColor = 'rgba(79, 70, 229, 0.1)';
-                setTimeout(() => {
+                scrollHighlightRef.current = setTimeout(() => {
                     element.style.backgroundColor = 'transparent';
                 }, 1000);
             }
@@ -765,6 +768,14 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
         }, 300);
         return () => { if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current); };
     }, [bibleSearchInput]);
+
+    // Cleanup scroll timeouts on unmount
+    useEffect(() => {
+        return () => {
+            if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+            if (scrollHighlightRef.current) clearTimeout(scrollHighlightRef.current);
+        };
+    }, []);
 
     // Auto-expand sections when search has matches
     useEffect(() => {

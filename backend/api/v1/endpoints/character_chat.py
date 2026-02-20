@@ -12,7 +12,7 @@ from functools import partial
 from datetime import datetime
 
 from backend.db.session import get_db
-from backend.db.models import Novel, Analysis, AnalysisType, CharacterChatRoom, CharacterChatMessage, VectorDocument
+from backend.db.models import Novel, Analysis, AnalysisType, AnalysisStatus, CharacterChatRoom, CharacterChatMessage, VectorDocument
 from backend.core.config import settings
 from backend.services.chatbot_service import get_chatbot_service
 from backend.services.character_chat_service import CharacterChatService
@@ -88,7 +88,7 @@ def _fetch_analysis_for_character(
     """분석 데이터 조회. 챕터별 분석 → 벡터 메타데이터 집계 → 글로벌 분석 순으로 시도."""
     query = db.query(Analysis).filter(
         Analysis.novel_id == novel_id,
-        Analysis.status == "completed"
+        Analysis.status == AnalysisStatus.COMPLETED
     )
     if chapter_id:
         query = query.filter(Analysis.chapter_id == chapter_id)
@@ -153,7 +153,7 @@ def _fetch_analysis_for_character(
         analysis = db.query(Analysis).filter(
             Analysis.novel_id == novel_id,
             Analysis.analysis_type == AnalysisType.CHARACTER,
-            Analysis.status == "completed"
+            Analysis.status == AnalysisStatus.COMPLETED
         ).order_by(desc(Analysis.created_at)).first()
 
     if analysis:
@@ -470,7 +470,7 @@ async def _prepare_message_context(
     # 2. Fetch chat history
     history_records = db.query(CharacterChatMessage).filter(
         CharacterChatMessage.room_id == room.id
-    ).order_by(CharacterChatMessage.created_at).all()
+    ).order_by(CharacterChatMessage.created_at).limit(100).all()
 
     # 3. RAG + 바이블 (단순 메시지는 RAG 스킵)
     chatbot_service = get_chatbot_service()

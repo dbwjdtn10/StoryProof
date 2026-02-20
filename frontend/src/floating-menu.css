@@ -213,3 +213,45 @@
 [data-theme="dark"] .chatbot-close:hover {
     color: #ffffff;
 }
+
+/* Sepia Mode */
+[data-theme="sepia"] .floating-menu-btn {
+    background: var(--botanical-brown-rich, #553f2e);
+    color: #ffffff;
+}
+
+[data-theme="sepia"] .floating-menu-btn:hover {
+    background: var(--botanical-brown-deep, #3B2F28);
+}
+
+[data-theme="sepia"] .menu-option {
+    background: #fdf6e3;
+    border-color: rgba(107, 79, 58, 0.2);
+    color: #311900;
+}
+
+[data-theme="sepia"] .menu-option:hover {
+    background: rgba(107, 79, 58, 0.08);
+    border-color: rgba(107, 79, 58, 0.4);
+}
+
+[data-theme="sepia"] .chatbot-modal {
+    background: #fdf6e3;
+    border-color: rgba(107, 79, 58, 0.2);
+}
+
+[data-theme="sepia"] .chatbot-header {
+    border-bottom-color: rgba(107, 79, 58, 0.15);
+}
+
+[data-theme="sepia"] .chatbot-header h3 {
+    color: currentColor;
+}
+
+[data-theme="sepia"] .chatbot-close {
+    color: #6b4f3a;
+}
+
+[data-theme="sepia"] .chatbot-close:hover {
+    color: #311900;
+}

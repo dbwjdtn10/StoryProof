@@ -61,10 +61,10 @@ def logout():
 
 # ===== 토큰 갱신 =====
 
-@router.post("/refresh")
+@router.post("/refresh", response_model=None)
 def refresh_token():
-    """JWT 토큰 갱신 (TODO: refresh token 로직 구현)"""
-    raise HTTPException(status_code=501, detail="토큰 갱신 기능은 아직 구현되지 않았습니다.")
+    """JWT 토큰 갱신 - 미구현 (클라이언트에서 재로그인 유도)"""
+    raise HTTPException(status_code=status.HTTP_405_METHOD_NOT_ALLOWED, detail="토큰 갱신은 지원되지 않습니다. 다시 로그인해주세요.")
 
 
 # ===== 현재 사용자 조회 =====

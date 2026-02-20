@@ -555,6 +555,7 @@ export function CharacterChatBot({ onClose, novelId, chapterId }: CharacterChatW
     const [activeRoom, setActiveRoom] = useState<CharacterChatRoom | null>(null);
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [roomListKey, setRoomListKey] = useState(0);
     const menuRef = useRef<HTMLDivElement>(null);
 
     // Close menu when clicking outside
@@ -580,6 +581,7 @@ export function CharacterChatBot({ onClose, novelId, chapterId }: CharacterChatW
                         await deleteRoom(activeRoom.id);
                         setActiveRoom(null);
                         setIsMenuOpen(false);
+                        setRoomListKey(prev => prev + 1);
                     } catch (error) {
                         console.error("Failed to delete room:", error);
                         toast.error("대화방 삭제 실패");
@@ -705,7 +707,7 @@ export function CharacterChatBot({ onClose, novelId, chapterId }: CharacterChatW
                 {activeRoom ? (
                     <ChatRoom room={activeRoom} />
                 ) : (
-                    <RoomList novelId={novelId} chapterId={chapterId} onSelectRoom={setActiveRoom} />
+                    <RoomList key={roomListKey} novelId={novelId} chapterId={chapterId} onSelectRoom={setActiveRoom} />
                 )}
             </div>
 

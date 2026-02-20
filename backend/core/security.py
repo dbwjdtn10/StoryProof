@@ -214,101 +214,40 @@ async def get_current_user(
 async def get_optional_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
 ):
-    """
-    선택적 인증 (토큰이 없어도 됨)
-    
-    Args:
-        credentials: HTTP Bearer 토큰 (선택)
-        
-    Returns:
-        Optional[User]: 사용자 객체 (인증되지 않으면 None)
-    """
-    pass
+    """선택적 인증 (토큰이 없어도 됨)"""
+    if not credentials:
+        return None
+    try:
+        payload = decode_token(credentials.credentials)
+        user_id = payload.get("sub")
+        if not user_id:
+            return None
+        db = next(get_db())
+        try:
+            return db.query(User).filter(User.id == int(user_id)).first()
+        finally:
+            db.close()
+    except Exception:
+        return None
 
 
 # ===== 권한 검증 함수 =====
 
 def require_admin(current_user = Depends(get_current_user)):
-    """
-    관리자 권한 필요 (의존성 주입용)
-    
-    Args:
-        current_user: 현재 사용자
-        
-    Returns:
-        User: 사용자 객체
-        
-    Raises:
-        HTTPException: 관리자가 아닌 경우
-    """
-    pass
+    """관리자 권한 필요 (의존성 주입용)"""
+    if not getattr(current_user, "is_admin", False):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+    return current_user
 
 
 def require_verified_email(current_user = Depends(get_current_user)):
-    """
-    이메일 인증 필요 (의존성 주입용)
-    
-    Args:
-        current_user: 현재 사용자
-        
-    Returns:
-        User: 사용자 객체
-        
-    Raises:
-        HTTPException: 이메일이 인증되지 않은 경우
-    """
-    pass
-
-
-# ===== 유틸리티 함수 =====
-
-def generate_verification_token(email: str) -> str:
-    """
-    이메일 인증 토큰 생성
-    
-    Args:
-        email: 사용자 이메일
-        
-    Returns:
-        str: 인증 토큰
-    """
-    pass
-
-
-def verify_verification_token(token: str) -> Optional[str]:
-    """
-    이메일 인증 토큰 검증
-    
-    Args:
-        token: 인증 토큰
-        
-    Returns:
-        Optional[str]: 이메일 (토큰이 유효하지 않으면 None)
-    """
-    pass
-
-
-def generate_password_reset_token(email: str) -> str:
-    """
-    비밀번호 재설정 토큰 생성
-    
-    Args:
-        email: 사용자 이메일
-        
-    Returns:
-        str: 재설정 토큰
-    """
-    pass
-
-
-def verify_password_reset_token(token: str) -> Optional[str]:
-    """
-    비밀번호 재설정 토큰 검증
-    
-    Args:
-        token: 재설정 토큰
-        
-    Returns:
-        Optional[str]: 이메일 (토큰이 유효하지 않으면 None)
-    """
-    pass
+    """이메일 인증 필요 (의존성 주입용)"""
+    if not getattr(current_user, "is_email_verified", False):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Email verification required",
+        )
+    return current_user

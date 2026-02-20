@@ -186,27 +186,28 @@
 }
 
 .splash-progress-fill {
-    width: 30%;
+    width: 100%;
     height: 100%;
     background: linear-gradient(90deg, #6366f1, #a78bfa, #6366f1);
     background-size: 200% 100%;
     border-radius: 4px;
+    transform-origin: left;
     animation: splash-progress 2s ease-in-out infinite;
 }
 
 @keyframes splash-progress {
     0% {
-        width: 10%;
+        transform: scaleX(0.1);
         background-position: 0% 50%;
     }
 
     50% {
-        width: 70%;
+        transform: scaleX(0.7);
         background-position: 100% 50%;
     }
 
     100% {
-        width: 10%;
+        transform: scaleX(0.1);
         background-position: 0% 50%;
     }
 }

@@ -83,6 +83,32 @@
     background-color: rgba(0, 0, 0, 0.5);
 }
 
+/* Dark Mode Scrollbar */
+[data-theme="dark"] .dictionary-sidebar::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+[data-theme="dark"] .dictionary-sidebar::-webkit-scrollbar-thumb {
+    background-color: rgba(255, 255, 255, 0.3);
+}
+
+[data-theme="dark"] .dictionary-sidebar::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(255, 255, 255, 0.5);
+}
+
+/* Sepia Mode Scrollbar */
+[data-theme="sepia"] .dictionary-sidebar::-webkit-scrollbar-track {
+    background: rgba(107, 79, 58, 0.05);
+}
+
+[data-theme="sepia"] .dictionary-sidebar::-webkit-scrollbar-thumb {
+    background-color: rgba(107, 79, 58, 0.3);
+}
+
+[data-theme="sepia"] .dictionary-sidebar::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(107, 79, 58, 0.5);
+}
+
 .dictionary-sidebar.closed {
     width: 0;
     overflow: hidden;
@@ -445,7 +471,7 @@
 }
 
 [data-theme="dark"] .bible-search-highlight {
-    background-color: rgba(255, 215, 0, 0.35);
+    background-color: rgba(255, 215, 0, 0.5);
 }
 
 /* Sepia Mode for Bible Toolbar */
@@ -711,7 +737,7 @@
 }
 
 [data-theme="dark"] .highlight-mark {
-    background-color: rgba(255, 215, 0, 0.3);
+    background-color: rgba(255, 215, 0, 0.5);
     animation-name: fadeHighlightDark;
 }
 
@@ -731,11 +757,11 @@
 
 @keyframes fadeHighlightDark {
     0% {
-        background-color: rgba(255, 215, 0, 0.3);
+        background-color: rgba(255, 215, 0, 0.5);
     }
 
     70% {
-        background-color: rgba(255, 215, 0, 0.3);
+        background-color: rgba(255, 215, 0, 0.5);
     }
 
     100% {

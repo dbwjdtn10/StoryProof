@@ -94,7 +94,8 @@ async def generate_entity_image(
                 # 캐시 확인: 이미 생성된 이미지가 있고 force_regenerate가 아니면 즉시 반환
                 existing_image = entity.get('image')
                 if existing_image and not request.force_regenerate:
-                    image_file_path = os.path.join("backend", existing_image.lstrip('/'))
+                    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                    image_file_path = os.path.join(base_dir, existing_image.lstrip('/'))
                     if os.path.exists(image_file_path):
                         logger.info(f"Image cache hit: {existing_image} for {request.entity_name}")
                         return ImageGenerationResponse(image_url=existing_image, refined_prompt="(cached)")

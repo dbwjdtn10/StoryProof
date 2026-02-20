@@ -78,6 +78,14 @@ export function FileUpload({ onFileClick, novelId, mode = 'writer' }: FileUpload
         poll();
     };
 
+    // Cleanup polling intervals on unmount
+    useEffect(() => {
+        return () => {
+            Object.values(progressIntervalRef.current).forEach(clearTimeout);
+            progressIntervalRef.current = {};
+        };
+    }, []);
+
     // Fetch existing chapters
     useEffect(() => {
         if (novelId) {
@@ -244,7 +252,7 @@ export function FileUpload({ onFileClick, novelId, mode = 'writer' }: FileUpload
                                 <Upload size={48} className="upload-icon" />
                                 <p className="upload-text-main">
                                     {mode === 'reader'
-                                        ? '자품 파일을 추가하여 읽기 시작하기'
+                                        ? '작품 파일을 추가하여 읽기 시작하기'
                                         : '파일을 드래그하거나 클릭하여 업로드'}
                                 </p>
                                 <p className="upload-text-sub">PDF, HWP, TXT 파일 지원</p>
