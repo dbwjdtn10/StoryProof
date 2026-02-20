@@ -356,8 +356,7 @@
 
 /* Sepia Mode Override */
 [data-theme="sepia"] .upload-container::before {
-    opacity: 0.8;
-    filter: saturate(2);
+    opacity: 0.85;
 }
 
 /* File Merge Button Dark Mode */
