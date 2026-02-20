@@ -380,6 +380,12 @@
     color: #999999;
 }
 
+[data-theme="dark"] .trait-tag {
+    background-color: #292524;
+    color: #a8a29e;
+    border-color: #444444;
+}
+
 /* Dark Mode for Text Content */
 [data-theme="dark"] .text-content {
     background: #1a1a1a;

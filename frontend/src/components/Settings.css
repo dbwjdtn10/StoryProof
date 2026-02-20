@@ -369,7 +369,7 @@
 [data-theme="sepia"] .btn-outline { background-color: transparent; border-color: #6b4f3a; color: #6b4f3a; }
 [data-theme="sepia"] .btn-outline:hover { background-color: #f0e4d7; border-color: #5d534b; color: #4a3728; }
 [data-theme="sepia"] .danger-zone { background-color: rgba(220, 50, 47, 0.05); border-color: #eaddc5; }
-[data-theme="sepia"] .danger-title { color: #dc322f; }
+[data-theme="sepia"] .danger-title { color: #dc2626; }
 [data-theme="sepia"] .danger-description { color: #cb4b16; }
-[data-theme="sepia"] .btn-destructive { background-color: transparent; border-color: #dc322f; color: #dc322f; }
-[data-theme="sepia"] .btn-destructive:hover { background-color: #dc322f; color: #ffffff; }
+[data-theme="sepia"] .btn-destructive { background-color: transparent; border-color: #dc2626; color: #dc2626; }
+[data-theme="sepia"] .btn-destructive:hover { background-color: #dc2626; color: #ffffff; }
