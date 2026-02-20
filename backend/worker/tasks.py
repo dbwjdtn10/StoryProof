@@ -19,6 +19,7 @@ from backend.services.analysis import (
     SceneChunker,
     GeminiStructurer,
     EmbeddingSearchEngine,
+    get_embedding_search_engine,
     StructuredScene
 )
 
@@ -151,7 +152,7 @@ def process_chapter_storyboard(novel_id: int, chapter_id: int):
         # Pinecone에 배치 저장
         update_chapter_progress(chapter_id, 80, "PROCESSING", f"Pinecone 저장 중 ({len(structured_scenes)} 씬)")
         
-        search_engine = EmbeddingSearchEngine()
+        search_engine = get_embedding_search_engine()
         documents = [asdict(scene) for scene in structured_scenes]
         search_engine.add_documents(documents, novel_id, chapter_id)
         update_chapter_progress(chapter_id, 90, "PROCESSING", "저장 완료")

@@ -31,6 +31,19 @@ export interface Chapter {
     storyboard_message?: string;
 }
 
+export interface ChapterListItem {
+    id: number;
+    novel_id: number;
+    chapter_number: number;
+    title: string;
+    word_count: number;
+    created_at: string;
+    storyboard_status?: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+    storyboard_progress?: number;
+    storyboard_message?: string;
+    storyboard_completed_at?: string;
+}
+
 export interface StoryboardProgress {
     chapter_id: number;
     status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'pending' | 'processing' | 'completed' | 'failed';
@@ -47,8 +60,8 @@ export const createNovel = async (data: { title: string; description?: string; g
     return request<Novel>('/novels/', { method: 'POST', body: JSON.stringify(data) });
 };
 
-export const getChapters = async (novelId: number): Promise<Chapter[]> => {
-    return request<Chapter[]>(`/novels/${novelId}/chapters`, { method: 'GET' });
+export const getChapters = async (novelId: number): Promise<ChapterListItem[]> => {
+    return request<ChapterListItem[]>(`/novels/${novelId}/chapters`, { method: 'GET' });
 };
 
 export const uploadChapter = async (

@@ -13,7 +13,7 @@ from .gemini_structurer import (
     Event,
     StructuredScene
 )
-from .embedding_engine import EmbeddingSearchEngine
+from .embedding_engine import EmbeddingSearchEngine, get_embedding_search_engine
 
 __all__ = [
     'DocumentLoader',
@@ -25,4 +25,5 @@ __all__ = [
     'Event',
     'StructuredScene',
     'EmbeddingSearchEngine',
+    'get_embedding_search_engine',
 ]

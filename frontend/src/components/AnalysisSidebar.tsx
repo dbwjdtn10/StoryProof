@@ -153,7 +153,7 @@ export function AnalysisSidebar({ isOpen, onClose, result, isLoading, onNavigate
                                                     fontWeight: '600',
                                                     padding: '4px 10px',
                                                     borderRadius: '12px',
-                                                    backgroundColor: item.type === '설정 충돌' ? '#FEE2E2' : '#FEF3C7',
+                                                    backgroundColor: item.type === '설정 충돌' ? 'rgba(220, 38, 38, 0.1)' : 'rgba(217, 119, 6, 0.1)',
                                                     color: item.type === '설정 충돌' ? '#DC2626' : '#D97706'
                                                 }}
                                             >

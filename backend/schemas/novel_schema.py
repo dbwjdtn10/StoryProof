@@ -91,6 +91,23 @@ class ChapterResponse(ChapterBase):
 
 
 
+class ChapterListItem(BaseModel):
+    """회차 목록 아이템 스키마 (content 제외 - 경량화)"""
+    id: int
+    novel_id: int
+    chapter_number: int
+    title: str
+    word_count: int
+    storyboard_status: Optional[str] = "PENDING"
+    storyboard_progress: Optional[int] = 0
+    storyboard_message: Optional[str] = None
+    storyboard_completed_at: Optional[datetime] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 class ChapterListResponse(BaseModel):
     """회차 목록 응답 스키마"""
     total: int

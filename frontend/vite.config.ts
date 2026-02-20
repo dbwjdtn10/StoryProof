@@ -52,6 +52,14 @@ export default defineConfig({
   build: {
     target: 'esnext',
     outDir: 'build',
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor': ['react', 'react-dom'],
+          'tiptap': ['@tiptap/react', '@tiptap/starter-kit', '@tiptap/core'],
+        },
+      },
+    },
   },
   server: {
     port: 3000,

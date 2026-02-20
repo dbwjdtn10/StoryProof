@@ -5,6 +5,7 @@
 인물, 장소, 아이템, 주요 사건 등의 분석 데이터를 제공합니다.
 """
 
+import time
 from typing import Dict, Any, List, Optional
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
@@ -14,6 +15,11 @@ from backend.db.models import Novel, Chapter, Analysis, AnalysisType, VectorDocu
 
 # 로거 설정
 logger = logging.getLogger(__name__)
+
+# Bible summary TTL 캐시 (키: (novel_id, chapter_id), 값: (summary_str, timestamp))
+_bible_summary_cache: Dict[tuple, tuple] = {}
+_BIBLE_SUMMARY_TTL = 300  # 5분
+_BIBLE_SUMMARY_MAX_SIZE = 200  # 캐시 최대 항목 수
 
 
 class AnalysisService:
@@ -317,7 +323,15 @@ class AnalysisService:
         Analysis DB에서 압축된 바이블 요약 텍스트 반환.
         LLM 프롬프트에 직접 주입하기 위한 간결한 텍스트 형식.
         분석 데이터가 없으면 빈 문자열 반환.
+        TTL 캐시 적용 (5분).
         """
+        # TTL 캐시 확인
+        cache_key = (novel_id, chapter_id)
+        now = time.time()
+        cached = _bible_summary_cache.get(cache_key)
+        if cached and (now - cached[1]) < _BIBLE_SUMMARY_TTL:
+            return cached[0]
+
         query = db.query(Analysis).filter(
             Analysis.novel_id == novel_id,
             Analysis.analysis_type == AnalysisType.CHARACTER
@@ -327,6 +341,7 @@ class AnalysisService:
         analysis = query.order_by(Analysis.updated_at.desc()).first()
 
         if not analysis or not analysis.result:
+            _bible_summary_cache[cache_key] = ("", now)
             return ""
 
         result = analysis.result
@@ -354,4 +369,15 @@ class AnalysisService:
             lines = [f"- {e.get('summary', '')[:80]}" for e in key_events]
             parts.append("[핵심사건]\n" + "\n".join(lines))
 
-        return "\n\n".join(parts)[:max_chars]
+        summary = "\n\n".join(parts)[:max_chars]
+        # 캐시 크기 제한: 초과 시 만료 항목 먼저 제거, 여전히 초과 시 가장 오래된 절반 제거
+        if len(_bible_summary_cache) > _BIBLE_SUMMARY_MAX_SIZE:
+            expired = [k for k, v in _bible_summary_cache.items() if (now - v[1]) >= _BIBLE_SUMMARY_TTL]
+            for k in expired:
+                del _bible_summary_cache[k]
+            if len(_bible_summary_cache) > _BIBLE_SUMMARY_MAX_SIZE:
+                sorted_keys = sorted(_bible_summary_cache.keys(), key=lambda k: _bible_summary_cache[k][1])
+                for k in sorted_keys[:len(_bible_summary_cache) // 2]:
+                    del _bible_summary_cache[k]
+        _bible_summary_cache[cache_key] = (summary, now)
+        return summary

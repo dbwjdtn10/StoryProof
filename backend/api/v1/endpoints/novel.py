@@ -13,7 +13,7 @@ from backend.services.novel_service import NovelService
 from backend.services.analysis_service import AnalysisService
 from backend.schemas.novel_schema import (
     NovelCreate, NovelUpdate, NovelResponse, NovelListResponse,
-    ChapterResponse, ChapterUpdate, ChapterMergeRequest
+    ChapterResponse, ChapterListItem, ChapterUpdate, ChapterMergeRequest
 )
 
 router = APIRouter()
@@ -90,7 +90,7 @@ def merge_chapters(
 
 # ===== 회차 관리 =====
 
-@router.get("/{novel_id}/chapters", response_model=List[ChapterResponse])
+@router.get("/{novel_id}/chapters", response_model=List[ChapterListItem])
 def get_chapters(
     novel_id: int,
     current_user = Depends(get_current_user),
