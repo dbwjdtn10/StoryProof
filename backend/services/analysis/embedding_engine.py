@@ -381,8 +381,12 @@ class EmbeddingSearchEngine:
             keywords (List[str]): 명시적 키워드 리스트
             original_query (str): 원본 질문 (리랭커에서 노이즈 없는 검색을 위해 사용)
         """
-        # (Step 1-3 logic remains similar but updated)
-        
+        # Pinecone 인덱스가 None이면 재연결 시도
+        if self.index is None:
+            self._init_pinecone()
+            if self.index is None:
+                raise RuntimeError(f"Pinecone 인덱스 '{self.index_name}' 연결 실패. 인덱스가 존재하는지 확인하세요.")
+
         # --- 1. Dense Search (Pinecone) ---
         query_embedding = self.embed_text(query)
         
