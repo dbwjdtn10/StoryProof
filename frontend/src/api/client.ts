@@ -1,9 +1,10 @@
-const API_BASE_URL = 'http://localhost:8000/api/v1';
+const API_BASE_URL = `${window.location.protocol}//${window.location.host}/api/v1`;
+
 
 export async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
     const url = `${API_BASE_URL}${endpoint}`;
     console.log("API Request:", { url, method: options?.method || 'GET' });
-    
+
     const response = await fetch(url, {
         ...options,
         headers: {

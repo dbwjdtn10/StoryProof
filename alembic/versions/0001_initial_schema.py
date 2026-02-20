@@ -78,13 +78,11 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_chapters_id'), 'chapters', ['id'], unique=False)
 
-    # Create analysis_type enum
     analysis_type_enum = postgresql.ENUM('character', 'plot', 'style', 'overall', name='analysistype')
-    analysis_type_enum.create(op.get_bind())
+    analysis_type_enum.create(op.get_bind(), checkfirst=True)
     
-    # Create analysis_status enum
     analysis_status_enum = postgresql.ENUM('pending', 'processing', 'completed', 'failed', name='analysisstatus')
-    analysis_status_enum.create(op.get_bind())
+    analysis_status_enum.create(op.get_bind(), checkfirst=True)
 
     # Create analyses table
     op.create_table(
@@ -92,8 +90,8 @@ def upgrade() -> None:
         sa.Column('id', sa.Integer(), nullable=False),
         sa.Column('novel_id', sa.Integer(), nullable=False),
         sa.Column('chapter_id', sa.Integer(), nullable=True),
-        sa.Column('analysis_type', sa.Enum('character', 'plot', 'style', 'overall', name='analysistype'), nullable=False),
-        sa.Column('status', sa.Enum('pending', 'processing', 'completed', 'failed', name='analysisstatus'), nullable=True),
+        sa.Column('analysis_type', postgresql.ENUM('character', 'plot', 'style', 'overall', name='analysistype', create_type=False), nullable=False),
+        sa.Column('status', postgresql.ENUM('pending', 'processing', 'completed', 'failed', name='analysisstatus', create_type=False), nullable=True),
         sa.Column('result', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         sa.Column('error_message', sa.Text(), nullable=True),
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),

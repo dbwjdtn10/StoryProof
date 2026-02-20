@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Mail, Lock, Eye, EyeOff, User, BookOpen } from 'lucide-react';
 import { ChapterDetail } from './components/ChapterDetail';
 import { FileUpload } from './components/FileUpload';
@@ -6,6 +6,26 @@ import { ThemeToggle } from './components/ThemeToggle';
 import { CharacterChatBot } from './components/CharacterChatBot';
 import { register, login } from './api/auth';
 import { getNovels, createNovel, Novel } from './api/novel';
+import { SplashScreen } from './components/SplashScreen';
+
+// 커스텀 스플래시 이미지 경로 (5개 중 랜덤 선택)
+const SPLASH_IMAGE_URLS = [
+  '/static/images/splash1.png',
+  '/static/images/splash2.png',
+  '/static/images/splash3.png',
+  '/static/images/splash4.png',
+  '/static/images/splash5.png',
+];
+
+// 이미지 로드 확인 헬퍼
+const checkImageExists = (url: string): Promise<boolean> => {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve(true);
+    img.onerror = () => resolve(false);
+    img.src = url;
+  });
+};
 
 type Screen = 'login' | 'signup' | 'upload' | 'chapterDetail';
 
@@ -15,6 +35,61 @@ export default function App() {
   const [selectedChapterId, setSelectedChapterId] = useState<number | undefined>(undefined);
   const [currentNovel, setCurrentNovel] = useState<Novel | null>(null);
   const [showChatBot, setShowChatBot] = useState(false);
+
+  // 서버 준비 상태 (AI 모델 로딩)
+  const [isServerReady, setIsServerReady] = useState(false);
+  const [splashFadeOut, setSplashFadeOut] = useState(false);
+  const [availableImages, setAvailableImages] = useState<string[]>([]);
+
+  // 스플래시 이미지 존재 여부 확인 (모든 이미지 체크)
+  useEffect(() => {
+    const checkAllImages = async () => {
+      const validImages: string[] = [];
+      for (const url of SPLASH_IMAGE_URLS) {
+        const exists = await checkImageExists(url);
+        console.log(`[Splash] Checking ${url}: ${exists}`);
+        if (exists) {
+          validImages.push(url);
+        }
+      }
+      console.log(`[Splash] Available images:`, validImages);
+      setAvailableImages(validImages);
+    };
+    checkAllImages();
+  }, []);
+
+  // 서버 readiness 폴링
+  useEffect(() => {
+    let intervalId: ReturnType<typeof setInterval>;
+    let mounted = true;
+
+    const checkReady = async () => {
+      try {
+        const res = await fetch('/api/v1/health/ready');
+        if (res.ok && mounted) {
+          const data = await res.json();
+          if (data.ready) {
+            // 페이드아웃 후 로그인 화면으로 전환
+            setSplashFadeOut(true);
+            setTimeout(() => {
+              if (mounted) setIsServerReady(true);
+            }, 700);
+            clearInterval(intervalId);
+          }
+        }
+      } catch {
+        // 서버 아직 미시작 - 계속 폴링
+      }
+    };
+
+    checkReady();
+    intervalId = setInterval(checkReady, 2000);
+
+    return () => {
+      mounted = false;
+      clearInterval(intervalId);
+    };
+  }, []);
 
   // Login/Signup form states
   const [userMode, setUserMode] = useState<'reader' | 'writer'>(
@@ -102,6 +177,18 @@ export default function App() {
       console.error('Signup failed:', error);
     }
   };
+
+  // 스플래시 화면 (서버 모델 로딩 중)
+  if (!isServerReady) {
+    return (
+      <div className={splashFadeOut ? 'splash-fade-out' : ''}>
+        <SplashScreen
+          imageUrls={availableImages}
+          message="AI 모델을 불러오는 중입니다"
+        />
+      </div>
+    );
+  }
 
   // Upload Screen
   if (currentScreen === 'upload') {

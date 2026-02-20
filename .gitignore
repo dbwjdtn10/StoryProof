@@ -31,6 +31,7 @@ sp/
 # Environment Variables
 .env
 .env.local
+.env.gcp
 
 # IDE
 .vscode/
@@ -42,3 +43,8 @@ postgres_data/
 # OS
 .DS_Store
 Thumbs.db
+
+# Secrets
+*.pem
+*.key
+storyproof-key.pem

@@ -93,7 +93,7 @@ export const uploadChapter = async (
     }
     // Note: Content-Type for FormData is automatically set by browser
 
-    const response = await fetch(`http://localhost:8000/api/v1/novels/${novelId}/chapters/upload`, {
+    const response = await fetch(`/api/v1/novels/${novelId}/chapters/upload`, {
         method: 'POST',
         headers: headers,
         body: formData,
@@ -166,6 +166,7 @@ export interface Character {
     description?: string;
     traits?: string[];
     aliases?: string[];
+    image?: string; // Generated image URL
 }
 
 export interface Location {
@@ -173,12 +174,14 @@ export interface Location {
     appearance_count: number;
     appearances: number[];
     description?: string;
+    image?: string; // Generated image URL
 }
 
 export interface Item {
     name: string;
     first_appearance: number;
     description?: string;
+    image?: string; // Generated image URL
 }
 
 export interface KeyEvent {

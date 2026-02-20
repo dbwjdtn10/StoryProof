@@ -37,8 +37,8 @@ class ChatbotService:
     """
     
     # 기본 설정값 (클래스 상수)
-    DEFAULT_ALPHA = 0.297  # 레거시 파라미터 (Pinecone에서는 미사용)
-    DEFAULT_SIMILARITY_THRESHOLD = 0.5  # 유사도 임계값 (할루시네이션 방지를 위해 상향)
+    DEFAULT_ALPHA = 0.825  # 최적화된 기본값 (Vector 82.5%, BM25 17.5%)
+    DEFAULT_SIMILARITY_THRESHOLD = 0.2  # Reranker 도입으로 기준 하향 (0.5 -> 0.2)
 
     def __init__(self):
         """
@@ -57,9 +57,9 @@ class ChatbotService:
         if EmbeddingSearchEngine:
             try:
                 self.engine = EmbeddingSearchEngine()
-                print("✅ ChatbotService: EmbeddingSearchEngine loaded")
+                print("[Success] ChatbotService: EmbeddingSearchEngine loaded")
             except Exception as e:
-                print(f"❌ ChatbotService: Failed to load EmbeddingSearchEngine: {e}")
+                print(f"[Error] ChatbotService: Failed to load EmbeddingSearchEngine: {e}")
                 self.engine = None
         else:
             self.engine = None
@@ -80,7 +80,9 @@ class ChatbotService:
         similarity_threshold: float = DEFAULT_SIMILARITY_THRESHOLD,
         novel_id: Optional[int] = None,
         chapter_id: Optional[int] = None,
-        novel_filter: Optional[str] = None
+        novel_filter: Optional[str] = None,
+        keywords: Optional[List[str]] = None,
+        original_query: Optional[str] = None
     ) -> List[Dict]:
         """
         질문과 가장 유사한 씬(청크)을 Pinecone에서 검색합니다.
@@ -100,18 +102,26 @@ class ChatbotService:
                 novel = db.query(Novel).filter(Novel.title.ilike(f"%{search_term}%")).first()
                 if novel:
                     novel_id = novel.id
-                    print(f"🔎 Chatbot: Resolved novel_filter '{novel_filter}' to ID {novel_id} ({novel.title})")
+                    print(f"[Search] Chatbot: Resolved novel_filter '{novel_filter}' to ID {novel_id} ({novel.title})")
                 else:
-                    print(f"⚠️ Chatbot: novel_filter '{novel_filter}' not found in DB")
+                    print(f"[Warning] Chatbot: novel_filter '{novel_filter}' not found in DB")
             finally:
                 db.close()
         elif novel_id:
-            print(f"🔎 Chatbot: Using direct novel_id {novel_id}")
+            print(f"[Search] Chatbot: Using direct novel_id {novel_id}")
         
         # Step 2: Pinecone 벡터 검색 실행
         try:
-            results = self.engine.search(query=question, novel_id=novel_id, chapter_id=chapter_id, top_k=top_k)
-            print(f"🔍 Chatbot: Found {len(results)} results (Novel: {novel_id}, Chapter Context: {chapter_id})")
+            results = self.engine.search(
+                query=question, 
+                novel_id=novel_id, 
+                chapter_id=chapter_id, 
+                top_k=top_k,
+                alpha=alpha,
+                keywords=keywords,
+                original_query=original_query or question
+            )
+            print(f"[Search] Chatbot: Found {len(results)} results (Novel: {novel_id}, Chapter Context: {chapter_id})")
             
             # Step 3: 결과 포맷 변환 및 필터링
             formatted_results = []
@@ -184,20 +194,20 @@ class ChatbotService:
         # - 할루시네이션 방지: 컨텍스트 외부 지식 사용 금지
         prompt = f"""다음 문맥을 바탕으로 질문에 답변하세요.
 
-[중요 규칙 - 할루시네이션 방지]
-1. **반드시 제공된 문맥에 있는 정보만 사용하세요.**
-2. **문맥에 없는 내용은 절대 추측하거나 외부 지식을 사용하지 마세요.**
-3. **답변할 수 없는 경우 "제공된 문맥에서 해당 정보를 찾을 수 없습니다"라고 명시하세요.**
-4. **각 주장에는 어느 Context에서 가져왔는지 [Context N] 형태로 출처를 표시하세요.**
+[답변 가이드라인]
+1. **제공된 문맥을 최우선으로 참고하세요.**
+2. **문맥에 직접적인 정답이 없다면, 문맥의 단서들을 종합하여 가장 합리적인 답변을 추론하세요.**
+3. **추론된 답변일 경우, "~로 추정됩니다" 또는 "문맥상 ~인 것으로 보입니다"와 같이 표현하세요.**
+4. **답변에 [Context N]과 같은 출처 표시는 절대 포함하지 마세요.**
 
 [답변 형식]
 반드시 다음 형식을 지켜주세요. 두 섹션 사이에는 빈 줄을 두세요.
 
 [핵심 요약]
-(질문에 대한 핵심 답변을 1~2문장으로 요약하고, 출처를 표시) [Context N]
+(질문에 대한 핵심 답변을 1~2문장으로 요약)
 
 [상세 설명]
-(문맥을 바탕으로 한 구체적인 설명과 근거. 각 문장마다 출처 표시) [Context N]
+(문맥을 바탕으로 한 구체적인 설명과 근거, 추론 내용 포함)
 
 문맥:
 {context[:3500]}
@@ -226,56 +236,36 @@ class ChatbotService:
         except Exception as e:
             return f"답변 생성 중 오류가 발생했습니다: {str(e)}"
     
+    def warmup(self):
+        """
+        챗봇 서비스 웜업 (엔진 모델 프리로딩)
+        """
+        if self.engine:
+            self.engine.warmup()
+        else:
+            print("[Warning] ChatbotService: Engine not initialized, skipping warmup.")
+
     def augment_query(self, question: str) -> str:
         """
         사용자 질문을 검색에 최적화된 형태로 확장합니다.
-        Gemini를 사용하여 관련 키워드, 동의어, 구체적인 표현을 추가합니다.
-        
-        중요: 원본 질문을 반드시 유지하고, 추가 키워드만 덧붙입니다.
+        Gemini를 사용하여 관련 키워드, 동의어, 구체적인 표현만 추출하고, 원본 질문과 결합합니다.
         """
         if not self.client:
             return question
 
-        prompt = f"""당신은 소설 검색 전문가입니다. 사용자의 질문을 분석하여 검색에 최적화된 쿼리로 확장하세요.
+        prompt = f"""당신은 소설 검색 전문가입니다. 다음 질문에 대해 검색 정확도를 높이기 위한 **추가 검색 키워드**만 공백으로 구분하여 나열하세요.
 
-사용자 질문: "{question}"
+[사용자 질문]
+"{question}"
 
-[중요 원칙]
-1. **원본 질문을 절대 축약하거나 변경하지 마세요**
-2. **원본 질문 뒤에 관련 키워드만 추가하세요**
-3. **질문의 의미를 정확히 보존하세요**
-
-[시간적 순서 키워드 인식]
-- "처음", "첫", "최초" → 초반 씬, 등장, 시작, 첫 번째, Scene 1-5, 첫 만남, 첫 등장
-- "마지막", "최후", "끝" → 후반 씬, 종료, 마무리, 마지막 Scene, 최후, 종결
-- "가장", "제일", "최고" → 강조, 극단, 최상급, 가장 중요한
-- "유일한", "단 하나" → 독특, 특별, 오직, 유일
-
-[확장 규칙]
-1. **원본 질문 전체를 그대로 유지**
-2. **시간 키워드가 있으면 관련 표현 추가** (예: "처음" → "첫 번째, 최초, 초반, 시작")
-3. **핵심 엔티티(인물명, 장소명) 유지**
-4. **동의어 및 관련 표현 추가**
-5. **씬 위치 힌트 추가** (시간 조건이 있는 경우)
+[확장 가이드]
+1. 질문의 핵심 소재, 인물, 장소, 시간적 배경(처음, 끝 등)에 대한 관련 키워드를 추출하세요.
+2. "장소"에 대해서는 "위치, 배경, 공간" 등 다양한 동의어를 추가하세요.
+3. 질문에 "처음", "시작" 등이 포함되면 "최초, 등장, Scene 1" 등의 키워드를 추가하세요.
+4. 질문 내용은 다시 적지 말고, **오직 추가 키워드들만** 공백으로 구분하여 한 줄로 출력하세요.
 
 [출력 형식]
-원본 질문 + 추가 키워드 (한 줄, 설명 없이, 따옴표 없이)
-
-[예시]
-입력: "앨리스가 처음 만난 인물"
-출력: 앨리스가 처음 만난 인물 첫 번째 최초 등장 초반 시작 Scene 1 Scene 2 Scene 3 첫 등장인물 첫 만남
-
-입력: "도로시가 처음만난 인물이 누구양?"
-출력: 도로시가 처음만난 인물이 누구양 도로시 처음 만난 인물 첫 번째 최초 등장 초반 시작 Scene 1 Scene 2 Scene 3 첫 등장인물 첫 만남
-
-입력: "앨리스가 떨어진 곳"
-출력: 앨리스가 떨어진 곳 장소 위치 토끼굴 구멍 낙하 떨어짐
-
-입력: "토끼가 마지막으로 한 말"
-출력: 토끼가 마지막으로 한 말 최후 종료 끝 후반 마무리 마지막 대사 마지막 Scene
-
-입력: "가장 중요한 사건"
-출력: 가장 중요한 사건 최고 핵심 주요 결정적 중대한 전환점 클라이맥스
+추가 키워드1 키워드2 키워드3 ... (설명 없이 키워드만)
 
 출력:"""
         try:
@@ -283,20 +273,79 @@ class ChatbotService:
                 model=settings.GEMINI_CHAT_MODEL,
                 contents=prompt,
                 config={
-                    'temperature': 0.2,  # 낮은 temperature로 일관성 유지
-                    'max_output_tokens': 200  # 충분한 키워드 생성
+                    'temperature': 0.2,
+                    'max_output_tokens': 100
                 }
             )
-            augmented = response.text.strip()
+            keywords = response.text.strip()
             
-            # 따옴표 제거 (Gemini가 가끔 따옴표로 감싸는 경우 대비)
-            augmented = augmented.strip('"').strip("'")
+            # 따옴표 제거
+            keywords = keywords.strip('"').strip("'")
             
-            print(f"🧬 Query Augmented: '{question}' -> '{augmented}'")
+            # 원본 질문과 결합 (원본 질문 보존 보장)
+            augmented = f"{question} {keywords}"
+            
+            print(f"[Augment] Query Expanded: '{question}' -> '{augmented}'")
             return augmented
         except Exception as e:
-            print(f"⚠️ Query Augmentation Failed: {e}")
+            print(f"[Warning] Query Augmentation Failed: {e}")
             return question
+        except Exception as e:
+            print(f"[Warning] Query Augmentation Failed: {e}")
+            return question
+
+    def _extract_keywords(self, text: str) -> List[str]:
+        """
+        텍스트에서 검색에 유용한 명사 및 핵심 키워드를 추출합니다.
+        Kiwi 형태소 분석기를 사용합니다.
+        """
+        if not self.engine or not hasattr(self.engine, '_get_kiwi'):
+            return text.split()
+            
+        try:
+            kiwi = self.engine._get_kiwi()
+            # NNG(일반 명사), NNP(고유 명사), SL(외국어) 위주로 추출
+            tokens = kiwi.tokenize(text)
+            keywords = [t.form for t in tokens if t.tag in ['NNG', 'NNP', 'SL'] or len(t.form) > 1]
+            
+            # 중복 제거 및 너무 짧은 단어 필터링 (한 글자 명사 제외 등, 상황에 따라 조절)
+            unique_keywords = list(dict.fromkeys(keywords))
+            print(f"[Keyword] Keywords Extracted: {unique_keywords}")
+            return unique_keywords
+        except Exception as e:
+            print(f"[Warning] Keyword Extraction Failed: {e}")
+            return text.split()
+
+    def hybrid_search(
+        self, 
+        question: str, 
+        novel_id: Optional[int] = None,
+        chapter_id: Optional[int] = None,
+        novel_filter: Optional[str] = None,
+        **kwargs
+    ) -> List[Dict]:
+        """
+        하이브리드 검색: LLM 가공 + 벡터 검색 + 키워드 검색
+        """
+        # 1. LLM으로 쿼리 확장
+        augmented = self.augment_query(question)
+        
+        # 2. 확장된 쿼리에서 키워드 추출 (Sparse 검색용)
+        keywords = self._extract_keywords(augmented)
+        
+        # 3. 통합 검색 (Dense + Sparse)
+        # find_similar_chunks 내부의 engine.search가 hybrid score를 계산함
+        results = self.find_similar_chunks(
+            question=augmented,
+            novel_id=novel_id,
+            chapter_id=chapter_id,
+            novel_filter=novel_filter,
+            keywords=keywords,
+            original_query=question,  # 리랭커를 위해 원본 질문 전달
+            **kwargs
+        )
+        
+        return results
 
     def ask(
         self,
@@ -311,28 +360,13 @@ class ChatbotService:
         질문에 대한 답변 생성 (전체 파이프라인)
         
         검색 전략:
-        1. [개선] 항상 쿼리 확장 적용 (LLM으로 키워드 추가)
-        2. 확장된 쿼리로 1차 검색
-        3. 실패 시 원본 쿼리로 2차 검색 (폴백)
-        
-        예상 효과: 유사도 +8~15% 향상
+        1. 하이브리드 검색 (LLM 확장 + Dense + Sparse)
+        2. 실패 시 원본 쿼리로 2차 검색 (폴백)
         """
-        # 1. [개선] 항상 쿼리 확장 적용
-        print(f"🔍 원본 질문: '{question}'")
-        augmented_query = self.augment_query(question)
-        
-        # 확장이 실제로 일어났는지 확인
-        if augmented_query != question:
-            print(f"✨ 확장된 질문: '{augmented_query}'")
-            search_query = augmented_query
-        else:
-            print("ℹ️ 쿼리 확장 실패 또는 불필요, 원본 사용")
-            search_query = question
-        
-        # 2. 확장된 쿼리로 1차 검색
-        top_chunks = self.find_similar_chunks(
-            question=search_query,
-            top_k=5,
+        # 1. 하이브리드 검색 실행
+        print(f"[Search] 원본 질문: '{question}'")
+        top_chunks = self.hybrid_search(
+            question=question,
             alpha=alpha,
             similarity_threshold=similarity_threshold,
             novel_id=novel_id,
@@ -340,9 +374,9 @@ class ChatbotService:
             novel_filter=novel_filter
         )
         
-        # 3. 실패 시 원본 쿼리로 2차 검색 (폴백)
-        if not top_chunks and search_query != question:
-            print("⚠️ 확장 쿼리 검색 실패, 원본 쿼리로 재시도...")
+        # 2. 실패 시 원본 쿼리로 2차 검색 (폴백)
+        if not top_chunks:
+            print("[Warning] 하이브리드 검색 실패, 원본 쿼리로 재시도...")
             top_chunks = self.find_similar_chunks(
                 question=question,  # 원본 쿼리
                 top_k=5,

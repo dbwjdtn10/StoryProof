@@ -337,17 +337,35 @@ export function FileUpload({ onFileClick, novelId, mode = 'writer' }: FileUpload
                                                 position: 'relative'
                                             }}
                                         >
-                                            {/* Selection Checkbox (Merge Mode) */}
                                             {isMergeMode && (
                                                 <div
                                                     style={{
                                                         position: 'absolute',
                                                         top: '12px',
                                                         left: '12px',
-                                                        color: isSelected ? '#4F46E5' : '#9ca3af'
+                                                        color: isSelected ? '#4F46E5' : '#9ca3af',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '4px'
                                                     }}
                                                 >
                                                     {isSelected ? <CheckSquare size={20} /> : <Square size={20} />}
+                                                    {isSelected && (
+                                                        <span style={{
+                                                            fontSize: '12px',
+                                                            fontWeight: 'bold',
+                                                            backgroundColor: '#4F46E5',
+                                                            color: 'white',
+                                                            width: '20px',
+                                                            height: '20px',
+                                                            borderRadius: '50%',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'center'
+                                                        }}>
+                                                            {selectedSourceIds.indexOf(file.id) + 1}
+                                                        </span>
+                                                    )}
                                                 </div>
                                             )}
 

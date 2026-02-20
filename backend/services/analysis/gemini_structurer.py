@@ -103,9 +103,9 @@ class GeminiStructurer:
 
 {
   "summary": "씬의 핵심 요약 (2-3 문장)",
-  "characters": [{"name": "인물 이름", "description": "행동/성격 묘사 (1문장)", "traits": ["특성1", "특성2"]}],
-  "locations": [{"name": "장소 이름", "description": "장소 묘사"}],
-  "items": [{"name": "아이템 이름", "description": "용도/의미"}],
+  "characters": [{"name": "인물 이름", "description": "행동/성격 묘사 (1문장)", "visual_description": "외모 묘사 (머리색, 눈 색, 체형, 복장, 나이대, 인상 등 시각적 특징을 최대한 상세하게)", "traits": ["특성1", "특성2"]}],
+  "locations": [{"name": "장소 이름", "description": "장소 묘사", "visual_description": "장소의 시각적 묘사 (건축 양식, 분위기, 조명, 색감, 크기 등)"}],
+  "items": [{"name": "아이템 이름", "description": "용도/의미", "visual_description": "아이템의 시각적 묘사 (재질, 색상, 크기, 형태, 장식 등)"}],
   "key_events": [{"summary": "사건 내용", "importance": "상/중/하"}],
   "mood": "분위기 (예: 긴장감, 평온, 슬픔, 유쾌 등)",
   "time_period": "시간대 정보 (있다면)"
@@ -115,6 +115,7 @@ class GeminiStructurer:
 - 정확히 JSON 형식으로만 응답하세요
 - 없는 정보는 빈 리스트([]) 또는 null로 표시
 - 인물 이름은 일관성 있게 표기 (별칭도 통일)
+- visual_description은 이미지 생성에 사용되므로, 소설에서 언급된 외모/시각적 정보를 최대한 구체적으로 추출하세요
 """
 
     def _generate_with_retry(self, prompt: str):
@@ -670,6 +671,7 @@ Output Format (JSON List of Strings):
       "name": "인물 이름",
       "aliases": ["별칭1", "별칭2"],
       "description": "인물 설명",
+      "visual_description": "외모 묘사 (머리색, 눈 색, 체형, 복장, 나이대, 인상 등 시각적 특징)",
       "first_appearance": 첫_등장_씬_번호,
       "traits": ["특징1", "특징2"]
     }}
@@ -678,6 +680,7 @@ Output Format (JSON List of Strings):
     {{
       "name": "아이템 이름",
       "description": "설명",
+      "visual_description": "아이템의 시각적 묘사 (재질, 색상, 크기, 형태, 장식 등)",
       "first_appearance": 첫_등장_씬_번호,
       "significance": "스토리상 의미"
     }}
@@ -686,6 +689,7 @@ Output Format (JSON List of Strings):
     {{
       "name": "장소 이름",
       "description": "장소 설명",
+      "visual_description": "장소의 시각적 묘사 (건축 양식, 분위기, 조명, 색감, 크기 등)",
       "scenes": [등장한_씬_번호들]
     }}
   ],
@@ -802,15 +806,18 @@ Output Format (JSON List of Strings):
                 if isinstance(char, str):
                     name = char
                     desc = ""
+                    visual_desc = ""
                 else:
                     name = char.get('name') or 'Unknown'
                     desc = char.get('description') or ''
+                    visual_desc = char.get('visual_description') or ''
                     traits = char.get('traits') or []
 
                 if name not in all_characters:
                     all_characters[name] = {
                         "name": name,
                         "description": desc,
+                        "visual_description": visual_desc,
                         "aliases": [],
                         "traits": [],
                         "appearances": []
@@ -818,6 +825,10 @@ Output Format (JSON List of Strings):
                 # 설명이 더 길면 업데이트 (정보 보강) - trait도 합집합
                 if len(desc) > len(all_characters[name]['description']):
                     all_characters[name]['description'] = desc
+                
+                # visual_description도 더 길면 업데이트
+                if len(visual_desc) > len(all_characters[name].get('visual_description', '')):
+                    all_characters[name]['visual_description'] = visual_desc
                 
                 # Traits 통합 (중복 제거)
                 if traits:
@@ -833,14 +844,17 @@ Output Format (JSON List of Strings):
                 if isinstance(item, str):
                     name = item
                     desc = ""
+                    visual_desc = ""
                 else:
                     name = item.get('name') or 'Unknown'
                     desc = item.get('description') or ''
+                    visual_desc = item.get('visual_description') or ''
 
                 if name not in all_items:
                     all_items[name] = {
                         "name": name,
                         "description": desc,
+                        "visual_description": visual_desc,
                         "first_appearance": idx,
                         "significance": "",
                         "appearances": []
@@ -848,6 +862,10 @@ Output Format (JSON List of Strings):
                 # 설명이 더 길면 업데이트
                 if len(desc) > len(all_items[name]['description']):
                     all_items[name]['description'] = desc
+                
+                # visual_description도 더 길면 업데이트
+                if len(visual_desc) > len(all_items[name].get('visual_description', '')):
+                    all_items[name]['visual_description'] = visual_desc
                 
                 if idx not in all_items[name]['appearances']:
                     all_items[name]['appearances'].append(idx)
@@ -857,19 +875,26 @@ Output Format (JSON List of Strings):
                 if isinstance(loc, str):
                     name = loc
                     desc = ""
+                    visual_desc = ""
                 else:
                     name = loc.get('name') or 'Unknown'
                     desc = loc.get('description') or ''
+                    visual_desc = loc.get('visual_description') or ''
 
                 if name not in all_locations:
                     all_locations[name] = {
                         "name": name,
                         "description": desc,
+                        "visual_description": visual_desc,
                         "scenes": []
                     }
                 # 설명이 더 길면 업데이트
                 if len(desc) > len(all_locations[name]['description']):
                     all_locations[name]['description'] = desc
+                
+                # visual_description도 더 길면 업데이트
+                if len(visual_desc) > len(all_locations[name].get('visual_description', '')):
+                    all_locations[name]['visual_description'] = visual_desc
                 
                 if idx not in all_locations[name]['scenes']:
                     all_locations[name]['scenes'].append(idx)

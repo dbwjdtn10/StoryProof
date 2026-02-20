@@ -12,7 +12,7 @@ import chardet
 from datetime import datetime
 import logging
 
-from backend.db.models import Novel, Chapter, VectorDocument
+from backend.db.models import Novel, Chapter, VectorDocument, CharacterChatRoom
 from backend.schemas.novel_schema import NovelCreate, NovelUpdate, ChapterUpdate
 from backend.core.config import settings
 
@@ -153,6 +153,26 @@ class NovelService:
             
         if novel.author_id != user_id:
             raise HTTPException(status_code=403, detail="권한이 없습니다.")
+        
+        # 관련 이미지 파일 삭제
+        import os
+        import glob
+        
+        base_dir = os.getcwd()
+        images_dir = os.path.join(base_dir, "backend", "static", "images")
+        pattern = os.path.join(images_dir, f"novel_{novel_id}_*.png")
+        
+        deleted_count = 0
+        for image_path in glob.glob(pattern):
+            try:
+                os.remove(image_path)
+                deleted_count += 1
+                print(f"[Cleanup] Deleted image: {os.path.basename(image_path)}")
+            except Exception as e:
+                print(f"[Warning] Failed to delete {os.path.basename(image_path)}: {e}")
+        
+        if deleted_count > 0:
+            print(f"[Cleanup] Deleted {deleted_count} image(s) for novel {novel_id}")
             
         db.delete(novel)
         db.commit()
@@ -402,6 +422,17 @@ class NovelService:
         if not chapter:
             raise HTTPException(status_code=404, detail="회차를 찾을 수 없습니다.")
             
+        # 관련된 캐릭터 채팅방 삭제 (Cascade가 안 걸려 있을 경우 수동 삭제)
+        # CharacterChatMessage는 CharacterChatRoom 삭제 시 ORM cascade로 삭제됨
+        chat_rooms = db.query(CharacterChatRoom).filter(CharacterChatRoom.chapter_id == chapter_id).all()
+        for room in chat_rooms:
+            print(f"[DEBUG] Deleting chat room: {room.id}, Chapter ID: {chapter_id}")
+            db.delete(room)
+        
+        # 채팅방 삭제를 먼저 DB에 반영
+        db.flush()
+            
+        print(f"[DEBUG] Deleting chapter: {chapter_id}")
         db.delete(chapter)
         db.commit()
 
@@ -446,12 +477,19 @@ class NovelService:
         if len(chapters) != len(all_ids):
             raise HTTPException(status_code=404, detail="일부 회차를 찾을 수 없습니다.")
             
-        # 3. 회차 번호 순으로 정렬
-        sorted_chapters = sorted(chapters, key=lambda c: c.chapter_number)
+        # 3. 요청된 순서대로 정렬 (target_id가 첫 번째, 그 뒤로 source_ids 순서)
+        ordered_ids = [target_id] + [sid for sid in source_ids if sid != target_id]
+        
+        # ID를 키로 하는 딕셔너리 생성
+        chapter_map = {c.id: c for c in chapters}
         
         # 4. 내용 병합
         merged_content_parts = []
-        for ch in sorted_chapters:
+        for cid in ordered_ids:
+            if cid not in chapter_map:
+                continue
+                
+            ch = chapter_map[cid]
             # 제목을 포함하여 구분할 수도 있지만, 여기서는 내용만 단순 병합하거나 구분자 추가
             # 요구사항에 따라 다르지만, 파일 병합 스크립트 참고: "\n\n--- {title} 시작 ---\n"
             header = f"\n\n--- {ch.title} ---\n"
