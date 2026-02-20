@@ -1788,6 +1788,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                 onCheckConsistency={handleCheckConsistency}
                 onPredictStory={handlePredictStoryTrigger}
                 onOpenCharacterChat={onOpenCharacterChat}
+                onOpenSettings={handleOpenSettings}
                 novelId={novelId}
                 chapterId={chapterId}
                 mode={mode}

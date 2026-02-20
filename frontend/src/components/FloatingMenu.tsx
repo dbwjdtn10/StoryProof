@@ -1,4 +1,4 @@
-import { MessageCircle, MoreVertical, ShieldAlert, X, Sparkles, MessageSquare, Users } from 'lucide-react';
+import { MessageCircle, MoreVertical, ShieldAlert, X, Sparkles, MessageSquare, Users, Settings as SettingsIcon } from 'lucide-react';
 import { useState } from 'react';
 import { ChatInterface } from './ChatBot';
 import { useTheme } from '../contexts/ThemeContext';
@@ -9,12 +9,13 @@ interface FloatingMenuProps {
     onCheckConsistency?: () => void;
     onPredictStory?: () => void;
     onOpenCharacterChat?: () => void;
+    onOpenSettings?: () => void;
     novelId?: number;
     chapterId?: number;
     mode?: 'reader' | 'writer';
 }
 
-export function FloatingMenu({ onNavigateToScene, onCheckConsistency, onPredictStory, onOpenCharacterChat, novelId, chapterId, mode = 'writer' }: FloatingMenuProps) {
+export function FloatingMenu({ onNavigateToScene, onCheckConsistency, onPredictStory, onOpenCharacterChat, onOpenSettings, novelId, chapterId, mode = 'writer' }: FloatingMenuProps) {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [isChatOpen, setIsChatOpen] = useState(false);
     const { theme } = useTheme();
@@ -66,6 +67,12 @@ export function FloatingMenu({ onNavigateToScene, onCheckConsistency, onPredictS
                             setIsMenuOpen(false);
                         }} title="캐릭터 챗봇">
                             <Users size={20} strokeWidth={2.5} />
+                        </button>
+                        <button className="menu-option btn-brown-dark" onClick={() => {
+                            if (onOpenSettings) onOpenSettings();
+                            setIsMenuOpen(false);
+                        }} title="환경설정">
+                            <SettingsIcon size={20} strokeWidth={2.5} />
                         </button>
                     </div>
                 )}

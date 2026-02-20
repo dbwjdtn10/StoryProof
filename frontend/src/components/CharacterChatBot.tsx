@@ -437,6 +437,7 @@ function ChatRoom({ room }: ChatRoomProps) {
 
                 {messages.map((msg, index) => {
                     const isUser = msg.role === 'user';
+                    if (!isUser && !msg.content) return null;
                     return (
                         <div
                             key={msg.id || index}
@@ -489,7 +490,7 @@ function ChatRoom({ room }: ChatRoomProps) {
                         </div>
                     );
                 })}
-                {loading && (
+                {loading && messages[messages.length - 1]?.content === '' && (
                     <div style={{ display: 'flex', justifyContent: 'flex-start', paddingLeft: '44px' }}>
                         <div style={{ backgroundColor: 'var(--chat-assistant-bg)', color: 'var(--chat-assistant-text)', padding: '8px 12px', borderRadius: '12px', fontSize: '0.8rem' }}>
                             ...
