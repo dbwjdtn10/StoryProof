@@ -1,12 +1,11 @@
 import { MessageCircle, X, Send, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
-import { askQuestionStream, ChatAnswerResponse, StreamMeta } from '../api/chat';
+import { askQuestion, ChatAnswerResponse } from '../api/chat';
 import '../chatbot.css';
 
 interface Message {
     role: 'user' | 'assistant';
     content: string;
-    isStreaming?: boolean;
     source?: {
         filename: string;
         scene_index?: number;
@@ -38,11 +37,15 @@ function ChatMessageItem({ msg, onNavigateToScene, chapterId }: { msg: Message, 
                 padding: '0.75rem 1rem',
                 borderRadius: '1.5rem',
                 maxWidth: '100%',
+                backgroundColor: msg.role === 'user' ? 'var(--primary)' : 'var(--chat-assistant-bg)',
+                color: msg.role === 'user' ? 'var(--primary-foreground)' : 'var(--chat-assistant-text)',
+                border: msg.role === 'assistant' ? '1px solid var(--border)' : 'none',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
             }}>
                 <p style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{mainContent}</p>
 
                 {detailContent && (
-                    <div className="detail-container" style={{ marginTop: '0.5rem', borderTop: '1px solid rgba(0,0,0,0.1)', paddingTop: '0.5rem' }}>
+                    <div className="detail-container" style={{ marginTop: '0.5rem', borderTop: '1px solid var(--border)', paddingTop: '0.5rem' }}>
                         <button
                             onClick={() => setIsDetailOpen(!isDetailOpen)}
                             style={{
@@ -58,7 +61,7 @@ function ChatMessageItem({ msg, onNavigateToScene, chapterId }: { msg: Message, 
                                 fontWeight: '600'
                             }}
                         >
-                            {isDetailOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                            {isDetailOpen ? <ChevronUp size={14} strokeWidth={2.5} /> : <ChevronDown size={14} strokeWidth={2.5} />}
                             상세 설명
                         </button>
                         {isDetailOpen && (
@@ -68,7 +71,7 @@ function ChatMessageItem({ msg, onNavigateToScene, chapterId }: { msg: Message, 
                 )}
 
                 {msg.source && (
-                    <div className="source-container" style={{ marginTop: '0.5rem', borderTop: '1px solid rgba(0,0,0,0.1)', paddingTop: '0.5rem' }}>
+                    <div className="source-container" style={{ marginTop: '0.5rem', borderTop: '1px solid var(--border)', paddingTop: '0.5rem' }}>
                         <button
                             onClick={() => setIsSourceOpen(!isSourceOpen)}
                             style={{
@@ -80,18 +83,20 @@ function ChatMessageItem({ msg, onNavigateToScene, chapterId }: { msg: Message, 
                                 alignItems: 'center',
                                 gap: '4px',
                                 fontSize: '0.75rem',
-                                color: msg.role === 'user' ? 'rgba(255,255,255,0.9)' : 'var(--muted-foreground)',
+                                color: msg.role === 'user' ? 'var(--primary-foreground)' : 'var(--muted-foreground)',
+                                opacity: 0.9,
                                 fontWeight: '600'
                             }}
                         >
-                            {isSourceOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                            {isSourceOpen ? <ChevronUp size={14} strokeWidth={2.5} /> : <ChevronDown size={14} strokeWidth={2.5} />}
                             출처
                         </button>
 
                         {isSourceOpen && (
                             <div style={{
                                 fontSize: '0.75rem',
-                                color: msg.role === 'user' ? 'rgba(255,255,255,0.85)' : '#6C757D',
+                                color: msg.role === 'user' ? 'var(--primary-foreground)' : 'var(--muted-foreground)',
+                                opacity: 0.85,
                                 marginTop: '0.5rem',
                                 fontStyle: 'italic',
                                 display: 'flex',
@@ -106,11 +111,11 @@ function ChatMessageItem({ msg, onNavigateToScene, chapterId }: { msg: Message, 
                                 </div>
                                 {msg.source.summary && (
                                     <div style={{
-                                        backgroundColor: msg.role === 'user' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.03)',
+                                        backgroundColor: 'rgba(0,0,0,0.1)',
                                         padding: '6px',
                                         borderRadius: '4px',
                                         marginTop: '2px',
-                                        borderLeft: '2px solid var(--primary)',
+                                        borderLeft: '2px solid currentColor',
                                         fontSize: '0.8rem',
                                         lineHeight: '1.4'
                                     }}>
@@ -124,10 +129,10 @@ function ChatMessageItem({ msg, onNavigateToScene, chapterId }: { msg: Message, 
                                         }}
                                         disabled={!!(msg.source.chapter_id && chapterId && msg.source.chapter_id !== chapterId)}
                                         style={{
-                                            background: msg.role === 'user' ? 'rgba(255,255,255,0.2)' : 'var(--primary)',
-                                            border: msg.role === 'user' ? '1px solid rgba(255,255,255,0.3)' : 'none',
+                                            background: 'rgba(255,255,255,0.2)',
+                                            border: '1px solid rgba(255,255,255,0.3)',
                                             borderRadius: '4px',
-                                            color: 'white',
+                                            color: 'currentColor',
                                             padding: '4px 8px',
                                             cursor: (msg.source.chapter_id && chapterId && msg.source.chapter_id !== chapterId) ? 'not-allowed' : 'pointer',
                                             opacity: (msg.source.chapter_id && chapterId && msg.source.chapter_id !== chapterId) ? 0.5 : 1,
@@ -173,56 +178,40 @@ export function ChatInterface({ onNavigateToScene, novelId, chapterId }: ChatInt
     }, [messages]);
 
     const handleSend = async () => {
-        if (!message.trim() || isLoading) return;
+        if (message.trim() && !isLoading) {
+            const userMessage = message.trim();
+            setMessage('');
+            // Add user message to chat
+            setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+            setIsLoading(true);
 
-        const userMessage = message.trim();
-        setMessage('');
-        setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
-        setIsLoading(true);
+            try {
+                // Call API
+                const response: ChatAnswerResponse = await askQuestion({
+                    question: userMessage,
+                    novel_id: novelId,
+                    chapter_id: chapterId,
+                    alpha: 0.32,
+                    similarity_threshold: 0.35 // 낮아진 임계값 반영
+                });
 
-        // 스트리밍 플레이스홀더 추가
-        setMessages(prev => [...prev, { role: 'assistant', content: '', isStreaming: true }]);
-
-        let metaInfo: StreamMeta | null = null;
-
-        try {
-            await askQuestionStream(
-                { question: userMessage, novel_id: novelId, chapter_id: chapterId, alpha: 0.32, similarity_threshold: 0.35 },
-                // onToken: 마지막 메시지에 토큰 누적
-                (token) => {
-                    setMessages(prev => {
-                        const arr = [...prev];
-                        const last = arr[arr.length - 1];
-                        arr[arr.length - 1] = { ...last, content: last.content + token };
-                        return arr;
-                    });
-                },
-                // onMeta: 출처/유사도 정보 저장
-                (meta) => { metaInfo = meta; },
-                // onDone: 스트리밍 완료 → isStreaming 해제 + 메타 반영
-                () => {
-                    setMessages(prev => {
-                        const arr = [...prev];
-                        const last = arr[arr.length - 1];
-                        arr[arr.length - 1] = {
-                            ...last,
-                            isStreaming: false,
-                            source: metaInfo?.source ?? null,
-                            similarity: metaInfo?.similarity ?? 0
-                        };
-                        return arr;
-                    });
-                }
-            );
-        } catch (err: any) {
-            console.error('Chat error:', err);
-            setMessages(prev => {
-                const arr = [...prev];
-                arr[arr.length - 1] = { role: 'assistant', content: `오류: ${err.message || '답변 생성 중 오류가 발생했습니다.'}` };
-                return arr;
-            });
-        } finally {
-            setIsLoading(false);
+                // Add assistant response to chat
+                setMessages(prev => [...prev, {
+                    role: 'assistant',
+                    content: response.answer,
+                    source: response.source,
+                    similarity: response.similarity
+                }]);
+            } catch (err: any) {
+                console.error('Chat error:', err);
+                const errorMessage = err.response?.data?.detail || err.message || '답변 생성 중 오류가 발생했습니다.';
+                setMessages(prev => [...prev, {
+                    role: 'assistant',
+                    content: `오류: ${errorMessage}`
+                }]);
+            } finally {
+                setIsLoading(false);
+            }
         }
     };
 
@@ -234,24 +223,36 @@ export function ChatInterface({ onNavigateToScene, novelId, chapterId }: ChatInt
     };
 
     return (
-        <div className="chatbot-container" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+        <div className="chatbot-container" style={{ display: 'flex', flexDirection: 'column', height: '100%', backgroundColor: 'var(--modal-bg)' }}>
             <div className="chatbot-messages" style={{ flex: 1, overflowY: 'auto', padding: '1rem' }}>
                 {messages.map((msg, idx) => (
-                    msg.isStreaming && !msg.content ? null : <ChatMessageItem key={idx} msg={msg} onNavigateToScene={onNavigateToScene} chapterId={chapterId} />
+                    <ChatMessageItem key={idx} msg={msg} onNavigateToScene={onNavigateToScene} chapterId={chapterId} />
                 ))}
-                {isLoading && messages[messages.length - 1]?.content === '' && (
+                {isLoading && (
                     <div className="chatbot-message assistant" style={{ alignSelf: 'flex-start' }}>
-                        <div className="chatbot-message-bubble assistant-bubble" style={{ padding: '0.75rem 1rem', borderRadius: '1.5rem' }}>
+                        <div className="chatbot-message-bubble assistant-bubble" style={{
+                            padding: '0.75rem 1rem',
+                            borderRadius: '1.5rem',
+                            backgroundColor: 'var(--chat-assistant-bg)',
+                            border: '1px solid var(--border)',
+                            color: 'var(--chat-assistant-text)'
+                        }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                <Loader2 size={16} className="animate-spin" />
-                                <span>답변 생성 중...</span>
+                                <Loader2 size={16} strokeWidth={2.5} className="animate-spin" style={{ color: 'var(--muted-foreground)' }} />
+                                <span style={{ color: 'var(--muted-foreground)' }}>답변 생성 중...</span>
                             </div>
                         </div>
                     </div>
                 )}
                 <div ref={messagesEndRef} />
             </div>
-            <div className="chatbot-input-area" style={{ padding: '1rem', display: 'flex', gap: '0.5rem' }}>
+            <div className="chatbot-input-area" style={{
+                padding: '1rem',
+                display: 'flex',
+                gap: '0.5rem',
+                backgroundColor: 'var(--modal-bg)',
+                borderTop: '1px solid var(--border)'
+            }}>
                 <input
                     type="text"
                     className="chatbot-input"
@@ -260,15 +261,38 @@ export function ChatInterface({ onNavigateToScene, novelId, chapterId }: ChatInt
                     onChange={(e) => setMessage(e.target.value)}
                     onKeyPress={handleKeyPress}
                     disabled={isLoading}
-                    style={{ flex: 1, padding: '0.75rem', borderRadius: '0.5rem', fontSize: '0.95rem', outline: 'none', transition: 'border-color 0.2s' }}
+                    style={{
+                        flex: 1,
+                        padding: '0.75rem',
+                        borderRadius: '0.5rem',
+                        fontSize: '0.95rem',
+                        outline: 'none',
+                        transition: 'border-color 0.2s',
+                        backgroundColor: 'var(--input-bg)',
+                        color: 'var(--input-text)',
+                        border: '1px solid var(--input-border)'
+                    }}
                 />
                 <button
                     className="chatbot-send"
                     onClick={handleSend}
                     disabled={isLoading || !message.trim()}
-                    style={{ background: 'var(--primary)', color: 'var(--primary-foreground)', border: 'none', borderRadius: '0.5rem', padding: '0.75rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'transform 0.2s', minWidth: '45px' }}
+                    style={{
+                        backgroundColor: 'var(--primary)',
+                        color: 'var(--primary-foreground)',
+                        border: 'none',
+                        borderRadius: '0.5rem',
+                        padding: '0.75rem',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: 'transform 0.2s',
+                        minWidth: '45px',
+                        opacity: isLoading || !message.trim() ? 0.5 : 1
+                    }}
                 >
-                    {isLoading ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} />}
+                    {isLoading ? <Loader2 size={20} strokeWidth={2.5} className="animate-spin" /> : <Send size={20} strokeWidth={2.5} />}
                 </button>
             </div>
         </div>
@@ -292,22 +316,24 @@ export function ChatBot({ novelId, chapterId, onNavigateToScene }: { novelId?: n
                     boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
                     display: 'flex',
                     flexDirection: 'column',
-                    zIndex: 1000
+                    zIndex: 1000,
+                    backgroundColor: 'var(--modal-bg)',
+                    border: '1px solid var(--modal-border)'
                 }}>
                     <div className="chatbot-header" style={{
                         padding: '1rem',
-                        background: 'var(--modal-header-bg)',
+                        backgroundColor: 'var(--modal-header-bg)',
                         color: 'var(--modal-header-text)',
                         borderTopLeftRadius: '1rem',
                         borderTopRightRadius: '1rem',
-                        borderBottom: 'none',
+                        borderBottom: '1px solid var(--border)',
                         display: 'flex',
                         justifyContent: 'flex-end',
                         alignItems: 'center',
-                        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)'
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.05)'
                     }}>
-                        <button className="chatbot-close" onClick={() => setIsOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--modal-header-text)', transition: 'opacity 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.opacity = '0.7'} onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}>
-                            <X size={20} />
+                        <button className="chatbot-close" onClick={() => setIsOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'currentColor', transition: 'opacity 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.opacity = '0.7'} onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}>
+                            <X size={20} strokeWidth={2.5} />
                         </button>
                     </div>
                     <ChatInterface onNavigateToScene={onNavigateToScene} novelId={novelId} chapterId={chapterId} />
@@ -326,7 +352,7 @@ export function ChatBot({ novelId, chapterId, onNavigateToScene }: { novelId?: n
                     width: '50px',
                     height: '50px',
                     borderRadius: '50%',
-                    background: 'var(--primary)',
+                    backgroundColor: 'var(--primary)',
                     color: 'var(--primary-foreground)',
                     border: 'none',
                     boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
@@ -337,10 +363,8 @@ export function ChatBot({ novelId, chapterId, onNavigateToScene }: { novelId?: n
                     zIndex: 1000
                 }}
             >
-                {isOpen ? <X size={24} /> : <MessageCircle size={24} />}
+                {isOpen ? <X size={24} strokeWidth={2.5} /> : <MessageCircle size={24} strokeWidth={2.5} />}
             </button>
         </>
     );
 }
-
-
