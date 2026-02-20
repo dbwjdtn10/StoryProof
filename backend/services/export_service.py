@@ -176,8 +176,12 @@ class BibleExportService:
         def body_text(text: str, indent: int = 0):
             pdf.set_font("NanumGothic", "", 10)
             if indent:
-                pdf.set_x(pdf.get_x() + indent)
-            pdf.multi_cell(0, 6, text)
+                x = pdf.l_margin + indent
+                w = pdf.w - x - pdf.r_margin
+                pdf.set_x(x)
+                pdf.multi_cell(w, 6, text)
+            else:
+                pdf.multi_cell(0, 6, text)
 
         def item_name(text: str):
             pdf.set_font("NanumGothic", "B", 11)
