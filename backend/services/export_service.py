@@ -175,13 +175,10 @@ class BibleExportService:
 
         def body_text(text: str, indent: int = 0):
             pdf.set_font("NanumGothic", "", 10)
-            if indent:
-                x = pdf.l_margin + indent
-                w = pdf.w - x - pdf.r_margin
-                pdf.set_x(x)
-                pdf.multi_cell(w, 6, text)
-            else:
-                pdf.multi_cell(0, 6, text)
+            x = pdf.l_margin + indent
+            w = pdf.w - x - pdf.r_margin
+            pdf.set_x(x)
+            pdf.multi_cell(w, 6, text)
 
         def item_name(text: str):
             pdf.set_font("NanumGothic", "B", 11)
@@ -232,6 +229,7 @@ class BibleExportService:
             pdf.ln(3)
 
         # Scenes
+        content_w = pdf.w - pdf.l_margin - pdf.r_margin
         scenes = bible_data.get("scenes", [])
         if scenes:
             section_header("씬 원문")
@@ -242,7 +240,8 @@ class BibleExportService:
                 if s.get("summary"):
                     pdf.set_font("NanumGothic", "", 9)
                     pdf.set_text_color(100, 100, 100)
-                    pdf.multi_cell(0, 5, f"요약: {s['summary']}")
+                    pdf.set_x(pdf.l_margin)
+                    pdf.multi_cell(content_w, 5, f"요약: {s['summary']}")
                     pdf.set_text_color(0, 0, 0)
                 body_text(s.get("original_text", ""))
                 pdf.ln(5)
