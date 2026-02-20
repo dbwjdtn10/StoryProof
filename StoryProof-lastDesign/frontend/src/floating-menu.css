@@ -1,0 +1,215 @@
+/* Floating Menu Styles */
+.floating-menu-container {
+    position: fixed;
+    bottom: 2rem;
+    right: 2rem;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.75rem;
+}
+
+.floating-menu-btn {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: #000000;
+    color: white;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    transition: all 0.3s ease;
+}
+
+.floating-menu-btn:hover {
+    background: #333333;
+    transform: scale(1.05);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+}
+
+.floating-menu-options {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.menu-option {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    padding: 0;
+    background: white;
+    border: 1px solid #cbcbcb;
+    border-radius: 50%;
+    cursor: pointer;
+    color: #1a1a1a;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    transition: all 0.2s ease;
+}
+
+.menu-option:hover {
+    background: #f9fafb;
+    border-color: #000000;
+    transform: scale(1.1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Button Colors */
+.btn-sepia {
+    background: var(--floating-btn-bg) !important;
+    color: var(--floating-btn-text) !important;
+    border: 1px solid var(--floating-btn-border) !important;
+}
+
+.btn-sepia:hover {
+    background: var(--floating-btn-hover-bg) !important;
+}
+
+.btn-brown-med {
+    background: #795548 !important;
+    color: white !important;
+    border: none !important;
+}
+
+.btn-brown-dark {
+    background: var(--modal-header-bg) !important;
+    color: var(--modal-header-text) !important;
+    border: 1px solid var(--floating-btn-border) !important;
+}
+
+.btn-brown-rich {
+    background: #553f2e !important;
+    color: white !important;
+    border: none !important;
+}
+
+.btn-purple {
+    background: #8b5cf6 !important;
+    color: white !important;
+    border: none !important;
+}
+
+.btn-blue {
+    background: #3b82f6 !important;
+    color: white !important;
+    border: none !important;
+}
+
+.menu-option svg {
+    flex-shrink: 0;
+}
+
+/* Chatbot Modal */
+.chatbot-modal {
+    position: fixed;
+    bottom: 6rem;
+    right: 2rem;
+    width: 350px;
+    height: 500px;
+    background: var(--modal-bg);
+    border-radius: 1rem;
+    border: 1px solid var(--modal-border);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+    display: flex;
+    flex-direction: column;
+    z-index: 999;
+    animation: slideUp 0.3s ease;
+}
+
+.chatbot-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--modal-header-bg);
+    color: var(--modal-header-text);
+}
+
+.chatbot-header h3 {
+    font-size: 1.125rem;
+    font-weight: 700;
+    margin: 0;
+    color: currentColor;
+}
+
+.chatbot-close {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 0.25rem;
+    color: currentColor;
+    opacity: 0.8;
+    transition: opacity 0.2s ease;
+}
+
+.chatbot-close:hover {
+    opacity: 1;
+}
+
+.chatbot-content {
+    flex: 1;
+    padding: 1.25rem;
+    overflow-y: auto;
+}
+
+/* Dark Mode */
+[data-theme="dark"] .menu-option {
+    background: #2a2a2a;
+    border-color: #444444;
+    color: #ffffff;
+}
+
+[data-theme="dark"] .menu-option:hover {
+    background: #333333;
+    border-color: #666666;
+}
+
+[data-theme="dark"] .floating-menu-btn {
+    background: #ffffff;
+    color: #000000;
+}
+
+[data-theme="dark"] .floating-menu-btn:hover {
+    background: #e5e7eb;
+}
+
+[data-theme="dark"] .chatbot-modal {
+    background: #1a1a1a;
+    border: 1px solid #444444;
+}
+
+[data-theme="dark"] .chatbot-header {
+    border-bottom-color: #444444;
+}
+
+[data-theme="dark"] .chatbot-header h3 {
+    color: #ffffff;
+}
+
+[data-theme="dark"] .chatbot-close {
+    color: #999999;
+}
+
+[data-theme="dark"] .chatbot-close:hover {
+    color: #ffffff;
+}

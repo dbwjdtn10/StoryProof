@@ -1,0 +1,52 @@
+/* Chatbot Styles */
+.chatbot-panel,
+.chatbot-modal {
+    background-color: var(--modal-bg);
+    color: var(--modal-text);
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.chatbot-message-bubble.assistant-bubble {
+    background: var(--chat-assistant-bg);
+    color: var(--chat-assistant-text);
+    border: 1px solid var(--border, #0000001a);
+}
+
+.chatbot-message-bubble.user-bubble {
+    background: var(--primary);
+    color: var(--primary-foreground);
+    border: none;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.chatbot-input-area {
+    background: var(--modal-bg);
+    border-top: 1px solid var(--border);
+}
+
+.chatbot-input {
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
+    color: var(--input-text);
+}
+
+.chatbot-input::placeholder {
+    color: var(--input-placeholder);
+}
+
+/* Specific UI adjustments for better visibility across themes */
+.detail-container button,
+.source-container button {
+    color: var(--muted-foreground) !important;
+}
+
+.detail-container p,
+.source-container div {
+    color: var(--muted-foreground) !important;
+    opacity: 0.9;
+}
+
+/* User bubble text should always be high contrast */
+.chatbot-message-bubble.user-bubble * {
+    color: var(--primary-foreground) !important;
+}

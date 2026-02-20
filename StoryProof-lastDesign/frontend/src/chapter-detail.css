@@ -1,0 +1,505 @@
+/* Chapter Detail Screen Styles */
+
+.chapter-detail-container {
+    height: 100vh;
+    overflow: hidden;
+    background: var(--reader-bg, var(--background));
+    display: flex;
+    flex-direction: column;
+}
+
+/* Header */
+.chapter-detail-header {
+    background: var(--card);
+    padding: 1.25rem 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    z-index: 50;
+    border-bottom: 1px solid var(--border);
+}
+
+.back-button {
+    background: none;
+    border: none;
+    color: var(--primary);
+    cursor: pointer;
+    padding: 0.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.5rem;
+    transition: all 0.2s ease;
+}
+
+.back-button:hover {
+    background: var(--secondary);
+}
+
+.chapter-detail-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--foreground);
+    margin: 0;
+}
+
+/* Main Layout */
+.chapter-detail-layout {
+    display: flex;
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+}
+
+/* Dictionary Sidebar */
+.dictionary-sidebar {
+    width: 320px;
+    background: var(--sidebar);
+    display: flex;
+    flex-direction: column;
+    transition: transform 0.3s ease;
+    z-index: 10;
+    overflow-y: auto;
+    height: 100%;
+    border-right: 1px solid var(--sidebar-border);
+}
+
+/* Custom Scrollbar for Sidebar */
+/* Custom Scrollbar for Sidebar */
+.dictionary-sidebar::-webkit-scrollbar {
+    width: 8px;
+}
+
+.dictionary-sidebar::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.05);
+}
+
+.dictionary-sidebar::-webkit-scrollbar-thumb {
+    background-color: rgba(0, 0, 0, 0.3);
+    border-radius: 4px;
+}
+
+.dictionary-sidebar::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(0, 0, 0, 0.5);
+}
+
+.dictionary-sidebar.closed {
+    width: 0;
+    overflow: hidden;
+    transform: none;
+}
+
+.dictionary-header {
+    padding: 1.5rem;
+    border-bottom: 2px solid var(--sidebar-border);
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    background: var(--sidebar);
+    color: var(--sidebar-primary-foreground);
+}
+
+.dictionary-header svg {
+    color: white;
+}
+
+.dictionary-title {
+    font-size: 1.125rem;
+    font-weight: 700;
+    margin: 0;
+}
+
+.dictionary-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1rem;
+}
+
+.dictionary-entry {
+    padding: 1rem;
+    border-bottom: 1px solid var(--sidebar-border);
+    transition: background 0.2s ease;
+}
+
+.dictionary-entry:hover {
+    background: var(--secondary);
+}
+
+.dictionary-entry:last-child {
+    border-bottom: none;
+}
+
+.dictionary-word {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--foreground);
+    margin-bottom: 0.5rem;
+}
+
+.dictionary-meaning {
+    font-size: 0.875rem;
+    color: var(--muted-foreground);
+    line-height: 1.5;
+}
+
+/* Toggle Button */
+.dictionary-toggle {
+    display: none;
+}
+
+.dictionary-toggle:hover {
+    background: var(--secondary);
+}
+
+/* Text Area */
+.text-area {
+    flex: 1;
+    padding: 0.5rem;
+    overflow-y: auto;
+    transition: margin-left 0.3s ease;
+    max-width: 80%;
+}
+
+.dictionary-sidebar.closed~.text-area {
+    margin-left: 0;
+    max-width: 80%;
+}
+
+.text-content {
+    width: 100%;
+    margin: 0;
+    background: var(--card);
+    border-radius: 1rem;
+    padding: 2rem;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.05);
+    min-height: calc(100vh - 8rem);
+    border: 1px solid var(--border);
+}
+
+.novel-text {
+    font-size: 1.125rem;
+    line-height: 2;
+    color: var(--foreground);
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: keep-all;
+    font-family: 'Noto Serif KR', serif;
+    /* Botanical theme often pairs well with serif */
+}
+
+/* Responsive Design */
+@media (max-width: 1024px) {
+    .dictionary-sidebar {
+        width: 280px;
+    }
+
+    .dictionary-sidebar.closed {
+        transform: translateX(-280px);
+    }
+
+    .dictionary-toggle {
+        left: 280px;
+    }
+
+    .text-content {
+        padding: 2rem;
+    }
+
+    .novel-text {
+        font-size: 1rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .dictionary-sidebar {
+        position: absolute;
+        height: 100%;
+        width: 280px;
+    }
+
+    .text-area {
+        padding: 1rem;
+    }
+
+    .text-content {
+        padding: 1.5rem;
+    }
+
+    .novel-text {
+        font-size: 0.9375rem;
+        line-height: 1.8;
+    }
+}
+
+@media (max-width: 480px) {
+    .chapter-detail-header {
+        padding: 1rem;
+    }
+
+    .chapter-detail-title {
+        font-size: 1.125rem;
+    }
+
+    .dictionary-sidebar {
+        width: 240px;
+    }
+
+    .dictionary-sidebar.closed {
+        transform: translateX(-240px);
+    }
+
+    .text-content {
+        padding: 1.25rem;
+        border-radius: 0.75rem;
+    }
+}
+
+/* Collapsible Sections */
+.sidebar-section {
+    border-top: 1px solid var(--sidebar-border);
+}
+
+.section-header {
+    width: 100%;
+    padding: 1rem 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--sidebar-border);
+    cursor: pointer;
+    transition: background 0.2s;
+    color: var(--foreground);
+}
+
+.section-header:hover {
+    background: var(--secondary);
+}
+
+.section-header.active {
+    background: var(--secondary);
+    color: var(--primary);
+    font-weight: 600;
+}
+
+.section-header.active .section-title {
+    color: var(--primary);
+}
+
+.section-header-content {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.section-title {
+    font-size: 1rem;
+    font-weight: 700;
+    margin: 0;
+}
+
+.section-content {
+    padding: 0 1.5rem 1rem 1.5rem;
+    animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.section-item {
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--sidebar-border);
+}
+
+.section-item:last-child {
+    border-bottom: none;
+}
+
+.item-name {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--foreground);
+    margin-bottom: 0.25rem;
+}
+
+.item-description {
+    font-size: 0.875rem;
+    color: var(--muted-foreground);
+    line-height: 1.5;
+}
+
+.trait-tag {
+    font-size: 10px;
+    padding: 2px 6px;
+    background-color: #f1efef;
+    color: #4b4035;
+    border: 1px solid #998879;
+    border-radius: 4px;
+    display: inline-block;
+}
+
+/* Dark Mode for Collapsible Sections */
+[data-theme="dark"] .sidebar-section {
+    border-top-color: #444444;
+}
+
+[data-theme="dark"] .section-header {
+    color: #ffffff;
+}
+
+[data-theme="dark"] .section-header:hover {
+    background: #333333;
+}
+
+[data-theme="dark"] .section-header.active {
+    background: #333333;
+    color: #818cf8;
+}
+
+[data-theme="dark"] .section-header.active .section-title {
+    color: #818cf8;
+}
+
+[data-theme="dark"] .section-item {
+    border-bottom-color: #444444;
+}
+
+[data-theme="dark"] .item-name {
+    color: #ffffff;
+}
+
+[data-theme="dark"] .item-description {
+    color: #999999;
+}
+
+/* Dark Mode for Text Content */
+[data-theme="dark"] .text-content {
+    background: #1a1a1a;
+    color: #e0e0e0;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+}
+
+[data-theme="dark"] .novel-text {
+    color: #e0e0e0;
+}
+
+[data-theme="dark"] .novel-text-editor {
+    color: #e0e0e0;
+}
+
+[data-theme="dark"] textarea {
+    background-color: #1a1a1a !important;
+    color: #e0e0e0 !important;
+    border-color: #333 !important;
+}
+
+[data-theme="dark"] .scene-block textarea {
+    background-color: #262626 !important;
+    border-color: #404040 !important;
+    color: #e0e0e0 !important;
+}
+
+[data-theme="dark"] .scene-block div[style*="backgroundColor: #f5f5f5"] {
+    background-color: #333 !important;
+    color: #818cf8 !important;
+    border-color: #404040 !important;
+}
+
+/* Highlighting Styles */
+.textarea-container {
+    position: relative;
+    width: 100%;
+}
+
+/* Exact Text Match Shared Styles */
+.exact-text-match {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol" !important;
+    font-size: 1.1rem !important;
+    line-height: 1.8 !important;
+    letter-spacing: 0px !important;
+    word-spacing: 0px !important;
+    padding: 20px !important;
+    padding-top: 25px !important;
+    box-sizing: border-box !important;
+    width: 100% !important;
+    margin: 0 !important;
+    border: 1px solid transparent !important;
+    white-space: pre-wrap !important;
+    overflow-wrap: break-word !important;
+    word-break: break-word !important;
+    /* Safer for synchronization than keep-all */
+}
+
+.textarea-backdrop {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    pointer-events: none;
+    z-index: 0;
+    color: transparent;
+    /* Hide text, show highlights */
+    background: transparent;
+    overflow: hidden;
+}
+
+.highlight-mark {
+    background-color: rgba(255, 255, 0, 0.4);
+    border-radius: 4px;
+    animation: fadeHighlight 15s forwards;
+    /* 15s duration */
+    color: inherit;
+}
+
+[data-theme="dark"] .highlight-mark {
+    background-color: rgba(255, 215, 0, 0.3);
+    animation-name: fadeHighlightDark;
+}
+
+@keyframes fadeHighlight {
+    0% {
+        background-color: rgba(255, 255, 0, 0.4);
+    }
+
+    70% {
+        background-color: rgba(255, 255, 0, 0.4);
+    }
+
+    100% {
+        background-color: rgba(255, 255, 0, 0);
+    }
+}
+
+@keyframes fadeHighlightDark {
+    0% {
+        background-color: rgba(255, 215, 0, 0.3);
+    }
+
+    70% {
+        background-color: rgba(255, 215, 0, 0.3);
+    }
+
+    100% {
+        background-color: rgba(255, 215, 0, 0);
+    }
+}
+
+.scene-block textarea {
+    position: relative;
+    z-index: 1;
+    background-color: transparent !important;
+    overflow-y: hidden;
+    /* Force hide scrollbar */
+    resize: none;
+    display: block;
+}
