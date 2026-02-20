@@ -1,0 +1,377 @@
+/* 감성적인 명조체 및 Grape Nuts 폰트 임포트 */
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;700&family=Grape+Nuts&display=swap');
+
+/* 전체 루트 컨테이너 */
+.landing-root {
+    min-height: 100vh;
+    /* 실제로 제공해주신 배경 이미지 적용 (slides 폴더 내부) */
+    background-image: url('/static/images/slides/background.png');
+    background-repeat: no-repeat;
+    background-position: center center;
+    background-attachment: fixed;
+    background-size: cover;
+    background-size: cover;
+    /* 전체적인 폰트 및 색상 설정 */
+    font-family: 'Noto Serif KR', serif;
+    color: #4a3a2a;
+    display: flex;
+    flex-direction: column;
+    overflow-x: hidden;
+}
+
+/* ── 헤더 (우측 상단 링크) ── */
+.landing-header {
+    position: absolute;
+    top: 25px;
+    right: 40px;
+    z-index: 100;
+}
+
+.landing-nav-links {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: #000000;
+    text-shadow: 0 1px 2px rgba(255, 255, 255, 0.5);
+}
+
+.landing-link-btn {
+    background: none;
+    border: none;
+    padding: 0;
+    font: inherit;
+    cursor: pointer;
+    color: inherit;
+    transition: opacity 0.2s;
+}
+
+.landing-link-btn:hover {
+    opacity: 0.7;
+}
+
+.landing-link-separator {
+    opacity: 0.4;
+}
+
+/* ── 메인 컨텐츠 영역 ── */
+.landing-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    padding-bottom: 80px;
+}
+
+/* ── 히어로 섹션 (로고 + 슬라이더) ── */
+.landing-hero {
+    width: 100%;
+    margin-top: 50px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 0 20px;
+}
+
+/* 중앙 메인 로고 (타원형 배경 포함) */
+.landing-main-logo {
+    font-family: 'Grape Nuts', cursive;
+    /* 874px 너비에 100pt가 비율상 적절함 */
+    font-size: clamp(60px, 9vw, 100pt);
+    color: #000000;
+
+    /* 텍스트 외곽선 1px (브라우저 호환성 고려) */
+    -webkit-text-stroke: 1px #000000;
+    text-shadow: none;
+
+    /* 타원형 배경 설정 */
+    width: 874px;
+    max-width: 73vw;
+    /* 배너(1200px) 대비 874px 비율(약 73%) 유지 */
+    height: 119px;
+    background: rgba(255, 255, 255, 0.18);
+    /* 채우기 하얀색 불투명도 18% */
+    border: 5px solid #000000;
+    /* 외곽선 굵기 5 */
+    border-radius: 50%;
+    /* 타원 만들기 */
+
+    /* 텍스트 중앙 정렬 */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    padding-bottom: 20px;
+    /* 폰트 베이스라인보정 */
+
+    margin-bottom: 50px;
+    box-sizing: border-box;
+}
+
+/* 모바일 대응 */
+@media (max-width: 900px) {
+    .landing-main-logo {
+        height: auto;
+        aspect-ratio: 874 / 119;
+        /* 비율 유지 */
+        border-width: 3px;
+    }
+}
+
+/* 슬라이더 컨테이너 (빈 박스 효과) */
+.landing-slider-container {
+    position: relative;
+    width: 1200px;
+    /* 요청하신 1200px 기준 */
+    max-width: 90vw;
+    /* 화면 작을 땐 꽉 차게 */
+    aspect-ratio: 25 / 11;
+    /* 이미지 비율에 맞춤 */
+    border-radius: 24px;
+    overflow: hidden;
+    /* 반투명한 유리 효과 */
+    background: rgba(255, 255, 255, 0.25);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    /* border: 2px solid rgba(255, 255, 255, 0.6); 외곽선 제거 */
+    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.12);
+}
+
+.landing-slider {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    /* 가로 배열 */
+    transition: transform 0.6s cubic-bezier(0.25, 1, 0.5, 1);
+    /* 부드러운 슬라이딩 */
+}
+
+.landing-slide {
+    min-width: 100%;
+    /* 너비 100% 차지 */
+    flex-shrink: 0;
+    height: 100%;
+    /* position: absolute; 제거 */
+    /* opacity transition 제거 */
+}
+
+/* opacity 기반 active 클래스 스타일 제거 */
+/* .landing-slide.active { opacity: 1; pointer-events: auto; } */
+
+.landing-slide-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    /* 비율 유지하며 꽉 채우기 */
+    display: block;
+}
+
+.landing-slide-fallback {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(232, 221, 208, 0.5);
+}
+
+.landing-slide-fallback-img {
+    max-width: 50%;
+    opacity: 0.4;
+}
+
+/* 슬라이드 인디케이터 */
+.landing-indicators {
+    position: absolute;
+    bottom: 25px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 14px;
+    z-index: 10;
+}
+
+.landing-indicator-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(255, 255, 255, 0.5);
+    cursor: pointer;
+    transition: all 0.3s ease;
+    padding: 0;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.landing-indicator-dot:hover {
+    background: rgba(255, 255, 255, 0.8);
+    transform: scale(1.1);
+}
+
+.landing-indicator-dot.active {
+    background: #fff;
+    transform: scale(1.25);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+/* ── 기능 소개 섹션 ── */
+.landing-features {
+    width: 100%;
+    max-width: 1080px;
+    padding: 70px 20px;
+}
+
+.landing-features-inner {
+    display: flex;
+    flex-direction: column;
+    gap: 35px;
+}
+
+.landing-features-row {
+    display: flex;
+    justify-content: center;
+    gap: 30px;
+    flex-wrap: wrap;
+}
+
+/* 공통 카드 스타일 및 애니메이션 */
+.landing-feature-card {
+    border-radius: 20px;
+    padding: 32px;
+    display: flex;
+    flex-direction: column;
+    transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+    opacity: 0;
+    transform: translateY(40px);
+}
+
+.landing-feature-card.visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.landing-feature-card:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.15) !important;
+}
+
+/* --- 상단 카드 스타일 (투명, 가로 배치) --- */
+.landing-feature-card.top-card {
+    flex: 1 1 420px;
+    background: rgba(255, 255, 255, 0.55);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 2px solid rgba(255, 255, 255, 0.7);
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 24px;
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.08);
+}
+
+.top-card .landing-feature-icon-wrapper {
+    color: #3e2a1c;
+    padding-top: 5px;
+}
+
+.top-card .landing-feature-content {
+    flex: 1;
+}
+
+/* --- 하단 카드 스타일 (어두움, 세로 배치) --- */
+.landing-feature-card.bottom-card {
+    flex: 1 1 260px;
+    background: rgba(74, 58, 42, 0.88);
+    /* 진한 갈색 반투명 */
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    color: #f2e8dc;
+    /* 밝은 텍스트 색상 */
+    align-items: center;
+    text-align: center;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.bottom-card .landing-feature-icon-wrapper {
+    color: #f2e8dc;
+    margin-bottom: 20px;
+}
+
+.bottom-card .landing-feature-title {
+    margin-bottom: 18px;
+}
+
+/* 아이콘 회전 유틸리티 */
+.rotate-90 {
+    transform: rotate(90deg);
+}
+
+/* 타이포그래피 및 태그 */
+.landing-feature-title {
+    font-size: 1.35rem;
+    font-weight: 700;
+    margin-bottom: 12px;
+}
+
+.landing-feature-desc {
+    font-size: 0.95rem;
+    line-height: 1.65;
+    margin-bottom: 18px;
+    color: #5a4a3a;
+}
+
+.landing-feature-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.top-card .landing-feature-tags {
+    justify-content: flex-start;
+}
+
+.bottom-card .landing-feature-tags {
+    justify-content: center;
+}
+
+.landing-feature-tag {
+    font-size: 0.8rem;
+    padding: 5px 12px;
+    border-radius: 16px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+
+.top-card .landing-feature-tag {
+    background: rgba(74, 58, 42, 0.12);
+    color: #4a3a2a;
+}
+
+.bottom-card .landing-feature-tag {
+    background: rgba(242, 232, 220, 0.25);
+    color: #f2e8dc;
+}
+
+/* 반응형 처리 */
+@media (max-width: 768px) {
+    .landing-main-logo {
+        font-size: 3.5rem;
+    }
+
+    .landing-slider-container {
+        width: 95%;
+        aspect-ratio: 4 / 3;
+    }
+
+    .landing-features-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .landing-feature-card.top-card,
+    .landing-feature-card.bottom-card {
+        flex: 1 1 auto;
+    }
+}

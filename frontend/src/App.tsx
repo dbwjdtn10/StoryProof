@@ -7,6 +7,7 @@ import { CharacterChatBot } from './components/CharacterChatBot';
 import { register, login } from './api/auth';
 import { getNovels, createNovel, Novel } from './api/novel';
 import { SplashScreen } from './components/SplashScreen';
+import { LandingPage } from './components/LandingPage';
 
 // 커스텀 스플래시 이미지 경로 (5개 중 랜덤 선택)
 const SPLASH_IMAGE_URLS = [
@@ -27,10 +28,10 @@ const checkImageExists = (url: string): Promise<boolean> => {
   });
 };
 
-type Screen = 'login' | 'signup' | 'upload' | 'chapterDetail';
+type Screen = 'landing' | 'login' | 'signup' | 'upload' | 'chapterDetail';
 
 export default function App() {
-  const [currentScreen, setCurrentScreen] = useState<Screen>('login');
+  const [currentScreen, setCurrentScreen] = useState<Screen>('landing');
   const [selectedFile, setSelectedFile] = useState<string>('');
   const [selectedChapterId, setSelectedChapterId] = useState<number | undefined>(undefined);
   const [currentNovel, setCurrentNovel] = useState<Novel | null>(null);
@@ -187,6 +188,16 @@ export default function App() {
           message="AI 모델을 불러오는 중입니다"
         />
       </div>
+    );
+  }
+
+  // Landing Screen
+  if (currentScreen === 'landing') {
+    return (
+      <LandingPage
+        onLogin={() => setCurrentScreen('login')}
+        onSignup={() => setCurrentScreen('signup')}
+      />
     );
   }
 
