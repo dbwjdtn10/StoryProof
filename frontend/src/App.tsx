@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import { Mail, Lock, Eye, EyeOff, User } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, User, ArrowLeft } from 'lucide-react';
 import logoImg from './assets/logo.png';
 import splashImg1 from './assets/KakaoTalk_20260219_151600086_01.png';
 import splashImg2 from './assets/KakaoTalk_20260219_151600086_02.png';
@@ -210,6 +210,21 @@ export default function App() {
     return (
       <div className="login-container">
         <div className="login-card">
+          <button
+            onClick={() => setCurrentScreen('landing')}
+            style={{
+              position: 'absolute', top: '16px', left: '16px',
+              background: 'none', border: 'none', cursor: 'pointer',
+              color: '#78716c', padding: '6px', borderRadius: '50%',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              transition: 'color 0.2s'
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.color = '#1c1917'}
+            onMouseLeave={(e) => e.currentTarget.style.color = '#78716c'}
+            title="첫 화면으로"
+          >
+            <ArrowLeft size={20} />
+          </button>
           {/* Logo and Brand */}
           <div className="brand-header">
             <div className="logo-icon">
@@ -395,6 +410,21 @@ export default function App() {
   return (
     <div className="login-container">
       <div className="login-card">
+        <button
+          onClick={() => setCurrentScreen('landing')}
+          style={{
+            position: 'absolute', top: '16px', left: '16px',
+            background: 'none', border: 'none', cursor: 'pointer',
+            color: '#78716c', padding: '6px', borderRadius: '50%',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            transition: 'color 0.2s'
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.color = '#1c1917'}
+          onMouseLeave={(e) => e.currentTarget.style.color = '#78716c'}
+          title="첫 화면으로"
+        >
+          <ArrowLeft size={20} />
+        </button>
         {/* Logo and Brand */}
         <div className="brand-header">
           <div className="logo-icon">
