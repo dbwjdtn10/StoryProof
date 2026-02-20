@@ -11,16 +11,17 @@ import { ChapterDetail } from './components/ChapterDetail';
 import { FileUpload } from './components/FileUpload';
 import { ThemeToggle } from './components/ThemeToggle';
 import { CharacterChatBot } from './components/CharacterChatBot';
+import { LandingPage } from './components/LandingPage';
 import { register, login } from './api/auth';
 import { getNovels, createNovel, Novel } from './api/novel';
 import { SplashScreen } from './components/SplashScreen';
 
 const SPLASH_IMAGES = [splashImg1, splashImg2, splashImg3, splashImg4, splashImg5];
 
-type Screen = 'login' | 'signup' | 'upload' | 'chapterDetail';
+type Screen = 'landing' | 'login' | 'signup' | 'upload' | 'chapterDetail';
 
 export default function App() {
-  const [currentScreen, setCurrentScreen] = useState<Screen>('login');
+  const [currentScreen, setCurrentScreen] = useState<Screen>('landing');
   const [selectedFile, setSelectedFile] = useState<string>('');
   const [selectedChapterId, setSelectedChapterId] = useState<number | undefined>(undefined);
   const [currentNovel, setCurrentNovel] = useState<Novel | null>(null);
@@ -154,6 +155,16 @@ export default function App() {
           message="AI 모델을 불러오는 중입니다"
         />
       </div>
+    );
+  }
+
+  // Landing Screen
+  if (currentScreen === 'landing') {
+    return (
+      <LandingPage
+        onLogin={() => setCurrentScreen('login')}
+        onSignup={() => setCurrentScreen('signup')}
+      />
     );
   }
 
