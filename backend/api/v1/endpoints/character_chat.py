@@ -441,6 +441,44 @@ Checklist: 5/5 | Confidence: 4.5/5.0 | Notes: 짧고 캐릭터답게
     """
 
 
+async def _prepare_message_context(
+    db: Session, room: CharacterChatRoom, message_content: str
+) -> tuple:
+    """유저 메시지 저장 + 히스토리 + RAG + 프롬프트 구성. send_message/send_message_stream 공통 로직."""
+    # 1. Save User Message
+    user_msg = CharacterChatMessage(room_id=room.id, role="user", content=message_content)
+    db.add(user_msg)
+    db.commit()
+    db.refresh(user_msg)
+
+    # 2. Fetch chat history
+    history_records = db.query(CharacterChatMessage).filter(
+        CharacterChatMessage.room_id == room.id
+    ).order_by(CharacterChatMessage.created_at).all()
+
+    # 3. RAG + 바이블
+    chatbot_service = get_chatbot_service()
+    rag_context = await _perform_rag_search(db, chatbot_service, room, message_content)
+    char_bible = _fetch_character_bible(db, room.novel_id, room.chapter_id, room.character_name)
+    bible_prefix = f"### [캐릭터 설정] ###\n{char_bible}\n\n" if char_bible else ""
+    memory_block = rag_context if rag_context else "[이 질문과 관련된 소설 장면을 찾지 못했습니다.]"
+    input_text = f"""{bible_prefix}### [기억 데이터] ###
+{memory_block}
+
+### [사용자의 메시지] ###
+{message_content}"""
+
+    # 4. Build system instruction + conversation history
+    system_instruction = room.persona_prompt + _CHAT_PROTOCOL
+    contents = [
+        types.Content(role="user" if m.role == "user" else "model", parts=[types.Part(text=m.content)])
+        for m in history_records if m.id != user_msg.id
+    ]
+    contents.append(types.Content(role="user", parts=[types.Part(text=input_text)]))
+
+    return user_msg, contents, system_instruction
+
+
 # --- Router ---
 router = APIRouter()
 
@@ -469,7 +507,7 @@ async def generate_persona(
         loop = asyncio.get_running_loop()
         response = await loop.run_in_executor(
             None,
-            partial(client.models.generate_content, model='gemini-2.5-flash', contents=meta_prompt)
+            partial(client.models.generate_content, model=settings.GEMINI_CHAT_MODEL, contents=meta_prompt)
         )
         persona_prompt = response.text.strip()
     except Exception as e:
@@ -537,45 +575,7 @@ async def send_message(
     if not client:
         raise HTTPException(status_code=500, detail="LLM client not initialized")
 
-    # 1. Save User Message
-    user_msg = CharacterChatMessage(room_id=room.id, role="user", content=message.content)
-    db.add(user_msg)
-    db.commit()
-
-    # 2. Fetch chat history
-    history_records = db.query(CharacterChatMessage).filter(
-        CharacterChatMessage.room_id == room.id
-    ).order_by(CharacterChatMessage.created_at).all()
-
-    # 3. RAG: Retrieve Context
-    chatbot_service = get_chatbot_service()
-    rag_context = await _perform_rag_search(db, chatbot_service, room, message.content)
-
-    # 4. Build input with optional RAG context
-    # 캐릭터 설정 바이블 조회 (Method C - 캐릭터 슬라이스)
-    char_bible = _fetch_character_bible(db, room.novel_id, room.chapter_id, room.character_name)
-    bible_prefix = f"### [캐릭터 설정] ###\n{char_bible}\n\n" if char_bible else ""
-
-    # RAG 결과가 없어도 [기억 데이터] 블록을 항상 포함시켜,
-    # LLM이 관련 소설 장면이 없다는 사실을 인지하도록 한다.
-    memory_block = rag_context if rag_context else "[이 질문과 관련된 소설 장면을 찾지 못했습니다.]"
-    input_text = f"""{bible_prefix}### [기억 데이터] ###
-{memory_block}
-
-### [사용자의 메시지] ###
-{message.content}"""
-
-    # Build system instruction
-    system_instruction = room.persona_prompt + _CHAT_PROTOCOL
-
-    # Build conversation history
-    contents = []
-    for msg in history_records:
-        if msg.id == user_msg.id:
-            continue  # 현재 메시지는 RAG 컨텍스트와 함께 아래서 추가
-        role = "user" if msg.role == "user" else "model"
-        contents.append(types.Content(role=role, parts=[types.Part(text=msg.content)]))
-    contents.append(types.Content(role="user", parts=[types.Part(text=input_text)]))
+    user_msg, contents, system_instruction = await _prepare_message_context(db, room, message.content)
 
     try:
         loop = asyncio.get_running_loop()
@@ -583,7 +583,7 @@ async def send_message(
             None,
             partial(
                 client.models.generate_content,
-                model='gemini-2.5-flash',
+                model=settings.GEMINI_CHAT_MODEL,
                 contents=contents,
                 config=types.GenerateContentConfig(system_instruction=system_instruction)
             )
@@ -632,39 +632,7 @@ async def send_message_stream(
     if not client:
         raise HTTPException(status_code=500, detail="LLM client not initialized")
 
-    # 1. Save User Message
-    user_msg = CharacterChatMessage(room_id=room.id, role="user", content=message.content)
-    db.add(user_msg)
-    db.commit()
-    db.refresh(user_msg)
-
-    # 2. Fetch chat history
-    history_records = db.query(CharacterChatMessage).filter(
-        CharacterChatMessage.room_id == room.id
-    ).order_by(CharacterChatMessage.created_at).all()
-
-    # 3. RAG + 바이블
-    chatbot_service = get_chatbot_service()
-    rag_context = await _perform_rag_search(db, chatbot_service, room, message.content)
-    char_bible = _fetch_character_bible(db, room.novel_id, room.chapter_id, room.character_name)
-    bible_prefix = f"### [캐릭터 설정] ###\n{char_bible}\n\n" if char_bible else ""
-    memory_block = rag_context if rag_context else "[이 질문과 관련된 소설 장면을 찾지 못했습니다.]"
-    input_text = f"""{bible_prefix}### [기억 데이터] ###
-{memory_block}
-
-### [사용자의 메시지] ###
-{message.content}"""
-
-    system_instruction = room.persona_prompt + _CHAT_PROTOCOL
-
-    # 4. Build conversation history
-    contents = []
-    for msg in history_records:
-        if msg.id == user_msg.id:
-            continue
-        role = "user" if msg.role == "user" else "model"
-        contents.append(types.Content(role=role, parts=[types.Part(text=msg.content)]))
-    contents.append(types.Content(role="user", parts=[types.Part(text=input_text)]))
+    user_msg, contents, system_instruction = await _prepare_message_context(db, room, message.content)
 
     loop = asyncio.get_running_loop()
 
@@ -678,7 +646,7 @@ async def send_message_stream(
         def _run_stream():
             try:
                 for chunk in client.models.generate_content_stream(
-                    model='gemini-2.5-flash',
+                    model=settings.GEMINI_CHAT_MODEL,
                     contents=contents,
                     config=types.GenerateContentConfig(system_instruction=system_instruction)
                 ):

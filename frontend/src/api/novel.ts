@@ -39,40 +39,16 @@ export interface StoryboardProgress {
     error?: string;
 }
 
-const getHeaders = (): Record<string, string> => {
-    const token = localStorage.getItem('token');
-    const headers: Record<string, string> = {};
-    if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-    }
-    return headers;
-}
-
 export const getNovels = async (skip = 0, limit = 10): Promise<NovelListResponse> => {
-    return request<NovelListResponse>(`/novels/?skip=${skip}&limit=${limit}`, {
-        method: 'GET',
-        headers: getHeaders(),
-    });
+    return request<NovelListResponse>(`/novels/?skip=${skip}&limit=${limit}`, { method: 'GET' });
 };
 
 export const createNovel = async (data: { title: string; description?: string; genre?: string; is_public?: boolean }) => {
-    return request<Novel>('/novels/', {
-        method: 'POST',
-        headers: getHeaders(),
-        body: JSON.stringify(data),
-    });
+    return request<Novel>('/novels/', { method: 'POST', body: JSON.stringify(data) });
 };
 
 export const getChapters = async (novelId: number): Promise<Chapter[]> => {
-    try {
-        const chapters = await request<Chapter[]>(`/novels/${novelId}/chapters`, {
-            method: 'GET',
-            headers: getHeaders(),
-        });
-        return chapters;
-    } catch (error) {
-        throw error;
-    }
+    return request<Chapter[]>(`/novels/${novelId}/chapters`, { method: 'GET' });
 };
 
 export const uploadChapter = async (
@@ -113,50 +89,22 @@ export const getChapter = async (novelId: number, chapterId: number): Promise<Ch
         throw new Error(`Missing required parameters: novelId=${novelId}, chapterId=${chapterId}`);
     }
 
-    const endpoint = `/novels/${novelId}/chapters/${chapterId}`;
-    const headers = getHeaders();
-
-    try {
-        const chapter = await request<Chapter>(endpoint, {
-            method: 'GET',
-            headers: headers,
-        });
-        return chapter;
-    } catch (error) {
-        throw error;
-    }
+    return request<Chapter>(`/novels/${novelId}/chapters/${chapterId}`, { method: 'GET' });
 };
 
 export const updateChapter = async (novelId: number, chapterId: number, data: { title?: string; content?: string }) => {
     return request<Chapter>(`/novels/${novelId}/chapters/${chapterId}`, {
         method: 'PUT',
-        headers: getHeaders(),
         body: JSON.stringify(data),
     });
 };
 
 export const deleteChapter = async (novelId: number, chapterId: number): Promise<void> => {
-    try {
-        const response = await request<void>(`/novels/${novelId}/chapters/${chapterId}`, {
-            method: 'DELETE',
-            headers: getHeaders(),
-        });
-        return response;
-    } catch (error) {
-        throw error;
-    }
+    return request<void>(`/novels/${novelId}/chapters/${chapterId}`, { method: 'DELETE' });
 };
 
 export const getStoryboardStatus = async (novelId: number, chapterId: number): Promise<StoryboardProgress> => {
-    try {
-        const status = await request<StoryboardProgress>(`/novels/${novelId}/chapters/${chapterId}/storyboard-status`, {
-            method: 'GET',
-            headers: getHeaders(),
-        });
-        return status;
-    } catch (error) {
-        throw error;
-    }
+    return request<StoryboardProgress>(`/novels/${novelId}/chapters/${chapterId}/storyboard-status`, { method: 'GET' });
 };
 export interface Character {
     name: string;
@@ -219,31 +167,16 @@ export interface BibleData {
 }
 
 export const getChapterBible = async (novelId: number, chapterId: number): Promise<BibleData> => {
-    try {
-        const bible = await request<BibleData>(`/novels/${novelId}/chapters/${chapterId}/bible`, {
-            method: 'GET',
-            headers: getHeaders(),
-        });
-        return bible;
-    } catch (error) {
-        throw error;
-    }
+    return request<BibleData>(`/novels/${novelId}/chapters/${chapterId}/bible`, { method: 'GET' });
 };
 
 export const reanalyzeChapter = async (novelId: number, chapterId: number): Promise<void> => {
-    await request<{ status: string }>(`/novels/${novelId}/chapters/${chapterId}/analyze`, {
-        method: 'POST',
-        headers: getHeaders(),
-    });
+    await request<{ status: string }>(`/novels/${novelId}/chapters/${chapterId}/analyze`, { method: 'POST' });
 };
 
 export const mergeChapters = async (novelId: number, targetId: number, sourceIds: number[]): Promise<Chapter> => {
     return request<Chapter>(`/novels/${novelId}/merge-contents`, {
         method: 'PATCH',
-        headers: getHeaders(),
-        body: JSON.stringify({
-            target_id: targetId,
-            source_ids: sourceIds
-        })
+        body: JSON.stringify({ target_id: targetId, source_ids: sourceIds }),
     });
 };

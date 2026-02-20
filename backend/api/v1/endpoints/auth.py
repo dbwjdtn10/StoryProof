@@ -23,7 +23,7 @@ router = APIRouter()
 # ===== 회원가입 =====
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
-async def register(
+def register(
     user_data: UserRegister,
     db: Session = Depends(get_db)
 ):
@@ -43,7 +43,7 @@ async def register(
 # ===== 로그인 =====
 
 @router.post("/login", response_model=TokenResponse)
-async def login(
+def login(
     user_data: UserLogin,
     db: Session = Depends(get_db)
 ):
@@ -54,7 +54,7 @@ async def login(
 # ===== 로그아웃 =====
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-async def logout():
+def logout():
     """로그아웃 처리 (클라이언트 토큰 삭제로 처리, TODO: Redis 블랙리스트 구현)"""
     return None
 
@@ -62,7 +62,7 @@ async def logout():
 # ===== 토큰 갱신 =====
 
 @router.post("/refresh")
-async def refresh_token():
+def refresh_token():
     """JWT 토큰 갱신 (TODO: refresh token 로직 구현)"""
     raise HTTPException(status_code=501, detail="토큰 갱신 기능은 아직 구현되지 않았습니다.")
 
@@ -70,7 +70,7 @@ async def refresh_token():
 # ===== 현재 사용자 조회 =====
 
 @router.get("/me", response_model=UserProfile)
-async def get_current_user_profile(
+def get_current_user_profile(
     user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db)
 ):

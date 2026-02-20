@@ -1,6 +1,6 @@
 import { Upload, X, FileText, Merge, CheckSquare, Square } from 'lucide-react';
-import { toast } from 'sonner';
 import { useState, useRef, useEffect } from 'react';
+import { toast } from 'sonner';
 import { ThemeToggle } from './ThemeToggle';
 import { getChapters, uploadChapter, deleteChapter, getStoryboardStatus, Chapter, StoryboardProgress } from '../api/novel';
 import { useFileMerge } from '../hooks/useFileMerge';
@@ -65,22 +65,14 @@ export function FileUpload({ onFileClick, novelId, mode = 'writer' }: FileUpload
             clearInterval(progressIntervalRef.current[chapterId]);
         }
 
-        // 3초마다 상태 조회
+        // 1초마다 상태 조회 (더 빠른 실시간 업데이트)
         progressIntervalRef.current[chapterId] = setInterval(() => {
             fetchStoryboardStatus(chapterId);
-        }, 3000);
+        }, 1000);
 
         // 초기 조회
         fetchStoryboardStatus(chapterId);
     };
-
-    // 컴포넌트 언마운트 시 모든 폴링 인터벌 정리
-    useEffect(() => {
-        return () => {
-            Object.values(progressIntervalRef.current).forEach(clearInterval);
-            progressIntervalRef.current = {};
-        };
-    }, []);
 
     // Fetch existing chapters
     useEffect(() => {
@@ -97,7 +89,8 @@ export function FileUpload({ onFileClick, novelId, mode = 'writer' }: FileUpload
 
             // 기존 파일 중 처리 중인 파일이 있으면 폴링 시작
             chapters.forEach(chapter => {
-                const status = chapter.storyboard_status?.toUpperCase();
+                // chapter 객체에 storyboard_status가 없는 경우를 대비해 초기화
+                const status = (chapter as any).storyboard_status?.toUpperCase();
                 if (status === 'PROCESSING' || status === 'PENDING') {
                     startProgressPolling(chapter.id);
                 }
@@ -171,15 +164,23 @@ export function FileUpload({ onFileClick, novelId, mode = 'writer' }: FileUpload
         loadChapters();
     };
 
-    const removeFile = async (id: number) => {
+    const removeFile = (id: number) => {
         if (!novelId) return;
 
-        try {
-            await deleteChapter(novelId, id);
-            setUploadedFiles((prev) => prev.filter((file) => file.id !== id));
-        } catch (error) {
-            toast.error("파일 삭제 실패");
-        }
+        toast("이 파일을 정말 삭제하시겠습니까?", {
+            action: {
+                label: "삭제",
+                onClick: async () => {
+                    try {
+                        await deleteChapter(novelId, id);
+                        setUploadedFiles((prev) => prev.filter((file) => file.id !== id));
+                    } catch {
+                        toast.error("파일 삭제 실패");
+                    }
+                }
+            },
+            cancel: { label: "취소", onClick: () => {} }
+        });
     };
 
     const openFileDialog = () => {
@@ -239,7 +240,7 @@ export function FileUpload({ onFileClick, novelId, mode = 'writer' }: FileUpload
                                 <Upload size={48} className="upload-icon" />
                                 <p className="upload-text-main">
                                     {mode === 'reader'
-                                        ? '작품 파일을 추가하여 읽기 시작하기'
+                                        ? '자품 파일을 추가하여 읽기 시작하기'
                                         : '파일을 드래그하거나 클릭하여 업로드'}
                                 </p>
                                 <p className="upload-text-sub">PDF, HWP, TXT 파일 지원</p>

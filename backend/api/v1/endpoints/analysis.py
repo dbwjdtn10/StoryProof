@@ -11,7 +11,7 @@ from celery.result import AsyncResult
 
 from backend.worker.tasks import detect_inconsistency_task
 from backend.worker.celery_app import celery_app
-from backend.services.agent import StoryConsistencyAgent
+from backend.services.agent import get_consistency_agent
 from backend.core.config import settings
 from backend.schemas.analysis_schema import ConsistencyRequest, PredictionRequest
 
@@ -63,8 +63,7 @@ def request_prediction(request: PredictionRequest):
     FastAPI가 자동으로 threadpool에서 실행합니다.
     """
     try:
-        agent = StoryConsistencyAgent(api_key=settings.GOOGLE_API_KEY)
-        result = agent.predict_story(request.novel_id, request.text)
+        result = get_consistency_agent().predict_story(request.novel_id, request.text)
         return {"result": result, "status": "COMPLETED"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

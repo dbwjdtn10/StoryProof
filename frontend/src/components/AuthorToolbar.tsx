@@ -153,7 +153,7 @@ export const AuthorToolbar = ({ editor, onOpenSettings }: AuthorToolbarProps) =>
                     <input
                         type="color"
                         onChange={e => editor?.chain().focus().setColor(e.target.value).run()}
-                        value={editor?.getAttributes('textStyle').color || '#000000'}
+                        value={editor?.getAttributes('textStyle').color || 'var(--foreground)'}
                         disabled={!editor}
                     />
                 </div>
@@ -311,7 +311,7 @@ export const AuthorToolbar = ({ editor, onOpenSettings }: AuthorToolbarProps) =>
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        color: '#4b5563',
+                        color: 'var(--foreground)',
                         padding: '6px'
                     }}
                 >

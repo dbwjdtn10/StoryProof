@@ -58,7 +58,7 @@
     height: 48px;
     padding: 0;
     background: white;
-    border: 1px solid #e5e7eb;
+    border: 1px solid #cbcbcb;
     border-radius: 50%;
     cursor: pointer;
     color: #1a1a1a;
@@ -73,6 +73,47 @@
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
+/* Button Colors */
+.btn-sepia {
+    background: var(--floating-btn-bg) !important;
+    color: var(--floating-btn-text) !important;
+    border: 1px solid var(--floating-btn-border) !important;
+}
+
+.btn-sepia:hover {
+    background: var(--floating-btn-hover-bg) !important;
+}
+
+.btn-brown-med {
+    background: #795548 !important;
+    color: white !important;
+    border: none !important;
+}
+
+.btn-brown-dark {
+    background: var(--modal-header-bg) !important;
+    color: var(--modal-header-text) !important;
+    border: 1px solid var(--floating-btn-border) !important;
+}
+
+.btn-brown-rich {
+    background: #553f2e !important;
+    color: white !important;
+    border: none !important;
+}
+
+.btn-purple {
+    background: #8b5cf6 !important;
+    color: white !important;
+    border: none !important;
+}
+
+.btn-blue {
+    background: #3b82f6 !important;
+    color: white !important;
+    border: none !important;
+}
+
 .menu-option svg {
     flex-shrink: 0;
 }
@@ -84,8 +125,9 @@
     right: 2rem;
     width: 350px;
     height: 500px;
-    background: white;
+    background: var(--modal-bg);
     border-radius: 1rem;
+    border: 1px solid var(--modal-border);
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
     display: flex;
     flex-direction: column;
@@ -98,14 +140,16 @@
     align-items: center;
     justify-content: space-between;
     padding: 1rem 1.25rem;
-    border-bottom: 1px solid #e5e7eb;
+    border-bottom: 1px solid var(--border);
+    background: var(--modal-header-bg);
+    color: var(--modal-header-text);
 }
 
 .chatbot-header h3 {
     font-size: 1.125rem;
     font-weight: 700;
     margin: 0;
-    color: #1a1a1a;
+    color: currentColor;
 }
 
 .chatbot-close {
@@ -113,12 +157,13 @@
     border: none;
     cursor: pointer;
     padding: 0.25rem;
-    color: #6b7280;
-    transition: color 0.2s ease;
+    color: currentColor;
+    opacity: 0.8;
+    transition: opacity 0.2s ease;
 }
 
 .chatbot-close:hover {
-    color: #000000;
+    opacity: 1;
 }
 
 .chatbot-content {

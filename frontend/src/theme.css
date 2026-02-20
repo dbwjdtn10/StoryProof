@@ -8,7 +8,7 @@
     width: 56px;
     height: 56px;
     background: white;
-    border: none;
+    border: 2px solid #000000;
     border-radius: 50%;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
     display: flex;
@@ -201,212 +201,214 @@
 
     /* Login/Signup Container */
     .login-container {
-        background: linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 100%);
+        background: var(--background);
     }
 
     .login-card {
-        background: #2a2a2a;
+        background: var(--card2, var(--card));
         box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
     }
 
     .login-title,
     .signup-title {
-        color: #ffffff;
+        color: var(--foreground);
     }
 
     .login-subtitle,
     .signup-subtitle {
-        color: #999999;
+        color: var(--muted-foreground);
     }
 
     .input-group label {
-        color: #e2e8f0;
+        color: var(--foreground);
     }
 
     .input-wrapper input {
-        background: #1a1a1a;
-        border-color: #444444;
-        color: #ffffff;
+        background: var(--input-background);
+        border-color: var(--border);
+        color: var(--foreground);
     }
 
     .input-wrapper input:focus {
-        border-color: #666666;
-        background: #222222;
+        border-color: var(--primary);
+        background: var(--input-background);
     }
 
     .checkbox-label {
-        color: #e2e8f0;
+        color: var(--foreground);
     }
 
     .signup-text {
-        color: #999999;
+        color: var(--muted-foreground);
     }
 
     .submit-btn {
-        background: #ffffff;
-        color: #000000;
+        background: var(--primary);
+        color: var(--primary-foreground);
     }
 
     .submit-btn:hover {
-        background: #e0e0e0;
+        opacity: 0.9;
     }
 
     /* Upload Screen */
     .upload-container {
-        background: linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 100%);
+        background: var(--background);
     }
 
     .upload-header {
-        background: #2a2a2a;
+        background: var(--card);
     }
 
     .upload-title {
-        color: #ffffff;
+        color: var(--foreground);
     }
 
     .upload-subtitle {
-        color: #999999;
+        color: var(--muted-foreground);
     }
 
     .upload-area {
-        background: #2a2a2a;
+        background: var(--card);
     }
 
     .upload-label {
-        border-color: #444444;
+        border-color: var(--border);
     }
 
     .upload-label:hover {
-        border-color: #666666;
-        background: #333333;
+        border-color: var(--primary);
+        background: var(--secondary);
     }
 
     .upload-text-main {
-        color: #ffffff;
+        color: var(--foreground);
     }
 
     .upload-text-sub {
-        color: #999999;
+        color: var(--muted-foreground);
     }
 
     .uploaded-files-section {
-        background: #2a2a2a;
+        background: var(--card);
     }
 
     .uploaded-files-title {
-        color: #ffffff;
+        color: var(--foreground);
     }
 
     .uploaded-file-card {
-        background: #333333;
+        background: var(--secondary);
         box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
     }
 
     .file-name {
-        color: #ffffff;
+        color: var(--foreground);
     }
 
     /* Chapter Detail */
     .chapter-detail-container {
-        background: linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 100%);
+        background: var(--background);
     }
 
     .chapter-detail-header {
-        background: #2a2a2a;
+        background: var(--card);
     }
 
     .chapter-detail-title {
-        color: #ffffff;
+        color: var(--foreground);
     }
 
     .dictionary-sidebar {
-        background: #2a2a2a;
+        background: var(--sidebar);
     }
 
     .dictionary-header {
-        background: #000000;
+        background: var(--sidebar);
+        border-bottom-color: var(--sidebar-border);
     }
 
     .dictionary-entry {
-        border-bottom-color: #444444;
+        border-bottom-color: var(--sidebar-border);
     }
 
     .dictionary-entry:hover {
-        background: #333333;
+        background: var(--secondary);
     }
 
     .dictionary-meaning {
-        color: #999999;
+        color: var(--muted-foreground);
     }
 
     .dictionary-toggle {
-        background: #2a2a2a;
+        background: var(--card);
     }
 
     .dictionary-toggle:hover {
-        background: #333333;
+        background: var(--secondary);
     }
 
     .text-content {
-        background: #2a2a2a;
+        background: var(--card);
     }
 
     .novel-text {
-        color: #e2e8f0;
+        color: var(--foreground);
     }
 
-    /* Theme Toggle */
     .theme-toggle-btn {
-        background: #2a2a2a;
-        color: #ffffff;
+        background: var(--card);
+        color: var(--foreground);
+        border: 2px solid #ffffff;
     }
 
     .theme-toggle-btn:hover {
-        background: #ffffff;
-        color: #000000;
+        background: var(--foreground);
+        color: var(--background);
     }
 
     /* Chatbot */
     .chatbot-panel {
-        background: #2a2a2a;
+        background: var(--card);
     }
 
     .chatbot-messages {
-        background: #1a1a1a;
+        background: var(--background);
     }
 
     .chatbot-message.bot {
-        background: #333333;
-        color: #e2e8f0;
+        background: var(--secondary);
+        color: var(--foreground);
     }
 
     .chatbot-message.user {
-        background: #ffffff;
-        color: #000000;
+        background: #1a1a1a;
+        color: var(--primary-foreground);
     }
 
     .chatbot-input-area {
-        background: #2a2a2a;
-        border-top-color: #444444;
+        background: var(--card);
+        border-top-color: var(--border);
     }
 
     .chatbot-input {
-        background: #1a1a1a;
-        border-color: #444444;
-        color: #ffffff;
+        background: var(--input-background);
+        border-color: var(--border);
+        color: var(--foreground);
     }
 
     .chatbot-input:focus {
-        border-color: #666666;
+        border-color: var(--primary);
     }
 
     .chatbot-send {
-        background: #ffffff;
-        color: #000000;
+        background: var(--primary);
+        color: var(--primary-foreground);
     }
 
     .chatbot-send:hover {
-        background: #e0e0e0;
+        opacity: 0.9;
+        transform: scale(1.05);
     }
 }
 
@@ -441,4 +443,63 @@
         bottom: 5rem;
         height: calc(100vh - 10rem);
     }
+}
+
+/* Sepia Mode Specific Overrides */
+[data-theme="sepia"] .theme-toggle-btn {
+    border: 2px solid #6b4f3a;
+}
+
+[data-theme="sepia"] .chatbot-panel,
+[data-theme="sepia"] .chatbot-messages,
+[data-theme="sepia"] .chatbot-input-area {
+    background-color: #fdf6e3;
+    border-color: #d4c4b7;
+}
+
+[data-theme="sepia"] .chatbot-header {
+    background-color: #6b4f3a;
+    color: #ffffff;
+    border-bottom: 1px solid #5a4230;
+}
+
+[data-theme="sepia"] .chatbot-input {
+    background-color: #ffffff;
+    border-color: #d4c4b7;
+    color: #4a3728;
+}
+
+[data-theme="sepia"] .chatbot-message.bot {
+    background-color: #f0e4d7;
+    color: #4a3728;
+}
+
+/* Sidebar Dark Mode Fixes */
+[data-theme="dark"] .dictionary-sidebar {
+    background-color: #1a1614;
+    border-right: 1px solid #333;
+}
+
+[data-theme="dark"] .section-header {
+    color: #e5e7eb;
+}
+
+[data-theme="dark"] .section-header:hover {
+    background-color: #2a2a2a;
+}
+
+[data-theme="dark"] .section-title {
+    color: #ffffff;
+}
+
+[data-theme="dark"] .item-name {
+    color: #e5e7eb;
+}
+
+[data-theme="dark"] .item-description {
+    color: #9ca3af;
+}
+
+[data-theme="dark"] .section-item:hover {
+    background-color: #2a2a2a;
 }

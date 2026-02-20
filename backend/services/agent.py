@@ -5,6 +5,7 @@ StoryConsistencyAgent를 사용하여 소설의 설정 파괴를 탐지하고 �
 
 import json
 import logging
+import threading
 from google import genai
 from backend.services.analysis import EmbeddingSearchEngine
 from backend.db.session import SessionLocal
@@ -72,6 +73,36 @@ class StoryConsistencyAgent:
         finally:
             db.close()
 
+    def _fetch_enriched_context(self, novel_id: int, query: str) -> tuple:
+        """컨텍스트 조회 + Agent-lite 공백 탐지 + 바이블 주입 통합.
+
+        Returns:
+            tuple: (relevant_context, summary, bible_block)
+        """
+        relevant_context, summary = self._fetch_context_for_novel(novel_id, query)
+
+        for gap_q in self._identify_search_gaps(relevant_context, query):
+            extra = self._format_search_results(
+                self.search_engine.search(query=gap_q, novel_id=novel_id, top_k=3)
+            )
+            if extra and extra != "관련 정보 없음":
+                relevant_context += f"\n\n[추가 검색]\n{extra}"
+
+        bible = self._fetch_bible_summary(novel_id)
+        bible_block = f"\n\n[바이블 요약]:\n{bible}" if bible else ""
+
+        return relevant_context, summary, bible_block
+
+    def _parse_json_response(self, text: str, fallback_key: str = None) -> dict:
+        """LLM JSON 응답 파싱. fallback_key 지정 시 파싱 실패 시 {fallback_key: text} 반환."""
+        clean_text = text.replace('```json', '').replace('```', '').strip()
+        try:
+            return json.loads(clean_text)
+        except json.JSONDecodeError:
+            if fallback_key:
+                return {fallback_key: clean_text}
+            raise
+
     def _identify_search_gaps(self, existing_context: str, query: str) -> list:
         """현재 검색 결과에서 누락된 정보를 파악, 추가 검색 쿼리 반환 (최대 2개)."""
         prompt = f"""아래 검색 결과가 질문에 답하기에 충분한지 평가하세요.
@@ -104,20 +135,7 @@ class StoryConsistencyAgent:
         Agent-lite: 검색 공백 탐지 후 추가 검색 수행.
         Method C: Analysis DB 바이블 요약을 프롬프트에 직접 주입.
         """
-        relevant_context, summary = self._fetch_context_for_novel(novel_id, input_text)
-
-        # Agent-lite: 검색 공백 탐지 후 추가 검색
-        gap_queries = self._identify_search_gaps(relevant_context, input_text)
-        for gap_q in gap_queries:
-            extra = self._format_search_results(
-                self.search_engine.search(query=gap_q, novel_id=novel_id, top_k=3)
-            )
-            if extra and extra != "관련 정보 없음":
-                relevant_context += f"\n\n[추가 검색]\n{extra}"
-
-        # Method C: 바이블 주입
-        bible = self._fetch_bible_summary(novel_id)
-        bible_block = f"\n\n[바이블 요약]:\n{bible}" if bible else ""
+        relevant_context, summary, bible_block = self._fetch_enriched_context(novel_id, input_text)
 
         from backend.core.prompts import STORY_GUARD_SYSTEM_PROMPT
         prompt = f"""{STORY_GUARD_SYSTEM_PROMPT}
@@ -135,13 +153,9 @@ class StoryConsistencyAgent:
             response = self.client.models.generate_content(
                 model=settings.GEMINI_STRUCTURING_MODEL,
                 contents=prompt,
-                config={
-                    'temperature': 0.1,
-                    'response_mime_type': 'application/json'
-                }
+                config={'temperature': 0.1, 'response_mime_type': 'application/json'}
             )
-            clean_text = response.text.replace('```json', '').replace('```', '').strip()
-            return json.loads(clean_text)
+            return self._parse_json_response(response.text)
         except Exception as e:
             logger.error(f"설정 일관성 검사 실패: {e}")
             return {"status": "분석 오류", "message": str(e), "results": []}
@@ -154,20 +168,7 @@ class StoryConsistencyAgent:
         Agent-lite: 검색 공백 탐지 후 추가 검색 수행.
         Method C: Analysis DB 바이블 요약을 프롬프트에 직접 주입.
         """
-        relevant_context, summary = self._fetch_context_for_novel(novel_id, user_input)
-
-        # Agent-lite: 검색 공백 탐지 후 추가 검색
-        gap_queries = self._identify_search_gaps(relevant_context, user_input)
-        for gap_q in gap_queries:
-            extra = self._format_search_results(
-                self.search_engine.search(query=gap_q, novel_id=novel_id, top_k=3)
-            )
-            if extra and extra != "관련 정보 없음":
-                relevant_context += f"\n\n[추가 검색]\n{extra}"
-
-        # Method C: 바이블 주입
-        bible = self._fetch_bible_summary(novel_id)
-        bible_block = f"\n\n[바이블 요약]:\n{bible}" if bible else ""
+        relevant_context, summary, bible_block = self._fetch_enriched_context(novel_id, user_input)
 
         from backend.core.prompts import STORY_PREDICTION_SYSTEM_PROMPT
         prompt = f"""{STORY_PREDICTION_SYSTEM_PROMPT}
@@ -184,16 +185,9 @@ class StoryConsistencyAgent:
             response = self.client.models.generate_content(
                 model=settings.GEMINI_STRUCTURING_MODEL,
                 contents=prompt,
-                config={
-                    'temperature': 0.3,  # 예측은 약간의 창의성 허용
-                    'response_mime_type': 'application/json'
-                }
+                config={'temperature': 0.3, 'response_mime_type': 'application/json'}
             )
-            clean_text = response.text.replace('```json', '').replace('```', '').strip()
-            try:
-                return json.loads(clean_text)
-            except json.JSONDecodeError:
-                return {"prediction": clean_text}
+            return self._parse_json_response(response.text, fallback_key="prediction")
         except Exception as e:
             logger.error(f"스토리 예측 실패: {e}")
             return {"prediction": f"예측 생성 중 오류가 발생했습니다: {str(e)}"}
@@ -225,3 +219,17 @@ class StoryConsistencyAgent:
             formatted.append("")
         
         return "\n".join(formatted)
+
+
+_agent_instance: "StoryConsistencyAgent | None" = None
+_agent_lock = threading.Lock()
+
+
+def get_consistency_agent() -> "StoryConsistencyAgent":
+    """싱글톤 StoryConsistencyAgent 반환 (스레드 안전)."""
+    global _agent_instance
+    if _agent_instance is None:
+        with _agent_lock:
+            if _agent_instance is None:
+                _agent_instance = StoryConsistencyAgent()
+    return _agent_instance

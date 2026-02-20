@@ -5,10 +5,127 @@ import {
     Plus, Send, Sparkles
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useTheme } from '../contexts/ThemeContext';
 import {
     CharacterChatRoom, CharacterChatMessage,
     generatePersona, createRoom, getRooms, sendMessageStream, getMessages, updateRoom, deleteRoom
 } from '../api/characterChat';
+
+// ------------------------------------------------------------------
+// Theme Colors
+// ------------------------------------------------------------------
+
+type ThemeColors = {
+    container: string;
+    header: string;
+    headerText: string;
+    chatBg: string;
+    userBubble: string;
+    userBubbleText: string;
+    aiBubble: string;
+    aiBubbleText: string;
+    inputArea: string;
+    inputBorder: string;
+    inputText: string;
+    roomListBg: string;
+    roomItemBg: string;
+    roomItemHover: string;
+    dropdown: string;
+    dropdownHover: string;
+    text: string;
+    subText: string;
+    border: string;
+    avatarBg: string;
+    avatarText: string;
+    errorBg: string;
+    errorText: string;
+    backBtnBg: string;
+    backBtnText: string;
+};
+
+const THEME_COLORS: Record<string, ThemeColors> = {
+    light: {
+        container: '#ffffff',
+        header: '#fee500',
+        headerText: '#3b1e1e',
+        chatBg: '#b2c7da',
+        userBubble: '#fee500',
+        userBubbleText: '#3b1e1e',
+        aiBubble: '#ffffff',
+        aiBubbleText: '#333333',
+        inputArea: '#ffffff',
+        inputBorder: '#dddddd',
+        inputText: '#333333',
+        roomListBg: '#ffffff',
+        roomItemBg: '#f9f9f9',
+        roomItemHover: '#f0f0f0',
+        dropdown: '#ffffff',
+        dropdownHover: '#f5f5f5',
+        text: '#333333',
+        subText: '#999999',
+        border: '#eeeeee',
+        avatarBg: '#e0e0e0',
+        avatarText: '#666666',
+        errorBg: '#ffebee',
+        errorText: '#c62828',
+        backBtnBg: '#f0f0f0',
+        backBtnText: '#333333',
+    },
+    sepia: {
+        container: '#f5ede0',
+        header: '#c9973a',
+        headerText: '#2d1a0a',
+        chatBg: '#c4b09a',
+        userBubble: '#c9973a',
+        userBubbleText: '#2d1a0a',
+        aiBubble: '#f5ede0',
+        aiBubbleText: '#3b2d1f',
+        inputArea: '#f5ede0',
+        inputBorder: '#c4a87a',
+        inputText: '#3b2d1f',
+        roomListBg: '#f5ede0',
+        roomItemBg: '#ede0cc',
+        roomItemHover: '#dfd0b8',
+        dropdown: '#f5ede0',
+        dropdownHover: '#ede0cc',
+        text: '#3b2d1f',
+        subText: '#7a6048',
+        border: '#c4a87a',
+        avatarBg: '#d4c0a0',
+        avatarText: '#5a4020',
+        errorBg: '#ffeedd',
+        errorText: '#8b3a10',
+        backBtnBg: '#ede0cc',
+        backBtnText: '#3b2d1f',
+    },
+    dark: {
+        container: '#1e1e2e',
+        header: '#c9a227',
+        headerText: '#1a1a1a',
+        chatBg: '#16213e',
+        userBubble: '#c9a227',
+        userBubbleText: '#1a1a1a',
+        aiBubble: '#2a2a40',
+        aiBubbleText: '#e8e8f0',
+        inputArea: '#1e1e2e',
+        inputBorder: '#3a3a55',
+        inputText: '#e8e8f0',
+        roomListBg: '#1e1e2e',
+        roomItemBg: '#2a2a40',
+        roomItemHover: '#3a3a55',
+        dropdown: '#2a2a40',
+        dropdownHover: '#3a3a55',
+        text: '#e8e8f0',
+        subText: '#888899',
+        border: '#3a3a55',
+        avatarBg: '#3a3a55',
+        avatarText: '#ccccdd',
+        errorBg: '#3d1a1a',
+        errorText: '#ff8080',
+        backBtnBg: '#2a2a40',
+        backBtnText: '#e8e8f0',
+    },
+};
 
 // ------------------------------------------------------------------
 // Components
@@ -27,6 +144,8 @@ interface CreateRoomModalProps {
 }
 
 function CreateRoomModal({ novelId, chapterId, onClose, onCreated, onUpdated, initialData, mode = 'create' }: CreateRoomModalProps) {
+    const { theme } = useTheme();
+    const c = THEME_COLORS[theme] || THEME_COLORS.light;
     const [characterName, setCharacterName] = useState(initialData?.character_name || '');
     const [personaPrompt, setPersonaPrompt] = useState(initialData?.persona_prompt || '');
     const [step, setStep] = useState<'input' | 'review'>(mode === 'edit' ? 'review' : 'input');
@@ -56,7 +175,6 @@ function CreateRoomModal({ novelId, chapterId, onClose, onCreated, onUpdated, in
                 const room = await createRoom(novelId, characterName, personaPrompt, chapterId);
                 onCreated?.(room);
             } else {
-                // Update mode
                 if (initialData?.id) {
                     const room = await updateRoom(initialData.id, personaPrompt);
                     onUpdated?.(room);
@@ -71,27 +189,24 @@ function CreateRoomModal({ novelId, chapterId, onClose, onCreated, onUpdated, in
     return (
         <div style={{
             position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'white',
+            top: 0, left: 0, right: 0, bottom: 0,
+            backgroundColor: c.container,
             zIndex: 10,
             display: 'flex',
             flexDirection: 'column',
             padding: '20px'
         }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
-                <h3 style={{ margin: 0 }}>{mode === 'create' ? '새 대화 시작' : '페르소나 수정'}</h3>
-                <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+                <h3 style={{ margin: 0, color: c.text }}>{mode === 'create' ? '새 대화 시작' : '페르소나 수정'}</h3>
+                <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: c.text }}>
                     <X size={20} />
                 </button>
             </div>
 
             {error && (
                 <div style={{
-                    backgroundColor: '#ffebee',
-                    color: '#c62828',
+                    backgroundColor: c.errorBg,
+                    color: c.errorText,
                     padding: '10px',
                     borderRadius: '8px',
                     marginBottom: '10px',
@@ -104,7 +219,7 @@ function CreateRoomModal({ novelId, chapterId, onClose, onCreated, onUpdated, in
             {step === 'input' ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                     <div>
-                        <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>캐릭터 이름</label>
+                        <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: c.text }}>캐릭터 이름</label>
                         <input
                             type="text"
                             value={characterName}
@@ -112,10 +227,14 @@ function CreateRoomModal({ novelId, chapterId, onClose, onCreated, onUpdated, in
                             placeholder="예: 셜록 홈즈"
                             style={{
                                 width: '100%', padding: '12px', borderRadius: '8px',
-                                border: '1px solid #ddd', fontSize: '1rem'
+                                border: `1px solid ${c.inputBorder}`,
+                                fontSize: '1rem',
+                                backgroundColor: c.inputArea,
+                                color: c.inputText,
+                                boxSizing: 'border-box'
                             }}
                         />
-                        <p style={{ fontSize: '0.8rem', color: '#666', marginTop: '4px' }}>
+                        <p style={{ fontSize: '0.8rem', color: c.subText, marginTop: '4px' }}>
                             * 분석된 데이터에 있는 캐릭터 이름을 입력하세요.
                         </p>
                     </div>
@@ -124,8 +243,8 @@ function CreateRoomModal({ novelId, chapterId, onClose, onCreated, onUpdated, in
                         onClick={handleGenerate}
                         disabled={loading || !characterName}
                         style={{
-                            backgroundColor: '#fee500',
-                            color: '#3b1e1e',
+                            backgroundColor: c.header,
+                            color: c.headerText,
                             border: 'none',
                             padding: '14px',
                             borderRadius: '8px',
@@ -150,13 +269,13 @@ function CreateRoomModal({ novelId, chapterId, onClose, onCreated, onUpdated, in
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', flex: 1 }}>
                     <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                            <label style={{ fontWeight: 'bold' }}>페르소나 프롬프트 (수정 가능)</label>
+                            <label style={{ fontWeight: 'bold', color: c.text }}>페르소나 프롬프트 (수정 가능)</label>
                             <button
                                 onClick={handleGenerate}
                                 title="AI 자동 업데이트 (현재 분석 데이터 기반)"
                                 style={{
                                     background: 'none', border: 'none', cursor: 'pointer',
-                                    color: '#666', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem'
+                                    color: c.subText, display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem'
                                 }}
                             >
                                 <Sparkles size={14} />
@@ -171,10 +290,12 @@ function CreateRoomModal({ novelId, chapterId, onClose, onCreated, onUpdated, in
                                 width: '100%',
                                 padding: '12px',
                                 borderRadius: '8px',
-                                border: '1px solid #ddd',
+                                border: `1px solid ${c.inputBorder}`,
                                 fontSize: '0.9rem',
                                 resize: 'none',
-                                fontFamily: 'monospace'
+                                fontFamily: 'monospace',
+                                backgroundColor: c.inputArea,
+                                color: c.inputText
                             }}
                         />
                     </div>
@@ -185,8 +306,8 @@ function CreateRoomModal({ novelId, chapterId, onClose, onCreated, onUpdated, in
                                 onClick={() => setStep('input')}
                                 style={{
                                     flex: 1,
-                                    backgroundColor: '#f0f0f0',
-                                    color: '#333',
+                                    backgroundColor: c.backBtnBg,
+                                    color: c.backBtnText,
                                     border: 'none',
                                     padding: '14px',
                                     borderRadius: '8px',
@@ -202,8 +323,8 @@ function CreateRoomModal({ novelId, chapterId, onClose, onCreated, onUpdated, in
                             disabled={loading}
                             style={{
                                 flex: 2,
-                                backgroundColor: '#fee500',
-                                color: '#3b1e1e',
+                                backgroundColor: c.header,
+                                color: c.headerText,
                                 border: 'none',
                                 padding: '14px',
                                 borderRadius: '8px',
@@ -230,9 +351,12 @@ interface RoomListProps {
 }
 
 function RoomList({ novelId, chapterId, onSelectRoom }: RoomListProps) {
+    const { theme } = useTheme();
+    const c = THEME_COLORS[theme] || THEME_COLORS.light;
     const [rooms, setRooms] = useState<CharacterChatRoom[]>([]);
     const [loading, setLoading] = useState(true);
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+    const [roomHover, setRoomHover] = useState<number | null>(null);
 
     const fetchRooms = async () => {
         try {
@@ -257,11 +381,11 @@ function RoomList({ novelId, chapterId, onSelectRoom }: RoomListProps) {
     };
 
     return (
-        <div style={{ padding: '16px', height: '100%', overflowY: 'auto', backgroundColor: '#fff' }}>
+        <div style={{ padding: '16px', height: '100%', overflowY: 'auto', backgroundColor: c.roomListBg }}>
             {loading ? (
-                <div style={{ textAlign: 'center', padding: '20px', color: '#999' }}>로딩 중...</div>
+                <div style={{ textAlign: 'center', padding: '20px', color: c.subText }}>로딩 중...</div>
             ) : rooms.length === 0 ? (
-                <div style={{ textAlign: 'center', marginTop: '100px', color: '#999' }}>
+                <div style={{ textAlign: 'center', marginTop: '100px', color: c.subText }}>
                     <p>대화방이 없습니다.</p>
                     <p>새로운 캐릭터와 대화를 시작해보세요!</p>
                 </div>
@@ -274,28 +398,28 @@ function RoomList({ novelId, chapterId, onSelectRoom }: RoomListProps) {
                             style={{
                                 padding: '16px',
                                 borderRadius: '12px',
-                                backgroundColor: '#f9f9f9',
-                                border: '1px solid #eee',
+                                backgroundColor: roomHover === room.id ? c.roomItemHover : c.roomItemBg,
+                                border: `1px solid ${c.border}`,
                                 cursor: 'pointer',
                                 display: 'flex',
                                 alignItems: 'center',
                                 gap: '12px',
                                 transition: 'background 0.2s'
                             }}
-                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f0f0'}
-                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#f9f9f9'}
+                            onMouseEnter={() => setRoomHover(room.id)}
+                            onMouseLeave={() => setRoomHover(null)}
                         >
                             <div style={{
                                 width: '40px', height: '40px', borderRadius: '50%',
-                                backgroundColor: '#e0e0e0', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                backgroundColor: c.avatarBg, display: 'flex', alignItems: 'center', justifyContent: 'center'
                             }}>
-                                <span style={{ fontWeight: 'bold', color: '#666' }}>
+                                <span style={{ fontWeight: 'bold', color: c.avatarText }}>
                                     {room.character_name.charAt(0)}
                                 </span>
                             </div>
                             <div style={{ flex: 1 }}>
-                                <div style={{ fontWeight: 'bold' }}>{room.character_name}</div>
-                                <div style={{ fontSize: '0.8rem', color: '#999' }}>
+                                <div style={{ fontWeight: 'bold', color: c.text }}>{room.character_name}</div>
+                                <div style={{ fontSize: '0.8rem', color: c.subText }}>
                                     {new Date(room.updated_at || room.created_at).toLocaleDateString()}
                                 </div>
                             </div>
@@ -304,12 +428,10 @@ function RoomList({ novelId, chapterId, onSelectRoom }: RoomListProps) {
                 </div>
             )}
 
-            {/* Notice Footer */}
-            <div style={{ marginTop: '20px', textAlign: 'center', fontSize: '0.75rem', color: '#999', paddingBottom: '80px' }}>
+            <div style={{ marginTop: '20px', textAlign: 'center', fontSize: '0.75rem', color: c.subText, paddingBottom: '80px' }}>
                 * 이미 생성된 대화방의 페르소나(Persona)는 <br /> 자동으로 업데이트되지 않습니다.
             </div>
 
-            {/* Floating Action Button for New Chat */}
             <button
                 onClick={() => setIsCreateModalOpen(true)}
                 style={{
@@ -319,14 +441,14 @@ function RoomList({ novelId, chapterId, onSelectRoom }: RoomListProps) {
                     width: '56px',
                     height: '56px',
                     borderRadius: '50%',
-                    backgroundColor: '#fee500',
+                    backgroundColor: c.header,
                     border: 'none',
                     boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     cursor: 'pointer',
-                    color: '#3b1e1e'
+                    color: c.headerText
                 }}
             >
                 <Plus size={28} />
@@ -351,6 +473,8 @@ interface ChatRoomProps {
 }
 
 function ChatRoom({ room }: ChatRoomProps) {
+    const { theme } = useTheme();
+    const c = THEME_COLORS[theme] || THEME_COLORS.light;
     const [messages, setMessages] = useState<CharacterChatMessage[]>([]);
     const [inputText, setInputText] = useState('');
     const [loading, setLoading] = useState(false);
@@ -372,7 +496,6 @@ function ChatRoom({ room }: ChatRoomProps) {
 
     useEffect(() => {
         fetchHistory();
-        // Poll for updates or real-time could be added here
     }, [room.id]);
 
     useEffect(() => {
@@ -386,7 +509,6 @@ function ChatRoom({ room }: ChatRoomProps) {
         setInputText('');
         setLoading(true);
 
-        // 임시 유저 메시지 + AI 스트리밍 플레이스홀더 동시 추가
         const tempUserId = Date.now();
         const streamingId = tempUserId + 1;
         setMessages(prev => [
@@ -399,17 +521,14 @@ function ChatRoom({ room }: ChatRoomProps) {
             await sendMessageStream(
                 room.id,
                 text,
-                // onUserSaved: 임시 유저 메시지 → 실제 메시지로 교체
                 (userMsg) => {
                     setMessages(prev => prev.map(m => m.id === tempUserId ? userMsg : m));
                 },
-                // onToken: AI 플레이스홀더에 토큰 누적
                 (token) => {
                     setMessages(prev => prev.map(m =>
                         m.id === streamingId ? { ...m, content: m.content + token } : m
                     ));
                 },
-                // onDone: AI 플레이스홀더 → 최종 메시지로 교체
                 (aiMsg) => {
                     setMessages(prev => prev.map(m => m.id === streamingId ? aiMsg : m));
                 }
@@ -432,7 +551,7 @@ function ChatRoom({ room }: ChatRoomProps) {
     };
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', height: '100%', backgroundColor: '#b2c7da' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100%', backgroundColor: c.chatBg }}>
             {/* Chat Area */}
             <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 <div style={{ textAlign: 'center', fontSize: '0.8rem', color: '#fff', marginBottom: '10px', opacity: 0.8 }}>
@@ -454,8 +573,8 @@ function ChatRoom({ room }: ChatRoomProps) {
                             {!isUser && (
                                 <div style={{
                                     width: '36px', height: '36px', borderRadius: '14px',
-                                    backgroundColor: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    fontSize: '0.8rem', fontWeight: 'bold'
+                                    backgroundColor: c.aiBubble, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    fontSize: '0.8rem', fontWeight: 'bold', color: c.aiBubbleText
                                 }}>
                                     {room.character_name.charAt(0)}
                                 </div>
@@ -463,12 +582,13 @@ function ChatRoom({ room }: ChatRoomProps) {
 
                             <div style={{ maxWidth: '70%' }}>
                                 {!isUser && (
-                                    <div style={{ fontSize: '0.8rem', marginBottom: '4px', color: '#555' }}>
+                                    <div style={{ fontSize: '0.8rem', marginBottom: '4px', color: '#ffffff' }}>
                                         {room.character_name}
                                     </div>
                                 )}
                                 <div style={{
-                                    backgroundColor: isUser ? '#fee500' : '#ffffff',
+                                    backgroundColor: isUser ? c.userBubble : c.aiBubble,
+                                    color: isUser ? c.userBubbleText : c.aiBubbleText,
                                     padding: '8px 12px',
                                     borderRadius: isUser ? '12px 0 12px 12px' : '0 12px 12px 12px',
                                     fontSize: '0.95rem',
@@ -481,10 +601,10 @@ function ChatRoom({ room }: ChatRoomProps) {
                                 </div>
                                 <div style={{
                                     fontSize: '0.7rem',
-                                    color: '#555',
+                                    color: '#ffffff',
+                                    opacity: 0.8,
                                     marginTop: '2px',
-                                    textAlign: isUser ? 'right'
-                                        : 'left'
+                                    textAlign: isUser ? 'right' : 'left'
                                 }}>
                                     {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                 </div>
@@ -494,7 +614,7 @@ function ChatRoom({ room }: ChatRoomProps) {
                 })}
                 {loading && (
                     <div style={{ display: 'flex', justifyContent: 'flex-start', paddingLeft: '44px' }}>
-                        <div style={{ backgroundColor: 'white', padding: '8px 12px', borderRadius: '12px', fontSize: '0.8rem', color: '#999' }}>
+                        <div style={{ backgroundColor: c.aiBubble, color: c.aiBubbleText, padding: '8px 12px', borderRadius: '12px', fontSize: '0.8rem' }}>
                             ...
                         </div>
                     </div>
@@ -503,7 +623,7 @@ function ChatRoom({ room }: ChatRoomProps) {
             </div>
 
             {/* Input Area */}
-            <div style={{ backgroundColor: 'white', padding: '10px', display: 'flex', gap: '8px' }}>
+            <div style={{ backgroundColor: c.inputArea, padding: '10px', display: 'flex', gap: '8px', borderTop: `1px solid ${c.border}` }}>
                 <textarea
                     value={inputText}
                     onChange={(e) => setInputText(e.target.value)}
@@ -511,27 +631,29 @@ function ChatRoom({ room }: ChatRoomProps) {
                     placeholder="메시지를 입력하세요..."
                     style={{
                         flex: 1,
-                        border: '1px solid #ddd',
+                        border: `1px solid ${c.inputBorder}`,
                         borderRadius: '4px',
                         padding: '8px',
                         resize: 'none',
                         height: '40px',
-                        fontFamily: 'inherit'
+                        fontFamily: 'inherit',
+                        backgroundColor: c.inputArea,
+                        color: c.inputText
                     }}
                 />
                 <button
                     onClick={handleSend}
                     disabled={loading || !inputText.trim()}
                     style={{
-                        backgroundColor: '#fee500',
-                        border: '1px solid #ddd',
+                        backgroundColor: c.header,
+                        border: `1px solid ${c.inputBorder}`,
                         borderRadius: '4px',
                         width: '50px',
                         cursor: 'pointer',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        color: loading ? '#999' : '#3b1e1e'
+                        color: loading ? c.subText : c.headerText
                     }}
                 >
                     <Send size={18} />
@@ -541,7 +663,7 @@ function ChatRoom({ room }: ChatRoomProps) {
     );
 }
 
-// --- Main Component: CharacterChatBot (formerly CharacterChatWindow) ---
+// --- Main Component: CharacterChatBot ---
 
 interface CharacterChatWindowProps {
     onClose: () => void;
@@ -550,12 +672,13 @@ interface CharacterChatWindowProps {
 }
 
 export function CharacterChatBot({ onClose, novelId, chapterId }: CharacterChatWindowProps) {
+    const { theme } = useTheme();
+    const c = THEME_COLORS[theme] || THEME_COLORS.light;
     const [activeRoom, setActiveRoom] = useState<CharacterChatRoom | null>(null);
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
 
-    // Close menu when clicking outside
     useEffect(() => {
         function handleClickOutside(event: MouseEvent) {
             if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
@@ -593,20 +716,20 @@ export function CharacterChatBot({ onClose, novelId, chapterId }: CharacterChatW
             right: '20px',
             width: '600px',
             height: '850px',
-            backgroundColor: 'white',
+            backgroundColor: c.container,
             borderRadius: '16px',
             boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
             display: 'flex',
             flexDirection: 'column',
             zIndex: 1001,
             overflow: 'hidden',
-            border: '1px solid #eee'
+            border: `1px solid ${c.border}`
         }}>
             {/* Header */}
             <div className="chat-header" style={{
                 padding: '16px',
-                backgroundColor: '#fee500',
-                color: '#3b1e1e',
+                backgroundColor: c.header,
+                color: c.headerText,
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
@@ -616,7 +739,7 @@ export function CharacterChatBot({ onClose, novelId, chapterId }: CharacterChatW
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     {activeRoom && (
                         <button onClick={() => setActiveRoom(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
-                            <ArrowLeft size={20} color="#3b1e1e" />
+                            <ArrowLeft size={20} color={c.headerText} />
                         </button>
                     )}
                     <span>{activeRoom ? activeRoom.character_name : '캐릭터 대화'}</span>
@@ -629,7 +752,7 @@ export function CharacterChatBot({ onClose, novelId, chapterId }: CharacterChatW
                                 onClick={() => setIsMenuOpen(!isMenuOpen)}
                                 style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex' }}
                             >
-                                <MoreVertical size={20} color="#3b1e1e" />
+                                <MoreVertical size={20} color={c.headerText} />
                             </button>
 
                             {isMenuOpen && (
@@ -638,12 +761,13 @@ export function CharacterChatBot({ onClose, novelId, chapterId }: CharacterChatW
                                     top: '100%',
                                     right: 0,
                                     marginTop: '8px',
-                                    backgroundColor: 'white',
+                                    backgroundColor: c.dropdown,
                                     borderRadius: '8px',
                                     boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
                                     zIndex: 10,
                                     minWidth: '150px',
-                                    overflow: 'hidden'
+                                    overflow: 'hidden',
+                                    border: `1px solid ${c.border}`
                                 }}>
                                     <button
                                         onClick={() => {
@@ -653,12 +777,12 @@ export function CharacterChatBot({ onClose, novelId, chapterId }: CharacterChatW
                                         style={{
                                             display: 'flex', alignItems: 'center', gap: '8px',
                                             width: '100%', padding: '12px 16px',
-                                            border: 'none', background: 'white',
+                                            border: 'none', background: c.dropdown,
                                             cursor: 'pointer', textAlign: 'left',
-                                            fontSize: '0.9rem', color: '#333'
+                                            fontSize: '0.9rem', color: c.text
                                         }}
-                                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f5f5f5'}
-                                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
+                                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = c.dropdownHover}
+                                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = c.dropdown}
                                     >
                                         <SquarePen size={16} />
                                         페르소나 수정
@@ -668,13 +792,13 @@ export function CharacterChatBot({ onClose, novelId, chapterId }: CharacterChatW
                                         style={{
                                             display: 'flex', alignItems: 'center', gap: '8px',
                                             width: '100%', padding: '12px 16px',
-                                            border: 'none', background: 'white',
+                                            border: 'none', background: c.dropdown,
                                             cursor: 'pointer', textAlign: 'left',
                                             fontSize: '0.9rem', color: '#c62828',
-                                            borderTop: '1px solid #eee'
+                                            borderTop: `1px solid ${c.border}`
                                         }}
-                                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f5f5f5'}
-                                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
+                                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = c.dropdownHover}
+                                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = c.dropdown}
                                     >
                                         <Trash2 size={16} />
                                         채팅방 삭제
@@ -684,7 +808,7 @@ export function CharacterChatBot({ onClose, novelId, chapterId }: CharacterChatW
                         </div>
                     )}
                     <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
-                        <X size={20} color="#3b1e1e" />
+                        <X size={20} color={c.headerText} />
                     </button>
                 </div>
             </div>

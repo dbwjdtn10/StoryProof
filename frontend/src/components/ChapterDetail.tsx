@@ -6,13 +6,14 @@ import { AuthorToolbar } from './AuthorToolbar';
 import { ReaderToolbar } from './ReaderToolbar';
 import { FloatingMenu } from './FloatingMenu';
 import { ThemeToggle } from './ThemeToggle';
-import { getChapter, updateChapter, getChapterBible, reanalyzeChapter, getStoryboardStatus, BibleData, Character, Item, Location } from '../api/novel';
+import { Settings } from './Settings';
+import { getChapter, updateChapter, getChapterBible, reanalyzeChapter, BibleData, Character, Item, Location } from '../api/novel';
 import { AnalysisSidebar, AnalysisResult } from './AnalysisSidebar';
 import { PredictionSidebar, Message } from './predictions/PredictionSidebar';
 import { requestPrediction, getPredictionTaskStatus } from '../api/prediction';
-import { requestConsistencyCheck, getTaskResult } from '../api/analysis';
 import { toast } from 'sonner';
 import { generateImage } from '../api/images';
+import { useTheme } from '../contexts/ThemeContext';
 import '../novel-toolbar.css';
 
 interface ChapterDetailProps {
@@ -30,6 +31,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
     const [isItemsOpen, setIsItemsOpen] = useState(false);
     const [isLocationsOpen, setIsLocationsOpen] = useState(false);
     const [isKeyEventsOpen, setIsKeyEventsOpen] = useState(false);
+    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
     const [content, setContent] = useState("");
     const [isLoading, setIsLoading] = useState(false);
@@ -60,6 +62,9 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
     // Tiptap Editor State
     const [activeEditor, setActiveEditor] = useState<Editor | null>(null);
 
+    // Global Theme Sync
+    const { theme: globalTheme, setTheme: setGlobalTheme } = useTheme();
+
     // Reader Mode Settings
     const [readerSettings, setReaderSettings] = useState(() => {
         const saved = localStorage.getItem('reader-settings');
@@ -68,10 +73,25 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
             lineHeight: 2.0,
             paragraphSpacing: 40,
             contentWidth: 80,
-            fontFamily: 'Noto Sans KR',
+            fontFamily: 'Noto Serif KR',
             theme: 'light'
         };
     });
+
+    // 1. Sync globalTheme -> readerSettings.theme (when global toggle is clicked)
+    useEffect(() => {
+        if (mode === 'reader' && readerSettings.theme !== globalTheme) {
+            setReaderSettings(prev => ({ ...prev, theme: globalTheme }));
+        }
+    }, [globalTheme, mode]);
+
+    const handleReaderSettingsChange = (newSettings: any) => {
+        setReaderSettings(newSettings);
+        // 2. Sync readerSettings.theme -> globalTheme (when reader toolbar setting is changed)
+        if (newSettings.theme && newSettings.theme !== globalTheme) {
+            setGlobalTheme(newSettings.theme);
+        }
+    };
 
     useEffect(() => {
         localStorage.setItem('reader-settings', JSON.stringify(readerSettings));
@@ -79,8 +99,10 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
         // Apply theme to document for reader mode
         if (mode === 'reader') {
             document.documentElement.setAttribute('data-reader-theme', readerSettings.theme);
+            document.documentElement.setAttribute('data-theme', readerSettings.theme);
         } else {
             document.documentElement.removeAttribute('data-reader-theme');
+            // Restore global theme if needed, but ThemeContext handles that
         }
     }, [readerSettings, mode]);
 
@@ -122,24 +144,30 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
             intervalId = setInterval(async () => {
                 if (!novelId || !chapterId) return;
                 try {
-                    const statusData = await getStoryboardStatus(novelId, chapterId);
-                    const currentStatus = statusData.status?.toUpperCase() || '';
+                    const chapterData = await getChapter(novelId, chapterId);
+                    console.log(`[Polling] Current Status: ${chapterData.storyboard_status}`);
 
-                    if (currentStatus === 'COMPLETED' || currentStatus === 'FAILED') {
+                    const terminalStatuses = ['COMPLETED', 'FAILED'];
+                    const rawStatus = chapterData.storyboard_status || '';
+                    const currentStatus = rawStatus.toUpperCase();
+
+                    if (terminalStatuses.includes(currentStatus)) {
+                        console.log(`[Polling] Terminal state reached: ${currentStatus}`);
                         setChapterStatus(currentStatus as any);
                         setIsAnalyzing(false);
-                        if (currentStatus === 'COMPLETED') {
+                        // Refresh Bible data when analysis is done
+                        if (chapterData.storyboard_status === 'COMPLETED') {
                             toast.success("분석이 완료되었습니다! 데이터를 새로고침합니다.");
                             loadChapterContent();
                             loadBibleData();
-                        } else {
-                            toast.error(`분석 실패: ${statusData.message || '알 수 없는 오류'}`);
+                        } else if (chapterData.storyboard_status === 'FAILED') {
+                            toast.error(`분석 실패: ${chapterData.storyboard_message || '알 수 없는 오류'}`);
                         }
                     }
                 } catch (error) {
                     console.error("Status check failed", error);
                 }
-            }, 3000);
+            }, 3000); // Check every 3 seconds
         }
 
         return () => {
@@ -228,6 +256,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
         setIsAppearancesExpanded(false);
         setIsItemAppearancesExpanded(false);
         setIsLocationAppearancesExpanded(false);
+        setIsSettingsOpen(false);
 
         // Set highlight if provided and not empty
         if (highlightText && highlightText.trim()) {
@@ -266,20 +295,29 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                 ? sceneTexts.join('\n\n')
                 : content;
 
-            const { task_id } = await requestConsistencyCheck({
-                novel_id: novelId!,
-                chapter_id: chapterId,
-                text: allText
+            const response = await fetch(`/api/v1/analysis/consistency`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    novel_id: novelId,
+                    chapter_id: chapterId,
+                    text: allText
+                })
             });
+
+            if (!response.ok) throw new Error('분석 요청 실패');
+
+            const { task_id } = await response.json();
 
             // 폴링 시작
             const intervalId = setInterval(async () => {
                 try {
-                    const data = await getTaskResult(task_id);
+                    const statusRes = await fetch(`/api/v1/analysis/task/${task_id}`);
+                    const data = await statusRes.json();
 
                     if (data.status === "COMPLETED") {
                         clearInterval(intervalId);
-                        setAnalysisResult(data.result as AnalysisResult);
+                        setAnalysisResult(data.result);
                         setIsAnalysisLoading(false);
                         toast.success("분석이 완료되었습니다.");
                     } else if (data.status === "FAILED") {
@@ -405,7 +443,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                 scrollToScene(foundIndex, quote);
             } else {
                 console.warn(`[Navigation] Quote not found in any scene. Sample scene 1 start: ${superNormalize(sceneTexts[0]).substring(0, 50)}`);
-                toast.warning('해당 문장을 본문에서 찾을 수 없습니다. (문장이 일부 다르거나 다른 회차의 내용일 수 있습니다)');
+                toast.error('해당 문장을 본문에서 찾을 수 없습니다. (문장이 일부 다르거나 다른 회차의 내용일 수 있습니다)');
             }
         }
         // 2. Single Textarea Mode (content)
@@ -426,10 +464,10 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                         textArea.scrollTop = (lines - 1) * 24;
                     } else {
                         // 정규화로는 찾았으나 원본에서 못 찾은 경우
-                        toast.warning('문장을 찾았으나, 정확한 위치 선정이 어려워 이동이 제한됩니다.');
+                        toast.warning('문장을 찾았으나, 정확한 위치 선정이 여려워 이동이 제한됩니다.');
                     }
                 } else {
-                    toast.warning('해당 문장을 본문에서 찾을 수 없습니다.');
+                    toast.error('해당 문장을 본문에서 찾을 수 없습니다.');
                 }
             }
         }
@@ -449,7 +487,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
     };
 
     const handleOpenSettings = () => {
-        toast.info("환경설정 기능은 준비 중입니다.");
+        setIsSettingsOpen(true);
     };
 
     // ... (rest of the setup)
@@ -479,25 +517,34 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
             { summary: '토끼를 따라 토끼 굴로 들어감', scene_index: 2, importance: '상' },
         ];
 
-    const handleReanalyze = async () => {
+    const handleReanalyze = () => {
         if (!novelId || !chapterId) return;
 
         if (chapterStatus === 'PROCESSING') {
-            toast.info("현재 분석이 진행 중입니다. 잠시만 기다려주세요.");
+            toast.warning("현재 분석이 진행 중입니다. 잠시만 기다려주세요.");
             return;
         }
 
-        setIsAnalyzing(true);
-        setChapterStatus('PROCESSING');
-        try {
-            await reanalyzeChapter(novelId, chapterId);
-            toast.success("재분석 요청이 완료되었습니다. 백그라운드에서 분석이 진행됩니다.");
-        } catch (error) {
-            console.error(error);
-            toast.error("재분석 요청 실패");
-            setChapterStatus('FAILED');
-            setIsAnalyzing(false);
-        }
+        toast("재분석을 진행하시겠습니까?", {
+            description: "기존 분석 데이터(인물, 사건 등)가 덮어씌워질 수 있습니다.",
+            action: {
+                label: "재분석",
+                onClick: async () => {
+                    setIsAnalyzing(true);
+                    setChapterStatus('PROCESSING');
+                    try {
+                        await reanalyzeChapter(novelId, chapterId);
+                        toast.success("재분석 요청이 완료되었습니다. 백그라운드에서 분석이 진행됩니다.");
+                    } catch (error) {
+                        console.error(error);
+                        toast.error("재분석 요청 실패");
+                        setChapterStatus('FAILED');
+                        setIsAnalyzing(false);
+                    }
+                }
+            },
+            cancel: { label: "취소", onClick: () => {} }
+        });
     };
 
     const locations = bibleData?.locations && bibleData.locations.length > 0
@@ -583,8 +630,8 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                 display: 'flex',
                 alignItems: 'center',
                 padding: '16px 24px',
-                borderBottom: '1px solid #E5E7EB',
-                backgroundColor: 'white',
+                borderBottom: '1px solid var(--border)',
+                backgroundColor: 'var(--card)',
                 position: 'sticky',
                 top: 0,
                 zIndex: 10
@@ -600,27 +647,15 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                     alignItems: 'center',
                     justifyContent: 'center'
                 }}>
-                    <ArrowLeft size={24} color="#4B5563" />
+                    <ArrowLeft size={24} color="var(--muted-foreground)" />
                 </button>
                 <div style={{ flex: 1, display: 'flex', alignItems: 'center' }}>
                     <h1 className="chapter-detail-title" style={{
                         fontSize: '1.25rem',
                         fontWeight: 600,
-                        color: '#1F2937',
+                        color: 'var(--foreground)',
                         margin: 0
                     }}>{fileName}</h1>
-                    <span style={{
-                        marginLeft: '12px',
-                        padding: '4px 12px',
-                        borderRadius: '9999px',
-                        fontSize: '12px',
-                        fontWeight: 600,
-                        backgroundColor: mode === 'reader' ? '#E0F2FE' : '#EEF2FF',
-                        color: mode === 'reader' ? '#0369A1' : '#4F46E5',
-                        whiteSpace: 'nowrap'
-                    }}>
-                        {mode === 'reader' ? '📖 독자 모드' : '✍️ 작가 모드'}
-                    </span>
                 </div>
                 {novelId && chapterId && mode !== 'reader' && (
                     <div style={{ display: 'flex', gap: '8px' }}>
@@ -634,9 +669,9 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                                 alignItems: 'center',
                                 gap: '8px',
                                 padding: '8px 16px',
-                                backgroundColor: (chapterStatus === 'PROCESSING' || chapterStatus === 'PENDING' || isAnalyzing) ? '#F3F4F6' : 'white',
-                                color: (chapterStatus === 'PROCESSING' || chapterStatus === 'PENDING' || isAnalyzing) ? '#9CA3AF' : '#4F46E5',
-                                border: (chapterStatus === 'PROCESSING' || chapterStatus === 'PENDING' || isAnalyzing) ? '1px solid #E5E7EB' : '1px solid #4F46E5',
+                                backgroundColor: (chapterStatus === 'PROCESSING' || chapterStatus === 'PENDING' || isAnalyzing) ? 'var(--muted)' : 'transparent',
+                                color: (chapterStatus === 'PROCESSING' || chapterStatus === 'PENDING' || isAnalyzing) ? 'var(--muted-foreground)' : 'var(--primary)',
+                                border: (chapterStatus === 'PROCESSING' || chapterStatus === 'PENDING' || isAnalyzing) ? '1px solid var(--border)' : '1px solid var(--primary)',
                                 borderRadius: '6px',
                                 cursor: (chapterStatus === 'PROCESSING' || chapterStatus === 'PENDING' || isAnalyzing) ? 'not-allowed' : 'pointer',
                                 fontSize: '0.9rem',
@@ -655,8 +690,8 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                                 alignItems: 'center',
                                 gap: '8px',
                                 padding: '8px 16px',
-                                backgroundColor: '#4F46E5',
-                                color: 'white',
+                                backgroundColor: 'var(--primary)',
+                                color: 'var(--primary-foreground)',
                                 border: 'none',
                                 borderRadius: '6px',
                                 cursor: isSaving ? 'wait' : 'pointer',
@@ -672,23 +707,25 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
             </div>
 
             {/* Author/Reader Toolbar */}
-            {mode === 'reader' ? (
-                <ReaderToolbar
-                    editor={activeEditor}
-                    readerSettings={readerSettings}
-                    onSettingsChange={setReaderSettings}
-                    onBookmark={handleBookmark}
-                    onHighlight={handleHighlight}
-                    onAddMemo={handleAddMemo}
-                />
-            ) : (
-                <AuthorToolbar
-                    editor={activeEditor}
-                    onOpenSettings={() => {
-                        handleOpenSettings();
-                    }}
-                />
-            )}
+            {
+                mode === 'reader' ? (
+                    <ReaderToolbar
+                        editor={activeEditor}
+                        readerSettings={readerSettings}
+                        onSettingsChange={handleReaderSettingsChange}
+                        onBookmark={handleBookmark}
+                        onHighlight={handleHighlight}
+                        onAddMemo={handleAddMemo}
+                    />
+                ) : (
+                    <AuthorToolbar
+                        editor={activeEditor}
+                        onOpenSettings={() => {
+                            handleOpenSettings();
+                        }}
+                    />
+                )
+            }
 
 
             {/* Main Layout */}
@@ -725,13 +762,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                                                     ? (
                                                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '4px' }}>
                                                             {character.traits.slice(0, 3).map((trait, i) => (
-                                                                <span key={i} style={{
-                                                                    fontSize: '10px',
-                                                                    padding: '2px 6px',
-                                                                    backgroundColor: 'rgba(79, 70, 229, 0.1)',
-                                                                    color: '#4F46E5',
-                                                                    borderRadius: '4px'
-                                                                }}>
+                                                                <span key={i} className="trait-tag">
                                                                     {trait}
                                                                 </span>
                                                             ))}
@@ -911,7 +942,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                                     height: '100%',
                                     overflowY: 'auto',
                                     padding: '20px',
-                                    backgroundColor: mode === 'reader' ? 'var(--reader-bg, #ffffff)' : 'white'
+                                    backgroundColor: mode === 'reader' ? 'var(--reader-bg)' : 'var(--background)'
                                 }}
                             >
                                 {sceneTexts.map((text, index) => (
@@ -927,12 +958,13 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                                             left: '10px',
                                             fontSize: '12px',
                                             fontWeight: 'bold',
-                                            color: '#6366f1',
-                                            backgroundColor: '#f5f5f5',
-                                            padding: '2px 8px',
+                                            color: 'var(--primary)',
+                                            backgroundColor: 'var(--card)',
+                                            padding: '2px 10px',
                                             borderRadius: '12px',
-                                            border: '1px solid #e0e7ff',
-                                            zIndex: 5
+                                            border: '1px solid var(--border)',
+                                            zIndex: 5,
+                                            boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
                                         }}>
                                             Scene {index + 1}
                                         </div>
@@ -1024,13 +1056,14 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                             className="modal-content"
                             onClick={(e) => e.stopPropagation()}
                             style={{
-                                backgroundColor: 'var(--bg-card, #fff)',
+                                backgroundColor: 'var(--modal-bg, #fff)',
                                 padding: '24px',
                                 borderRadius: '12px',
                                 width: '400px',
                                 maxWidth: '90%',
                                 boxShadow: '0 10px 25px rgba(0,0,0,0.2)',
-                                color: 'var(--text-primary, #333)'
+                                color: 'var(--modal-text, #333)',
+                                border: '1px solid var(--modal-border, #e5e7eb)'
                             }}
                         >
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
@@ -1055,12 +1088,12 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                                     <div style={{
                                         width: '100%',
                                         height: '200px',
-                                        backgroundColor: '#f1f5f9',
+                                        backgroundColor: 'var(--muted, #f1f5f9)',
                                         borderRadius: '8px',
                                         display: 'flex',
                                         alignItems: 'center',
                                         justifyContent: 'center',
-                                        color: '#94a3b8',
+                                        color: 'var(--muted-foreground, #94a3b8)',
                                         marginBottom: '8px'
                                     }}>
                                         이미지 없음
@@ -1071,8 +1104,8 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                                     disabled={isImageGenerating}
                                     style={{
                                         padding: '8px 16px',
-                                        backgroundColor: isImageGenerating ? '#cbd5e1' : '#4f46e5',
-                                        color: 'white',
+                                        backgroundColor: isImageGenerating ? 'var(--muted, #cbd5e1)' : 'var(--primary, #4f46e5)',
+                                        color: 'var(--primary-foreground, white)',
                                         border: 'none',
                                         borderRadius: '6px',
                                         cursor: isImageGenerating ? 'not-allowed' : 'pointer',
@@ -1089,15 +1122,17 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
 
                             {selectedCharacter.aliases && selectedCharacter.aliases.length > 0 && (
                                 <div style={{ marginBottom: '16px' }}>
-                                    <div style={{ fontSize: '0.875rem', color: '#666', marginBottom: '4px' }}>별칭</div>
+                                    <div style={{ fontSize: '0.875rem', color: 'var(--muted-foreground, #666)', marginBottom: '4px' }}>별칭</div>
                                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                                         {selectedCharacter.aliases.map((alias: string, i: number) => (
                                             <span key={i} style={{
                                                 fontSize: '0.8rem',
                                                 padding: '2px 8px',
-                                                backgroundColor: '#f1f5f9',
+                                                backgroundColor: 'var(--muted, #f1f5f9)',
                                                 borderRadius: '12px',
-                                                color: '#475569'
+                                                color: 'var(--muted-foreground, #475569)',
+                                                border: '1px solid var(--border)',
+                                                opacity: 0.9
                                             }}>
                                                 {alias}
                                             </span>
@@ -1107,7 +1142,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                             )}
 
                             <div style={{ marginBottom: '16px' }}>
-                                <div style={{ fontSize: '0.875rem', color: '#666', marginBottom: '4px' }}>설명</div>
+                                <div style={{ fontSize: '0.875rem', color: 'var(--muted-foreground, #666)', marginBottom: '4px' }}>설명</div>
                                 <p style={{ lineHeight: '1.6', fontSize: '1rem', margin: 0 }}>
                                     {selectedCharacter.description || "상세 설명이 없습니다."}
                                 </p>
@@ -1115,16 +1150,17 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
 
                             {selectedCharacter.traits && selectedCharacter.traits.length > 0 && (
                                 <div style={{ marginBottom: '16px' }}>
-                                    <div style={{ fontSize: '0.875rem', color: '#666', marginBottom: '4px' }}>특징</div>
+                                    <div style={{ fontSize: '0.875rem', color: 'var(--muted-foreground, #666)', marginBottom: '4px' }}>특징</div>
                                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                                         {selectedCharacter.traits.map((trait: string, i: number) => (
                                             <span key={i} style={{
                                                 fontSize: '0.8rem',
                                                 padding: '4px 10px',
-                                                backgroundColor: 'rgba(79, 70, 229, 0.1)',
-                                                color: '#4F46E5',
+                                                backgroundColor: 'var(--muted, rgba(79, 70, 229, 0.1))',
+                                                color: 'var(--primary, #4F46E5)',
                                                 borderRadius: '6px',
-                                                fontWeight: '500'
+                                                fontWeight: '500',
+                                                border: '1px solid var(--border)'
                                             }}>
                                                 {trait}
                                             </span>
@@ -1133,15 +1169,15 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                                 </div>
                             )}
 
-                            <div style={{ display: 'flex', gap: '16px', fontSize: '0.875rem', color: '#666', marginTop: '24px', borderTop: '1px solid #eee', paddingTop: '16px' }}>
+                            <div style={{ display: 'flex', gap: '16px', fontSize: '0.875rem', color: 'var(--muted-foreground, #666)', marginTop: '24px', borderTop: '1px solid var(--border, #eee)', paddingTop: '16px' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                    <strong>첫 등장:</strong>
+                                    <strong style={{ color: 'var(--modal-text)' }}>첫 등장:</strong>
                                     <button
                                         onClick={() => scrollToScene(selectedCharacter.first_appearance, selectedCharacter.name)}
                                         style={{
                                             background: 'none',
                                             border: 'none',
-                                            color: '#4F46E5',
+                                            color: 'var(--primary, #4F46E5)',
                                             fontWeight: 'bold',
                                             cursor: 'pointer',
                                             textDecoration: 'underline',
@@ -1154,18 +1190,18 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                                 </div>
                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                        <strong>총 등장:</strong> {selectedCharacter.appearance_count}회
+                                        <strong style={{ color: 'var(--modal-text)' }}>총 등장:</strong> {selectedCharacter.appearance_count}회
                                         {(selectedCharacter.appearances && selectedCharacter.appearances.length > 0) && (
                                             <button
                                                 onClick={() => setIsAppearancesExpanded(!isAppearancesExpanded)}
                                                 style={{
-                                                    background: 'none',
-                                                    border: '1px solid #e2e8f0',
+                                                    background: 'var(--modal-bg)',
+                                                    border: '1px solid var(--border, #e2e8f0)',
                                                     borderRadius: '4px',
                                                     cursor: 'pointer',
                                                     padding: '2px 6px',
                                                     fontSize: '0.8rem',
-                                                    color: '#666',
+                                                    color: 'var(--muted-foreground, #666)',
                                                     display: 'flex',
                                                     alignItems: 'center',
                                                     gap: '4px'
@@ -1193,12 +1229,12 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                                                     key={sceneIdx}
                                                     onClick={() => scrollToScene(sceneIdx, selectedCharacter.name)}
                                                     style={{
-                                                        background: '#f1f5f9',
-                                                        border: 'none',
+                                                        background: 'var(--muted, #f1f5f9)',
+                                                        border: '1px solid var(--border)',
                                                         borderRadius: '4px',
                                                         padding: '4px 8px',
                                                         fontSize: '0.8rem',
-                                                        color: '#475569',
+                                                        color: 'var(--muted-foreground, #475569)',
                                                         cursor: 'pointer',
                                                         display: 'flex',
                                                         alignItems: 'center',
@@ -1240,13 +1276,14 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                             className="modal-content"
                             onClick={(e) => e.stopPropagation()}
                             style={{
-                                backgroundColor: 'var(--bg-card, #fff)',
+                                backgroundColor: 'var(--modal-bg, #fff)',
                                 padding: '24px',
                                 borderRadius: '12px',
                                 width: '400px',
                                 maxWidth: '90%',
                                 boxShadow: '0 10px 25px rgba(0,0,0,0.2)',
-                                color: 'var(--text-primary, #333)'
+                                color: 'var(--modal-text, #333)',
+                                border: '1px solid var(--modal-border, #e5e7eb)'
                             }}
                         >
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
@@ -1271,12 +1308,12 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                                     <div style={{
                                         width: '100%',
                                         height: '200px',
-                                        backgroundColor: '#f1f5f9',
+                                        backgroundColor: 'var(--muted, #f1f5f9)',
                                         borderRadius: '8px',
                                         display: 'flex',
                                         alignItems: 'center',
                                         justifyContent: 'center',
-                                        color: '#94a3b8',
+                                        color: 'var(--muted-foreground, #94a3b8)',
                                         marginBottom: '8px'
                                     }}>
                                         이미지 없음
@@ -1287,8 +1324,8 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                                     disabled={isImageGenerating}
                                     style={{
                                         padding: '8px 16px',
-                                        backgroundColor: isImageGenerating ? '#cbd5e1' : '#4f46e5',
-                                        color: 'white',
+                                        backgroundColor: isImageGenerating ? 'var(--muted, #cbd5e1)' : 'var(--primary, #4f46e5)',
+                                        color: 'var(--primary-foreground, white)',
                                         border: 'none',
                                         borderRadius: '6px',
                                         cursor: isImageGenerating ? 'not-allowed' : 'pointer',
@@ -1304,22 +1341,22 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                             </div>
 
                             <div style={{ marginBottom: '16px' }}>
-                                <div style={{ fontSize: '0.875rem', color: '#666', marginBottom: '4px' }}>설명</div>
+                                <div style={{ fontSize: '0.875rem', color: 'var(--muted-foreground, #666)', marginBottom: '4px' }}>설명</div>
                                 <p style={{ lineHeight: '1.6', fontSize: '1rem', margin: 0 }}>
                                     {selectedItem.description || "상세 설명이 없습니다."}
                                 </p>
                             </div>
 
-                            <div style={{ display: 'flex', gap: '16px', fontSize: '0.875rem', color: '#666', marginTop: '24px', borderTop: '1px solid #eee', paddingTop: '16px' }}>
+                            <div style={{ display: 'flex', gap: '16px', fontSize: '0.875rem', color: 'var(--muted-foreground, #666)', marginTop: '24px', borderTop: '1px solid var(--border, #eee)', paddingTop: '16px' }}>
                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                        <strong>첫 등장:</strong>
+                                        <strong style={{ color: 'var(--modal-text)' }}>첫 등장:</strong>
                                         <button
                                             onClick={() => scrollToScene(selectedItem.first_appearance, selectedItem.name)}
                                             style={{
                                                 background: 'none',
                                                 border: 'none',
-                                                color: '#4F46E5',
+                                                color: 'var(--primary, #4F46E5)',
                                                 fontWeight: 'bold',
                                                 cursor: 'pointer',
                                                 textDecoration: 'underline',
@@ -1332,18 +1369,18 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                                     </div>
                                     {selectedItem.appearance_count > 0 && (
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
-                                            <strong>총 등장:</strong> {selectedItem.appearance_count}회
+                                            <strong style={{ color: 'var(--modal-text)' }}>총 등장:</strong> {selectedItem.appearance_count}회
                                             {(selectedItem.appearances && selectedItem.appearances.length > 0) && (
                                                 <button
                                                     onClick={() => setIsItemAppearancesExpanded(!isItemAppearancesExpanded)}
                                                     style={{
-                                                        background: 'none',
-                                                        border: '1px solid #e2e8f0',
+                                                        background: 'var(--modal-bg)',
+                                                        border: '1px solid var(--border, #e2e8f0)',
                                                         borderRadius: '4px',
                                                         cursor: 'pointer',
                                                         padding: '2px 6px',
                                                         fontSize: '0.8rem',
-                                                        color: '#666',
+                                                        color: 'var(--muted-foreground, #666)',
                                                         display: 'flex',
                                                         alignItems: 'center',
                                                         gap: '4px'
@@ -1372,12 +1409,12 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                                                     key={sceneIdx}
                                                     onClick={() => scrollToScene(sceneIdx, selectedItem.name)}
                                                     style={{
-                                                        background: '#f1f5f9',
-                                                        border: 'none',
+                                                        background: 'var(--muted, #f1f5f9)',
+                                                        border: '1px solid var(--border)',
                                                         borderRadius: '4px',
                                                         padding: '4px 8px',
                                                         fontSize: '0.8rem',
-                                                        color: '#475569',
+                                                        color: 'var(--muted-foreground, #475569)',
                                                         cursor: 'pointer',
                                                         display: 'flex',
                                                         alignItems: 'center',
@@ -1419,13 +1456,14 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                             className="modal-content"
                             onClick={(e) => e.stopPropagation()}
                             style={{
-                                backgroundColor: 'var(--bg-card, #fff)',
+                                backgroundColor: 'var(--modal-bg, #fff)',
                                 padding: '24px',
                                 borderRadius: '12px',
                                 width: '400px',
                                 maxWidth: '90%',
                                 boxShadow: '0 10px 25px rgba(0,0,0,0.2)',
-                                color: 'var(--text-primary, #333)'
+                                color: 'var(--modal-text, #333)',
+                                border: '1px solid var(--modal-border, #e5e7eb)'
                             }}
                         >
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
@@ -1450,12 +1488,12 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                                     <div style={{
                                         width: '100%',
                                         height: '200px',
-                                        backgroundColor: '#f1f5f9',
+                                        backgroundColor: 'var(--muted, #f1f5f9)',
                                         borderRadius: '8px',
                                         display: 'flex',
                                         alignItems: 'center',
                                         justifyContent: 'center',
-                                        color: '#94a3b8',
+                                        color: 'var(--muted-foreground, #94a3b8)',
                                         marginBottom: '8px'
                                     }}>
                                         이미지 없음
@@ -1466,8 +1504,8 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                                     disabled={isImageGenerating}
                                     style={{
                                         padding: '8px 16px',
-                                        backgroundColor: isImageGenerating ? '#cbd5e1' : '#4f46e5',
-                                        color: 'white',
+                                        backgroundColor: isImageGenerating ? 'var(--muted, #cbd5e1)' : 'var(--primary, #4f46e5)',
+                                        color: 'var(--primary-foreground, white)',
                                         border: 'none',
                                         borderRadius: '6px',
                                         cursor: isImageGenerating ? 'not-allowed' : 'pointer',
@@ -1483,27 +1521,27 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                             </div>
 
                             <div style={{ marginBottom: '16px' }}>
-                                <div style={{ fontSize: '0.875rem', color: '#666', marginBottom: '4px' }}>설명</div>
+                                <div style={{ fontSize: '0.875rem', color: 'var(--muted-foreground, #666)', marginBottom: '4px' }}>설명</div>
                                 <p style={{ lineHeight: '1.6', fontSize: '1rem', margin: 0 }}>
                                     {selectedLocation.description || "상세 설명이 없습니다."}
                                 </p>
                             </div>
 
-                            <div style={{ display: 'flex', gap: '16px', fontSize: '0.875rem', color: '#666', marginTop: '24px', borderTop: '1px solid #eee', paddingTop: '16px' }}>
+                            <div style={{ display: 'flex', gap: '16px', fontSize: '0.875rem', color: 'var(--muted-foreground, #666)', marginTop: '24px', borderTop: '1px solid var(--border, #eee)', paddingTop: '16px' }}>
                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                        <strong>총 등장:</strong> {selectedLocation.appearance_count || (selectedLocation.scenes ? selectedLocation.scenes.length : 0)}회
+                                        <strong style={{ color: 'var(--modal-text)' }}>총 등장:</strong> {selectedLocation.appearance_count || (selectedLocation.scenes ? selectedLocation.scenes.length : 0)}회
                                         {(selectedLocation.scenes && selectedLocation.scenes.length > 0) && (
                                             <button
                                                 onClick={() => setIsLocationAppearancesExpanded(!isLocationAppearancesExpanded)}
                                                 style={{
-                                                    background: 'none',
-                                                    border: '1px solid #e2e8f0',
+                                                    background: 'var(--modal-bg)',
+                                                    border: '1px solid var(--border, #e2e8f0)',
                                                     borderRadius: '4px',
                                                     cursor: 'pointer',
                                                     padding: '2px 6px',
                                                     fontSize: '0.8rem',
-                                                    color: '#666',
+                                                    color: 'var(--muted-foreground, #666)',
                                                     display: 'flex',
                                                     alignItems: 'center',
                                                     gap: '4px'
@@ -1531,12 +1569,12 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                                                     key={sceneIdx}
                                                     onClick={() => scrollToScene(sceneIdx)}
                                                     style={{
-                                                        background: '#f1f5f9',
-                                                        border: 'none',
+                                                        background: 'var(--secondary)',
+                                                        border: '1px solid var(--border)',
                                                         borderRadius: '4px',
                                                         padding: '4px 8px',
                                                         fontSize: '0.8rem',
-                                                        color: '#475569',
+                                                        color: 'var(--primary)',
                                                         cursor: 'pointer',
                                                         display: 'flex',
                                                         alignItems: 'center',
@@ -1579,13 +1617,14 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                             className="modal-content"
                             onClick={(e) => e.stopPropagation()}
                             style={{
-                                backgroundColor: 'var(--bg-card, #fff)',
+                                backgroundColor: 'var(--modal-bg, #fff)',
                                 padding: '24px',
                                 borderRadius: '12px',
                                 width: '400px',
                                 maxWidth: '90%',
                                 boxShadow: '0 10px 25px rgba(0,0,0,0.2)',
-                                color: 'var(--text-primary, #333)'
+                                color: 'var(--modal-text, #333)',
+                                border: '1px solid var(--modal-border, #e5e7eb)'
                             }}
                         >
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
@@ -1605,11 +1644,11 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                                     <div style={{
                                         display: 'inline-block',
                                         padding: '4px 8px',
-                                        backgroundColor: '#f1f5f9',
+                                        backgroundColor: 'var(--muted, #f1f5f9)',
                                         borderRadius: '4px',
                                         fontSize: '0.875rem',
                                         fontWeight: '500',
-                                        color: '#475569',
+                                        color: 'var(--muted-foreground, #475569)',
                                         marginTop: '8px'
                                     }}>
                                         중요도: {selectedKeyEvent.importance}
@@ -1617,19 +1656,19 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                                 )}
                             </div>
 
-                            <div style={{ display: 'flex', gap: '16px', fontSize: '0.875rem', color: '#666', marginTop: '16px', borderTop: '1px solid #eee', paddingTop: '16px' }}>
+                            <div style={{ display: 'flex', gap: '16px', fontSize: '0.875rem', color: 'var(--muted-foreground, #666)', marginTop: '16px', borderTop: '1px solid var(--border, #eee)', paddingTop: '16px' }}>
                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', width: '100%' }}>
                                     <button
                                         onClick={() => scrollToScene(selectedKeyEvent.scene_index)}
                                         style={{
                                             width: '100%',
-                                            background: '#4F46E5',
+                                            background: 'var(--primary, #4F46E5)',
                                             border: 'none',
                                             borderRadius: '6px',
                                             padding: '10px 16px',
                                             fontSize: '0.95rem',
                                             fontWeight: '600',
-                                            color: '#ffffff',
+                                            color: 'var(--primary-foreground, #ffffff)',
                                             cursor: 'pointer',
                                             display: 'flex',
                                             alignItems: 'center',
@@ -1671,13 +1710,14 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                             className="modal-content"
                             onClick={(e) => e.stopPropagation()}
                             style={{
-                                backgroundColor: 'var(--bg-card, #fff)',
+                                backgroundColor: 'var(--modal-bg, #fff)',
                                 padding: '24px',
                                 borderRadius: '12px',
                                 width: '400px',
                                 maxWidth: '90%',
                                 boxShadow: '0 10px 25px rgba(0,0,0,0.2)',
-                                color: 'var(--text-primary, #333)'
+                                color: 'var(--modal-text, #333)',
+                                border: '1px solid var(--modal-border, #e5e7eb)'
                             }}
                         >
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
@@ -1691,10 +1731,10 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                             </div>
 
                             <div style={{ marginBottom: '16px' }}>
-                                <div style={{ fontSize: '0.875rem', color: '#666', marginBottom: '4px' }}>{selectedExtraItem.title.toUpperCase()}</div>
+                                <div style={{ fontSize: '0.875rem', color: 'var(--muted-foreground, #666)', marginBottom: '4px' }}>{selectedExtraItem.title.toUpperCase()}</div>
                                 <div style={{ lineHeight: '1.6', fontSize: '1rem', margin: 0, maxHeight: '300px', overflowY: 'auto' }}>
                                     {selectedExtraItem.item.description || selectedExtraItem.item.summary || (
-                                        <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'monospace', fontSize: '0.8rem', backgroundColor: '#f1f5f9', padding: '8px', borderRadius: '4px' }}>
+                                        <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'monospace', fontSize: '0.8rem', backgroundColor: 'var(--muted, #f1f5f9)', color: 'var(--modal-text)', padding: '8px', borderRadius: '4px', border: '1px solid var(--border)' }}>
                                             {JSON.stringify(selectedExtraItem.item, null, 2)}
                                         </pre>
                                     )}
@@ -1707,6 +1747,21 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
 
             {/* Theme Toggle */}
             <ThemeToggle />
+
+            {/* Settings Modal - Floating Panel Style */}
+            {isSettingsOpen && (
+                <div style={{
+                    position: 'fixed',
+                    bottom: '20px',
+                    right: '25px',
+                    width: '600px',
+                    height: '750px',
+                    zIndex: 1002,
+                    animation: 'slideUp 0.3s ease'
+                }}>
+                    <Settings onClose={() => setIsSettingsOpen(false)} />
+                </div>
+            )}
 
             {/* 설정 파괴 분석 결과 사이드바 */}
             <AnalysisSidebar
@@ -1737,6 +1792,6 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                 chapterId={chapterId}
                 mode={mode}
             />
-        </div>
+        </div >
     );
 }

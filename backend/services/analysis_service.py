@@ -18,7 +18,12 @@ logger = logging.getLogger(__name__)
 
 class AnalysisService:
     """소설 분석 데이터 관리 서비스"""
-    
+
+    @staticmethod
+    def _entity_name(entity, key: str = 'name'):
+        """딕셔너리 또는 문자열 엔티티에서 필드값 추출."""
+        return entity.get(key) if isinstance(entity, dict) else entity
+
     @staticmethod
     def get_chapter_bible(
         db: Session, 
@@ -140,8 +145,7 @@ class AnalysisService:
         for scene in scenes:
             metadata = scene.metadata_json or {}
             for char in metadata.get('characters', []):
-                # 문자열/딕셔너리 호환성 처리
-                char_name = char.get('name') if isinstance(char, dict) else char
+                char_name = AnalysisService._entity_name(char)
                     
                 if char_name:
                     if char_name not in character_stats:
@@ -232,7 +236,7 @@ class AnalysisService:
             
             # 인물 정보 추출 및 집계
             for char in metadata.get('characters', []):
-                char_name = char.get('name') if isinstance(char, dict) else char
+                char_name = AnalysisService._entity_name(char)
                 if char_name and char_name not in character_dict:
                     character_dict[char_name] = {
                         'name': char_name,
@@ -262,7 +266,7 @@ class AnalysisService:
             
             # 장소 정보 추출 및 집계
             for loc in metadata.get('locations', []):
-                loc_name = loc.get('name') if isinstance(loc, dict) else loc
+                loc_name = AnalysisService._entity_name(loc)
                 if loc_name and loc_name not in location_dict:
                     location_dict[loc_name] = {
                         'name': loc_name,
@@ -276,7 +280,7 @@ class AnalysisService:
 
             # 아이템 정보 추출 및 집계
             for item in metadata.get('items', []):
-                item_name = item.get('name') if isinstance(item, dict) else item
+                item_name = AnalysisService._entity_name(item)
                 if item_name and item_name not in item_dict:
                     item_dict[item_name] = {
                         'name': item_name,
@@ -288,7 +292,7 @@ class AnalysisService:
             # 주요 사건 추출
             if 'key_events' in metadata:
                 for event in metadata['key_events']:
-                    event_summary = event.get('summary') if isinstance(event, dict) else event
+                    event_summary = AnalysisService._entity_name(event, 'summary')
                     bible_data["key_events"].append({
                         "summary": event_summary,
                         "scene_index": scene.chunk_index,

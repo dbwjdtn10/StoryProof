@@ -27,7 +27,7 @@ def _is_admin(user) -> bool:
 # ===== 소설 관리 =====
 
 @router.post("/", status_code=status.HTTP_201_CREATED, response_model=NovelResponse)
-async def create_novel(
+def create_novel(
     novel_data: NovelCreate,
     current_user = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -35,7 +35,7 @@ async def create_novel(
     return NovelService.create_novel(db, novel_data, current_user.id)
 
 @router.get("/", response_model=NovelListResponse)
-async def get_novels(
+def get_novels(
     skip: int = Query(0, ge=0),
     limit: int = Query(10, ge=1, le=100),
     search: Optional[str] = None,
@@ -47,7 +47,7 @@ async def get_novels(
     return NovelListResponse(total=total, novels=novels)
 
 @router.get("/{novel_id}", response_model=NovelResponse)
-async def get_novel(
+def get_novel(
     novel_id: int,
     current_user = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -55,7 +55,7 @@ async def get_novel(
     return NovelService.get_novel(db, novel_id, current_user.id)
 
 @router.put("/{novel_id}", response_model=NovelResponse)
-async def update_novel(
+def update_novel(
     novel_id: int,
     novel_update: NovelUpdate,
     current_user = Depends(get_current_user),
@@ -64,7 +64,7 @@ async def update_novel(
     return NovelService.update_novel(db, novel_id, novel_update, current_user.id)
 
 @router.delete("/{novel_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_novel(
+def delete_novel(
     novel_id: int,
     current_user = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -72,7 +72,7 @@ async def delete_novel(
     NovelService.delete_novel(db, novel_id, current_user.id)
 
 @router.patch("/{novel_id}/merge-contents", response_model=ChapterResponse)
-async def merge_chapters(
+def merge_chapters(
     novel_id: int,
     merge_data: ChapterMergeRequest,
     current_user = Depends(get_current_user),
@@ -91,7 +91,7 @@ async def merge_chapters(
 # ===== 회차 관리 =====
 
 @router.get("/{novel_id}/chapters", response_model=List[ChapterResponse])
-async def get_chapters(
+def get_chapters(
     novel_id: int,
     current_user = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -100,7 +100,7 @@ async def get_chapters(
     return NovelService.get_chapters(db, novel_id, current_user.id, is_admin)
 
 @router.get("/{novel_id}/chapters/{chapter_id}", response_model=ChapterResponse)
-async def get_chapter(
+def get_chapter(
     novel_id: int,
     chapter_id: int,
     current_user = Depends(get_current_user),
@@ -125,7 +125,7 @@ async def upload_chapter_file(
     )
 
 @router.post("/{novel_id}/chapters/{chapter_id}/analyze", status_code=status.HTTP_202_ACCEPTED)
-async def reanalyze_chapter(
+def reanalyze_chapter(
     novel_id: int,
     chapter_id: int,
     current_user = Depends(get_current_user),
@@ -143,7 +143,7 @@ async def reanalyze_chapter(
     return NovelService.analyze_chapter(db, novel_id, chapter_id, current_user.id, is_admin)
 
 @router.put("/{novel_id}/chapters/{chapter_id}", response_model=ChapterResponse)
-async def update_chapter(
+def update_chapter(
     novel_id: int,
     chapter_id: int,
     chapter_update: ChapterUpdate,
@@ -157,7 +157,7 @@ async def update_chapter(
     return NovelService.update_chapter(db, novel_id, chapter_id, chapter_update, current_user.id, is_admin)
 
 @router.delete("/{novel_id}/chapters/{chapter_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_chapter(
+def delete_chapter(
     novel_id: int,
     chapter_id: int,
     current_user = Depends(get_current_user),
@@ -170,7 +170,7 @@ async def delete_chapter(
 # TODO: 이것들도 Service로 올릴 수 있음
 
 @router.get("/{novel_id}/chapters/{chapter_id}/storyboard-status")
-async def get_storyboard_status(
+def get_storyboard_status(
     novel_id: int,
     chapter_id: int,
     current_user = Depends(get_current_user),
@@ -188,7 +188,7 @@ async def get_storyboard_status(
     }
 
 @router.get("/{novel_id}/chapters/{chapter_id}/bible")
-async def get_chapter_bible(
+def get_chapter_bible(
     novel_id: int,
     chapter_id: int,
     current_user = Depends(get_current_user),

@@ -239,6 +239,30 @@
     border-radius: 0;
   }
 
+  .theme-toggle-btn {
+    position: fixed;
+    bottom: 24px;
+    left: 24px;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background-color: var(--card);
+    border: 1px solid var(--border);
+    color: var(--primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    z-index: 1000;
+    transition: all 0.2s;
+  }
+
+  .theme-toggle-btn:hover {
+    background-color: var(--secondary);
+    transform: scale(1.05);
+  }
+
   ::file-selector-button {
     font: inherit;
     font-feature-settings: inherit;
@@ -740,6 +764,237 @@
   --sidebar-accent-foreground: oklch(.205 0 0);
   --sidebar-border: oklch(.922 0 0);
   --sidebar-ring: oklch(.708 0 0);
+
+  /* Semantic Theme Defaults (Fallback) */
+  --modal-bg: #ffffff;
+  --modal-text: #1c1917;
+  --modal-border: #e5e7eb;
+  --modal-header-bg: #1c1917;
+  --modal-header-text: #ffffff;
+
+  --input-bg: #ffffff;
+  --input-text: #1c1917;
+  --input-border: #e5e7eb;
+  --input-placeholder: #9ca3af;
+
+  --floating-btn-bg: #ffffff;
+  --floating-btn-text: #1c1917;
+  --floating-btn-border: #e5e7eb;
+  --floating-btn-hover-bg: #f9fafb;
+
+  /* Botanical Theme Variables (Extracted from botanical-herbs.jpg) */
+  --botanical-cream: #ede0d4;
+  --botanical-cream-dark: #e2d1c3;
+  --botanical-green-leaf: #4a6741;
+  --botanical-green-light: #8ba888;
+  --botanical-green-pale: #d9e2d5;
+  --botanical-accent-warm: #d9a07e;
+  --botanical-brown-rich: #6b4f3a;
+  --botanical-brown-dark: #4a3728;
+  --botanical-text-dark: #311900;
+  --botanical-text-muted: #312b25;
+  --botanical-paper: #fefcf9;
+  /* Slightly brighter for the writing area */
+}
+
+[data-theme='light'] {
+  --background: #ffffff;
+  --foreground: #1c1917;
+  --card: #ffffff;
+  --card-foreground: #1c1917;
+  --popover: #ffffff;
+  --popover-foreground: #1c1917;
+  --primary: #1c1917;
+  --primary-foreground: #ffffff;
+  --secondary: #f5f5f4;
+  --secondary-foreground: #1c1917;
+  --muted: #f5f5f4;
+  --muted-foreground: #78716c;
+  --accent: #f5f5f4;
+  --accent-foreground: #1c1917;
+  --border: #e7e5e4;
+  --input: transparent;
+  --input-background: #ffffff;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #1c1917;
+  --sidebar-primary: #1c1917;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-border: #f0f0f0;
+
+  /* Semantic Theme Variables - Light */
+  --modal-bg: #ffffff;
+  --modal-text: #1c1917;
+  --modal-border: #e5e7eb;
+  --modal-header-bg: #1c1917;
+  --modal-header-text: #ffffff;
+
+  --input-bg: #ffffff;
+  --input-text: #1c1917;
+  --input-border: #e5e7eb;
+  --input-placeholder: #9ca3af;
+
+  --floating-btn-bg: #ffffff;
+  --floating-btn-text: #1c1917;
+  --floating-btn-border: #e5e7eb;
+  --floating-btn-hover-bg: #f9fafb;
+
+  /* Chatbot bubbles & inputs */
+  --chat-assistant-bg: #f9f7f2;
+  --chat-assistant-text: #1c1917;
+}
+
+[data-theme='sepia'] {
+  --background: #ede0d4;
+  --foreground: var(--botanical-text-dark);
+  --card: #ede0d4;
+  --card-foreground: var(--botanical-text-dark);
+  --popover: var(--botanical-paper);
+  --popover-foreground: var(--botanical-text-dark);
+  --primary: var(--botanical-brown-rich);
+  --primary-foreground: #ede0d4;
+  --secondary: var(--botanical-cream-dark);
+  --secondary-foreground: var(--botanical-brown-rich);
+  --muted: var(--botanical-cream-dark);
+  --muted-foreground: var(--botanical-text-muted);
+  --accent: var(--botanical-green-leaf);
+  --accent-foreground: #ede0d4;
+  --border: rgba(107, 79, 58, 0.15);
+  --input: transparent;
+  --input-background: var(--botanical-cream-dark);
+  --sidebar: #ede0d4;
+  --sidebar-foreground: var(--botanical-text-dark);
+  --sidebar-primary: var(--botanical-brown-rich);
+  --sidebar-primary-foreground: #ede0d4;
+  --sidebar-border: rgba(107, 79, 58, 0.1);
+
+  /* Semantic Theme Variables - Sepia */
+  --modal-bg: #fdf6e3;
+  --modal-text: #4a3728;
+  --modal-border: #d4c4b7;
+  --modal-header-bg: #e6d3c1;
+  --modal-header-text: #4a3728;
+
+  --input-bg: #ffffff;
+  --input-text: #4a3728;
+  --input-border: #d4c4b7;
+  --input-placeholder: #8c7b70;
+
+  --floating-btn-bg: #fdf6e3;
+  --floating-btn-text: #4a3728;
+  --floating-btn-border: #d4c4b7;
+  --floating-btn-hover-bg: #f7ebc6;
+
+  /* Chatbot bubbles & inputs */
+  --chat-assistant-bg: #f0e4d7;
+  --chat-assistant-text: #4a3728;
+}
+
+[data-theme='dark'] {
+  --background: #1a1a1a;
+  --foreground: #fafaf9;
+  --card: #1a1a1a;
+  --card2: #352f2c;
+  --card-foreground: #fafaf9;
+  --popover: #1a1a1a;
+  --popover-foreground: #fafaf9;
+  --primary: #fafaf9;
+  --primary-foreground: #1a1a1a;
+  --secondary: #292524;
+  --secondary-foreground: #fafaf9;
+  --muted: #292524;
+  --muted-foreground: #a8a29e;
+  --accent: #292524;
+  --accent-foreground: #fafaf9;
+  --destructive: #7f1d1d;
+  --destructive-foreground: #fafaf9;
+  --border: #292524;
+  --input: transparent;
+  --input-background: #1c1917;
+  --ring: #d6d3d1;
+  --sidebar: #1a1a1a;
+  --sidebar-foreground: #ffffff;
+  --sidebar-primary: #ffffff;
+  --sidebar-primary-foreground: #1a1a1a;
+  --sidebar-border: #2a2a2a;
+
+  /* Semantic Theme Variables - Dark */
+  --modal-bg: #1a1a1a;
+  --modal-text: #e0e0e0;
+  --modal-border: #444444;
+  --modal-header-bg: #333333;
+  --modal-header-text: #ffffff;
+
+  --input-bg: #262626;
+  --input-text: #e0e0e0;
+  --input-border: #404040;
+  --input-placeholder: #6b7280;
+
+  --floating-btn-bg: #2a2a2a;
+  --floating-btn-text: #ffffff;
+  --floating-btn-border: #444444;
+  --floating-btn-hover-bg: #333333;
+
+  /* Chatbot bubbles & inputs */
+  --chat-assistant-bg: #262626;
+  --chat-assistant-text: #e0e0e0;
+}
+}
+
+[data-reader-theme='light'] {
+  --background: #ffffff;
+  --foreground: #1c1917;
+  --card: #ffffff;
+  --card-foreground: #1c1917;
+  --muted: #f5f5f4;
+  --reader-bg: #ffffff;
+  --text-primary: #1c1917;
+
+  /* Chatbot variables for Reader Light */
+  --modal-bg: #ffffff;
+  --modal-text: #1c1917;
+  --modal-border: #e5e7eb;
+  --modal-header-bg: #1c1917;
+  --modal-header-text: #ffffff;
+  --input-bg: #ffffff;
+  --input-text: #1c1917;
+  --input-border: #e5e7eb;
+  --chat-assistant-bg: #f9f7f2;
+  --chat-assistant-text: #1c1917;
+}
+
+[data-reader-theme='sepia'] {
+  --background: #ede0d4;
+  --foreground: var(--botanical-text-dark);
+  --card: #ede0d4;
+  --card-foreground: var(--botanical-text-dark);
+  --muted: var(--botanical-cream-dark);
+  --reader-bg: #ede0d4;
+  --sidebar: #ede0d4;
+  --text-primary: var(--botanical-text-dark);
+
+  /* Chatbot variables for Reader Sepia */
+  --modal-bg: #fdf6e3;
+  --modal-text: #4a3728;
+  --modal-border: #d4c4b7;
+  --modal-header-bg: #e6d3c1;
+  --modal-header-text: #4a3728;
+  --input-bg: #ffffff;
+  --input-text: #4a3728;
+  --input-border: #d4c4b7;
+  --chat-assistant-bg: #f0e4d7;
+  --chat-assistant-text: #4a3728;
+}
+
+[data-reader-theme='dark'] {
+  --background: #1a1a1a;
+  --foreground: #fafaf9;
+  --card: #1a1a1a;
+  --card2: #352f2c;
+  --card-foreground: #fafaf9;
+  --muted: #292524;
+  --reader-bg: #1a1a1a;
+  --sidebar: #1a1a1a;
+  --text-primary: #ffffff;
 }
 
 .dark {
@@ -780,18 +1035,19 @@
 }
 
 [data-reader-theme='sepia'] {
-  --background: #f4ecd8;
+  --background: #ede0d4;
   --foreground: #5b4636;
-  --card: #f4ecd8;
+  --card: #ede0d4;
   --card-foreground: #5b4636;
   --muted: #eaddc5;
-  --reader-bg: #f4ecd8;
+  --reader-bg: #ede0d4;
 }
 
 [data-reader-theme='dark'] {
   --background: #1a1a1a;
   --foreground: #e5e7eb;
   --card: #1a1a1a;
+  --card2: #352f2c;
   --card-foreground: #e5e7eb;
   --muted: #2a2a2a;
   --reader-bg: #1a1a1a;

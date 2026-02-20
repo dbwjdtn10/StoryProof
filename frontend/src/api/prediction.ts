@@ -2,7 +2,7 @@
  * Story Prediction API Service
  */
 
-import { request } from './client';
+const API_BASE_URL = `${window.location.protocol}//${window.location.host}/api/v1/prediction`;
 
 export interface PredictionTaskResponse {
     task_id: string;
@@ -12,12 +12,25 @@ export interface PredictionTaskResponse {
 }
 
 export const requestPrediction = async (novelId: number, text: string): Promise<PredictionTaskResponse> => {
-    return request<PredictionTaskResponse>('/prediction/request', {
+    const response = await fetch(`${API_BASE_URL}/request`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ novel_id: novelId, text })
     });
+
+    if (!response.ok) {
+        throw new Error("Failed to start prediction task");
+    }
+
+    return response.json();
 };
 
 export const getPredictionTaskStatus = async (taskId: string): Promise<PredictionTaskResponse> => {
-    return request<PredictionTaskResponse>(`/prediction/task/${taskId}`);
+    const response = await fetch(`${API_BASE_URL}/task/${taskId}`);
+
+    if (!response.ok) {
+        throw new Error("Failed to get task status");
+    }
+
+    return response.json();
 };

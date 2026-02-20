@@ -104,13 +104,14 @@ export function PredictionSidebar({ isOpen, onClose, messages, onSendMessage, is
                 top: 0,
                 right: 0,
                 bottom: 0,
-                backgroundColor: 'white',
+                backgroundColor: 'var(--modal-bg)',
                 boxShadow: '-4px 0 15px rgba(0,0,0,0.1)',
                 zIndex: 900,
                 transform: isOpen ? 'translateX(0)' : 'translateX(100%)',
                 transition: isResizing ? 'none' : 'transform 0.3s ease-in-out',
                 display: 'flex',
-                flexDirection: 'column'
+                flexDirection: 'column',
+                borderLeft: '1px solid var(--modal-border)'
             }}
         >
             {/* Resize Handle */}
@@ -123,9 +124,10 @@ export function PredictionSidebar({ isOpen, onClose, messages, onSendMessage, is
                     bottom: 0,
                     width: '6px',
                     cursor: 'ew-resize',
-                    backgroundColor: isResizing ? '#7C3AED' : 'transparent',
+                    backgroundColor: isResizing ? 'var(--primary)' : 'transparent',
                     zIndex: 50,
                     transition: 'background-color 0.2s',
+                    opacity: 0.5
                 }}
                 className="resize-handle"
             />
@@ -133,15 +135,16 @@ export function PredictionSidebar({ isOpen, onClose, messages, onSendMessage, is
             {/* Header */}
             <div style={{
                 padding: '16px 20px',
-                borderBottom: '1px solid #eee',
+                borderBottom: '1px solid var(--modal-border)',
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
-                backgroundColor: '#fff'
+                backgroundColor: 'var(--modal-header-bg)',
+                color: 'var(--modal-header-text)'
             }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <Sparkles size={20} className={isLoading ? 'animate-spin' : ''} color="#7C3AED" />
-                    <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 'bold', color: '#1f2937' }}>스토리 예측 챗봇</h3>
+                    <Sparkles size={20} strokeWidth={2.5} className={isLoading ? 'animate-spin' : ''} style={{ color: 'var(--primary)' }} />
+                    <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 'bold', color: 'inherit' }}>스토리 예측 챗봇</h3>
                 </div>
                 <div style={{ display: 'flex', gap: '8px' }}>
                     {onClearChat && messages.length > 0 && (
@@ -152,14 +155,14 @@ export function PredictionSidebar({ isOpen, onClose, messages, onSendMessage, is
                                 background: 'none',
                                 border: 'none',
                                 cursor: 'pointer',
-                                color: '#9ca3af',
+                                color: 'var(--muted-foreground)',
                                 padding: '4px',
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center'
                             }}
                         >
-                            <Trash2 size={18} />
+                            <Trash2 size={18} strokeWidth={2.5} />
                         </button>
                     )}
                     <button
@@ -168,14 +171,14 @@ export function PredictionSidebar({ isOpen, onClose, messages, onSendMessage, is
                             background: 'none',
                             border: 'none',
                             cursor: 'pointer',
-                            color: '#9ca3af',
+                            color: 'var(--muted-foreground)',
                             padding: '4px',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center'
                         }}
                     >
-                        <X size={20} />
+                        <X size={20} strokeWidth={2.5} />
                     </button>
                 </div>
             </div>
@@ -185,7 +188,7 @@ export function PredictionSidebar({ isOpen, onClose, messages, onSendMessage, is
                 flex: 1,
                 overflowY: 'auto',
                 padding: '20px',
-                backgroundColor: '#f9fafb',
+                backgroundColor: 'var(--modal-bg)',
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '20px'
@@ -193,14 +196,14 @@ export function PredictionSidebar({ isOpen, onClose, messages, onSendMessage, is
                 {messages.length === 0 && (
                     <div style={{
                         textAlign: 'center',
-                        color: '#9ca3af',
+                        color: 'var(--muted-foreground)',
                         marginTop: '60px',
                         display: 'flex',
                         flexDirection: 'column',
                         alignItems: 'center',
                         gap: '12px'
                     }}>
-                        <Sparkles size={48} style={{ opacity: 0.2 }} />
+                        <Sparkles size={48} strokeWidth={2.5} style={{ opacity: 0.2, color: 'var(--primary)' }} />
                         <p style={{ lineHeight: '1.5' }}>
                             "다음 전개는 어떻게 될까?"<br />
                             AI와 함께 이야기를 만들어보세요.
@@ -218,12 +221,12 @@ export function PredictionSidebar({ isOpen, onClose, messages, onSendMessage, is
                             <div style={{
                                 width: '32px', height: '32px',
                                 borderRadius: '50%',
-                                backgroundColor: '#EDE9FE',
+                                backgroundColor: 'var(--secondary)',
                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                                 flexShrink: 0,
                                 marginTop: '4px'
                             }}>
-                                <Bot size={18} color="#7C3AED" />
+                                <Bot size={18} strokeWidth={2.5} style={{ color: 'var(--primary)' }} />
                             </div>
                         )}
 
@@ -233,10 +236,10 @@ export function PredictionSidebar({ isOpen, onClose, messages, onSendMessage, is
                             borderRadius: '12px',
                             borderTopLeftRadius: msg.role === 'assistant' ? '2px' : '12px',
                             borderTopRightRadius: msg.role === 'user' ? '2px' : '12px',
-                            backgroundColor: msg.role === 'user' ? '#7C3AED' : 'white',
-                            color: msg.role === 'user' ? 'white' : '#1f2937',
+                            backgroundColor: msg.role === 'user' ? 'var(--primary)' : 'var(--input-bg)',
+                            color: msg.role === 'user' ? 'var(--primary-foreground)' : 'var(--input-text)',
                             boxShadow: msg.role === 'assistant' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
-                            border: msg.role === 'assistant' ? '1px solid #e5e7eb' : 'none',
+                            border: msg.role === 'assistant' ? '1px solid var(--input-border)' : 'none',
                             lineHeight: '1.6',
                             whiteSpace: 'pre-wrap',
                             wordBreak: 'break-word'
@@ -248,12 +251,12 @@ export function PredictionSidebar({ isOpen, onClose, messages, onSendMessage, is
                             <div style={{
                                 width: '32px', height: '32px',
                                 borderRadius: '50%',
-                                backgroundColor: '#e5e7eb',
+                                backgroundColor: 'var(--secondary)',
                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                                 flexShrink: 0,
                                 marginTop: '4px'
                             }}>
-                                <User size={18} color="#6b7280" />
+                                <User size={18} strokeWidth={2.5} style={{ color: 'var(--muted-foreground)' }} />
                             </div>
                         )}
                     </div>
@@ -264,19 +267,19 @@ export function PredictionSidebar({ isOpen, onClose, messages, onSendMessage, is
                         <div style={{
                             width: '32px', height: '32px',
                             borderRadius: '50%',
-                            backgroundColor: '#EDE9FE',
+                            backgroundColor: 'var(--secondary)',
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                             flexShrink: 0
                         }}>
-                            <Loader className="animate-spin" size={18} color="#7C3AED" />
+                            <Loader className="animate-spin" size={18} strokeWidth={2.5} style={{ color: 'var(--primary)' }} />
                         </div>
                         <div style={{
                             padding: '12px 16px',
                             borderRadius: '12px',
                             borderTopLeftRadius: '2px',
-                            backgroundColor: 'white',
-                            border: '1px solid #e5e7eb',
-                            color: '#6b7280',
+                            backgroundColor: 'var(--input-bg)',
+                            border: '1px solid var(--input-border)',
+                            color: 'var(--muted-foreground)',
                             boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
                         }}>
                             이야기를 생성하고 있습니다...
@@ -289,17 +292,17 @@ export function PredictionSidebar({ isOpen, onClose, messages, onSendMessage, is
             {/* Input Area */}
             <div style={{
                 padding: '16px',
-                backgroundColor: 'white',
-                borderTop: '1px solid #eee'
+                backgroundColor: 'var(--modal-bg)',
+                borderTop: '1px solid var(--modal-border)'
             }}>
                 <div style={{
                     display: 'flex',
                     gap: '10px',
                     alignItems: 'flex-end',
-                    backgroundColor: '#f3f4f6',
+                    backgroundColor: 'var(--input-bg)',
                     padding: '8px',
                     borderRadius: '12px',
-                    border: '1px solid #e5e7eb'
+                    border: '1px solid var(--input-border)'
                 }}>
                     <textarea
                         value={inputValue}
@@ -318,10 +321,11 @@ export function PredictionSidebar({ isOpen, onClose, messages, onSendMessage, is
                             fontSize: '0.95rem',
                             outline: 'none',
                             fontFamily: 'inherit',
-                            overflowY: 'auto' // Enable scroll
+                            overflowY: 'auto', // Enable scroll
+                            color: 'var(--input-text)'
                         }}
                         rows={1}
-                        // Simple auto-height hack could be added here similar to ChapterDetail
+                        // Simple auto-height hack
                         onInput={(e) => {
                             e.currentTarget.style.height = 'auto';
                             e.currentTarget.style.height = (e.currentTarget.scrollHeight) + 'px';
@@ -331,8 +335,8 @@ export function PredictionSidebar({ isOpen, onClose, messages, onSendMessage, is
                         onClick={handleSubmit}
                         disabled={!inputValue.trim() || isLoading}
                         style={{
-                            backgroundColor: inputValue.trim() && !isLoading ? '#7C3AED' : '#d1d5db',
-                            color: 'white',
+                            backgroundColor: inputValue.trim() && !isLoading ? 'var(--primary)' : 'var(--muted)',
+                            color: inputValue.trim() && !isLoading ? 'var(--primary-foreground)' : 'var(--muted-foreground)',
                             border: 'none',
                             borderRadius: '8px',
                             padding: '8px',
@@ -345,7 +349,7 @@ export function PredictionSidebar({ isOpen, onClose, messages, onSendMessage, is
                             height: '36px'
                         }}
                     >
-                        {isLoading ? <Loader size={18} className="animate-spin" /> : <Send size={18} />}
+                        {isLoading ? <Loader size={18} strokeWidth={2.5} className="animate-spin" /> : <Send size={18} strokeWidth={2.5} />}
                     </button>
                 </div>
             </div>

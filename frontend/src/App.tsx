@@ -1,6 +1,12 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import { Mail, Lock, Eye, EyeOff, User, BookOpen } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, User } from 'lucide-react';
+import logoImg from './assets/logo.png';
+import splashImg1 from './assets/KakaoTalk_20260219_151600086_01.png';
+import splashImg2 from './assets/KakaoTalk_20260219_151600086_02.png';
+import splashImg3 from './assets/KakaoTalk_20260219_151600086_03.png';
+import splashImg4 from './assets/KakaoTalk_20260219_151600086_04.png';
+import splashImg5 from './assets/KakaoTalk_20260219_151600086.png';
 import { ChapterDetail } from './components/ChapterDetail';
 import { FileUpload } from './components/FileUpload';
 import { ThemeToggle } from './components/ThemeToggle';
@@ -9,24 +15,7 @@ import { register, login } from './api/auth';
 import { getNovels, createNovel, Novel } from './api/novel';
 import { SplashScreen } from './components/SplashScreen';
 
-// 커스텀 스플래시 이미지 경로 (5개 중 랜덤 선택)
-const SPLASH_IMAGE_URLS = [
-  '/static/images/splash1.png',
-  '/static/images/splash2.png',
-  '/static/images/splash3.png',
-  '/static/images/splash4.png',
-  '/static/images/splash5.png',
-];
-
-// 이미지 로드 확인 헬퍼
-const checkImageExists = (url: string): Promise<boolean> => {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.onload = () => resolve(true);
-    img.onerror = () => resolve(false);
-    img.src = url;
-  });
-};
+const SPLASH_IMAGES = [splashImg1, splashImg2, splashImg3, splashImg4, splashImg5];
 
 type Screen = 'login' | 'signup' | 'upload' | 'chapterDetail';
 
@@ -40,24 +29,6 @@ export default function App() {
   // 서버 준비 상태 (AI 모델 로딩)
   const [isServerReady, setIsServerReady] = useState(false);
   const [splashFadeOut, setSplashFadeOut] = useState(false);
-  const [availableImages, setAvailableImages] = useState<string[]>([]);
-
-  // 스플래시 이미지 존재 여부 확인 (모든 이미지 체크)
-  useEffect(() => {
-    const checkAllImages = async () => {
-      const validImages: string[] = [];
-      for (const url of SPLASH_IMAGE_URLS) {
-        const exists = await checkImageExists(url);
-        console.log(`[Splash] Checking ${url}: ${exists}`);
-        if (exists) {
-          validImages.push(url);
-        }
-      }
-      console.log(`[Splash] Available images:`, validImages);
-      setAvailableImages(validImages);
-    };
-    checkAllImages();
-  }, []);
 
   // 서버 readiness 폴링
   useEffect(() => {
@@ -70,7 +41,6 @@ export default function App() {
         if (res.ok && mounted) {
           const data = await res.json();
           if (data.ready) {
-            // 페이드아웃 후 로그인 화면으로 전환
             setSplashFadeOut(true);
             setTimeout(() => {
               if (mounted) setIsServerReady(true);
@@ -109,16 +79,13 @@ export default function App() {
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Login attempt:', { email, rememberMe });
 
     try {
-      // 1. Login
       const tokenResponse = await login({ email, password });
       localStorage.setItem('token', tokenResponse.access_token);
       localStorage.setItem('userMode', tokenResponse.user_mode);
       setUserMode(tokenResponse.user_mode);
 
-      // 2. Fetch or Create Novel
       try {
         const novelsResponse = await getNovels();
         if (novelsResponse.novels.length > 0) {
@@ -163,7 +130,6 @@ export default function App() {
       });
       toast.success('회원가입이 완료되었습니다. 로그인해주세요.');
       setCurrentScreen('login');
-      // Reset form
       setName('');
       setEmail('');
       setPassword('');
@@ -184,7 +150,7 @@ export default function App() {
     return (
       <div className={splashFadeOut ? 'splash-fade-out' : ''}>
         <SplashScreen
-          imageUrls={availableImages}
+          imageUrls={SPLASH_IMAGES}
           message="AI 모델을 불러오는 중입니다"
         />
       </div>
@@ -194,18 +160,15 @@ export default function App() {
   // Upload Screen
   if (currentScreen === 'upload') {
     return (
-      <>
-        <FileUpload
-          onFileClick={(chapter) => {
-            setSelectedFile(chapter.title);
-            setSelectedChapterId(chapter.id);
-            setCurrentScreen('chapterDetail');
-          }}
-          novelId={currentNovel?.id}
-          mode={userMode}
-        />
-
-      </>
+      <FileUpload
+        onFileClick={(chapter) => {
+          setSelectedFile(chapter.title);
+          setSelectedChapterId(chapter.id);
+          setCurrentScreen('chapterDetail');
+        }}
+        novelId={currentNovel?.id}
+        mode={userMode}
+      />
     );
   }
 
@@ -239,7 +202,7 @@ export default function App() {
           {/* Logo and Brand */}
           <div className="brand-header">
             <div className="logo-icon">
-              <BookOpen size={32} strokeWidth={2.5} />
+              <img src={logoImg} alt="StoryProof Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
             </div>
             <h1 className="brand-name">StoryProof</h1>
           </div>
@@ -262,8 +225,8 @@ export default function App() {
                       flex: 1,
                       padding: '10px',
                       borderRadius: '8px',
-                      border: `1px solid ${signupMode === 'writer' ? '#4F46E5' : '#E5E7EB'}`, // indigo-600 : gray-200
-                      backgroundColor: signupMode === 'writer' ? '#EEF2FF' : 'white', // indigo-50
+                      border: `1px solid ${signupMode === 'writer' ? '#4F46E5' : '#E5E7EB'}`,
+                      backgroundColor: signupMode === 'writer' ? '#EEF2FF' : 'white',
                       color: signupMode === 'writer' ? '#4F46E5' : '#374151',
                       cursor: 'pointer',
                       fontWeight: 500
@@ -279,8 +242,8 @@ export default function App() {
                       flex: 1,
                       padding: '10px',
                       borderRadius: '8px',
-                      border: `1px solid ${signupMode === 'reader' ? '#0284C7' : '#E5E7EB'}`, // sky-600 : gray-200
-                      backgroundColor: signupMode === 'reader' ? '#E0F2FE' : 'white', // sky-50
+                      border: `1px solid ${signupMode === 'reader' ? '#0284C7' : '#E5E7EB'}`,
+                      backgroundColor: signupMode === 'reader' ? '#E0F2FE' : 'white',
                       color: signupMode === 'reader' ? '#0284C7' : '#374151',
                       cursor: 'pointer',
                       fontWeight: 500
@@ -293,9 +256,7 @@ export default function App() {
 
               {/* Name Input */}
               <div className="form-group">
-                <label htmlFor="name" className="form-label">
-                  이름
-                </label>
+                <label htmlFor="name" className="form-label">이름</label>
                 <div className="input-wrapper">
                   <User className="input-icon" size={20} />
                   <input
@@ -312,9 +273,7 @@ export default function App() {
 
               {/* Email Input */}
               <div className="form-group">
-                <label htmlFor="signup-email" className="form-label">
-                  이메일
-                </label>
+                <label htmlFor="signup-email" className="form-label">이메일</label>
                 <div className="input-wrapper">
                   <Mail className="input-icon" size={20} />
                   <input
@@ -331,9 +290,7 @@ export default function App() {
 
               {/* Password Input */}
               <div className="form-group">
-                <label htmlFor="signup-password" className="form-label">
-                  비밀번호
-                </label>
+                <label htmlFor="signup-password" className="form-label">비밀번호</label>
                 <div className="input-wrapper">
                   <Lock className="input-icon" size={20} />
                   <input
@@ -359,9 +316,7 @@ export default function App() {
 
               {/* Confirm Password Input */}
               <div className="form-group">
-                <label htmlFor="confirm-password" className="form-label">
-                  비밀번호 확인
-                </label>
+                <label htmlFor="confirm-password" className="form-label">비밀번호 확인</label>
                 <div className="input-wrapper">
                   <Lock className="input-icon" size={20} />
                   <input
@@ -432,7 +387,7 @@ export default function App() {
         {/* Logo and Brand */}
         <div className="brand-header">
           <div className="logo-icon">
-            <BookOpen size={32} strokeWidth={2.5} />
+            <img src={logoImg} alt="StoryProof Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
           </div>
           <h1 className="brand-name">StoryProof</h1>
         </div>
@@ -445,9 +400,7 @@ export default function App() {
           <form onSubmit={handleLoginSubmit} className="login-form">
             {/* Email Input */}
             <div className="form-group">
-              <label htmlFor="email" className="form-label">
-                이메일
-              </label>
+              <label htmlFor="email" className="form-label">이메일</label>
               <div className="input-wrapper">
                 <Mail className="input-icon" size={20} />
                 <input
@@ -464,9 +417,7 @@ export default function App() {
 
             {/* Password Input */}
             <div className="form-group">
-              <label htmlFor="password" className="form-label">
-                비밀번호
-              </label>
+              <label htmlFor="password" className="form-label">비밀번호</label>
               <div className="input-wrapper">
                 <Lock className="input-icon" size={20} />
                 <input

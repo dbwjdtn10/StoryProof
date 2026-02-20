@@ -5,8 +5,11 @@ Celery 비동기 작업 정의
 """
 
 import os
+import logging
 from typing import Dict, Any, Optional
 from dataclasses import asdict
+
+logger = logging.getLogger(__name__)
 
 from backend.db.session import SessionLocal
 from backend.db.models import Novel, Chapter, User, StoryboardStatus
@@ -51,9 +54,9 @@ def update_chapter_progress(chapter_id: int, progress: int, status: str = None, 
 
             db.commit()
         else:
-            print(f"⚠️ [DB Update Fail] Chapter {chapter_id} not found")
+            logger.warning(f"[DB Update Fail] Chapter {chapter_id} not found")
     except Exception as e:
-        print(f"⚠️ [DB Update Error] Chapter {chapter_id}: {e}")
+        logger.warning(f"[DB Update Error] Chapter {chapter_id}: {e}")
     finally:
         if db:
             db.close()
@@ -80,7 +83,7 @@ def process_chapter_storyboard(novel_id: int, chapter_id: int):
         
         if not chapter or not novel:
             error_msg = f"회차를 찾을 수 없습니다: {novel_id}/{chapter_id} (이미 삭제되었을 수 있습니다.)"
-            print(f"⚠️ {error_msg}")
+            logger.warning(error_msg)
             # 이미 삭제된 경우 상태 업데이트가 무의미하므로 즉시 종료
             return
         
@@ -184,9 +187,9 @@ def process_chapter_storyboard(novel_id: int, chapter_id: int):
                 analysis.updated_at = datetime.utcnow()
                 
             db.commit()
-            print(f"✅ 전역 엔티티 분석 완료 및 저장: {len(global_entities.get('characters', []))}명")
+            logger.info(f"전역 엔티티 분석 완료 및 저장: {len(global_entities.get('characters', []))}명")
         except Exception as e:
-            print(f"⚠️ 전역 엔티티 분석 실패 (무시됨): {e}")
+            logger.warning(f"전역 엔티티 분석 실패 (무시됨): {e}")
 
         # 6. 임시 파일 삭제
         if temp_file_path and os.path.exists(temp_file_path):
@@ -204,10 +207,8 @@ def process_chapter_storyboard(novel_id: int, chapter_id: int):
         update_chapter_progress(chapter_id, 100, "COMPLETED", "✓ 처리 완료")
         
     except Exception as e:
-        import traceback
         error_msg = f"스토리보드 처리 중 오류: {str(e)}"
-        print(f"❌ [Task Error] Chapter {chapter_id}: {error_msg}")
-        print(traceback.format_exc())
+        logger.error(f"[Task Error] Chapter {chapter_id}: {error_msg}", exc_info=True)
         update_chapter_progress(chapter_id, 0, "FAILED", error_msg)
     finally:
         if db:
@@ -374,14 +375,11 @@ def detect_inconsistency_task(self, novel_id: int, text_fragment: str, chapter_i
         dict: 분석 결과
     """
     try:
-        from backend.services.agent import StoryConsistencyAgent
-        
-        agent = StoryConsistencyAgent(api_key=settings.GOOGLE_API_KEY)
-        # 동기 메서드 직접 호출 (Celery는 동기 환경)
-        result = agent.check_consistency(novel_id, text_fragment)
+        from backend.services.agent import get_consistency_agent
+        result = get_consistency_agent().check_consistency(novel_id, text_fragment)
         return result
     except Exception as exc:
-        print(f"[Error] 설정 일관성 검사 실패: {exc}")
+        logger.error(f"설정 일관성 검사 실패: {exc}")
         raise self.retry(exc=exc, countdown=30)
 
 # ===== Celery Beat 스케줄 (정기 작업) =====

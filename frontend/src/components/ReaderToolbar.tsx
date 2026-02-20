@@ -77,9 +77,9 @@ export const ReaderToolbar = ({
     ];
 
     const themes = [
-        { id: 'light', label: '라이트', color: '#ffffff', textColor: '#1a1a1a' },
-        { id: 'sepia', label: '세피아', color: '#f4ecd8', textColor: '#5b4636' },
-        { id: 'dark', label: '다크', color: '#1a1a1a', textColor: '#e5e7eb' }
+        { id: 'light', label: '화이트', color: '#ffffff', textColor: '#1c1917' },
+        { id: 'sepia', label: '세피아', color: '#ede0d4', textColor: '#311900' },
+        { id: 'dark', label: '다크', color: '#1a1a1a', textColor: '#ffffff' }
     ];
 
     return (

@@ -3,26 +3,26 @@
 .chapter-detail-container {
     height: 100vh;
     overflow: hidden;
-    background: linear-gradient(135deg, #f5f5f5 0%, #e0e0e0 100%);
+    background: var(--reader-bg, var(--background));
     display: flex;
     flex-direction: column;
 }
 
 /* Header */
 .chapter-detail-header {
-    background: white;
+    background: var(--card);
     padding: 1.25rem 1.5rem;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
     display: flex;
     align-items: center;
     gap: 1rem;
     z-index: 50;
+    border-bottom: 1px solid var(--border);
 }
 
 .back-button {
     background: none;
     border: none;
-    color: #000000;
+    color: var(--primary);
     cursor: pointer;
     padding: 0.5rem;
     display: flex;
@@ -33,13 +33,13 @@
 }
 
 .back-button:hover {
-    background: #f3f4f6;
+    background: var(--secondary);
 }
 
 .chapter-detail-title {
     font-size: 1.25rem;
     font-weight: 700;
-    color: #1a1a1a;
+    color: var(--foreground);
     margin: 0;
 }
 
@@ -54,14 +54,14 @@
 /* Dictionary Sidebar */
 .dictionary-sidebar {
     width: 320px;
-    background: white;
-    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+    background: var(--sidebar);
     display: flex;
     flex-direction: column;
     transition: transform 0.3s ease;
     z-index: 10;
     overflow-y: auto;
     height: 100%;
+    border-right: 1px solid var(--sidebar-border);
 }
 
 /* Custom Scrollbar for Sidebar */
@@ -91,12 +91,12 @@
 
 .dictionary-header {
     padding: 1.5rem;
-    border-bottom: 2px solid #e5e7eb;
+    border-bottom: 2px solid var(--sidebar-border);
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    background: #000000;
-    color: white;
+    background: var(--sidebar);
+    color: var(--sidebar-primary-foreground);
 }
 
 .dictionary-header svg {
@@ -117,12 +117,12 @@
 
 .dictionary-entry {
     padding: 1rem;
-    border-bottom: 1px solid #e5e7eb;
+    border-bottom: 1px solid var(--sidebar-border);
     transition: background 0.2s ease;
 }
 
 .dictionary-entry:hover {
-    background: #f9fafb;
+    background: var(--secondary);
 }
 
 .dictionary-entry:last-child {
@@ -132,13 +132,13 @@
 .dictionary-word {
     font-size: 1rem;
     font-weight: 700;
-    color: #000000;
+    color: var(--foreground);
     margin-bottom: 0.5rem;
 }
 
 .dictionary-meaning {
     font-size: 0.875rem;
-    color: #6b7280;
+    color: var(--muted-foreground);
     line-height: 1.5;
 }
 
@@ -148,7 +148,7 @@
 }
 
 .dictionary-toggle:hover {
-    background: #f3f4f6;
+    background: var(--secondary);
 }
 
 /* Text Area */
@@ -168,21 +168,23 @@
 .text-content {
     width: 100%;
     margin: 0;
-    background: white;
+    background: var(--card);
     border-radius: 1rem;
     padding: 2rem;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.05);
     min-height: calc(100vh - 8rem);
+    border: 1px solid var(--border);
 }
 
 .novel-text {
     font-size: 1.125rem;
     line-height: 2;
-    color: #1a1a1a;
+    color: var(--foreground);
     margin: 0;
     white-space: pre-wrap;
     word-break: keep-all;
-    font-family: 'Noto Sans KR', sans-serif;
+    font-family: 'Noto Serif KR', serif;
+    /* Botanical theme often pairs well with serif */
 }
 
 /* Responsive Design */
@@ -254,34 +256,35 @@
 
 /* Collapsible Sections */
 .sidebar-section {
-    border-top: 1px solid #e5e7eb;
+    border-top: 1px solid var(--sidebar-border);
 }
 
 .section-header {
     width: 100%;
     padding: 1rem 1.5rem;
-    background: transparent;
-    border: none;
     display: flex;
     align-items: center;
     justify-content: space-between;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--sidebar-border);
     cursor: pointer;
-    transition: background 0.2s ease;
-    color: #1a1a1a;
+    transition: background 0.2s;
+    color: var(--foreground);
 }
 
 .section-header:hover {
-    background: #f9fafb;
+    background: var(--secondary);
 }
 
 .section-header.active {
-    background: #f3f4f6;
-    color: #4F46E5;
+    background: var(--secondary);
+    color: var(--primary);
     font-weight: 600;
 }
 
 .section-header.active .section-title {
-    color: #4F46E5;
+    color: var(--primary);
 }
 
 .section-header-content {
@@ -315,7 +318,7 @@
 
 .section-item {
     padding: 0.75rem 0;
-    border-bottom: 1px solid #f3f4f6;
+    border-bottom: 1px solid var(--sidebar-border);
 }
 
 .section-item:last-child {
@@ -325,14 +328,24 @@
 .item-name {
     font-size: 0.9375rem;
     font-weight: 600;
-    color: #000000;
+    color: var(--foreground);
     margin-bottom: 0.25rem;
 }
 
 .item-description {
     font-size: 0.875rem;
-    color: #6b7280;
+    color: var(--muted-foreground);
     line-height: 1.5;
+}
+
+.trait-tag {
+    font-size: 10px;
+    padding: 2px 6px;
+    background-color: #f1efef;
+    color: #4b4035;
+    border: 1px solid #998879;
+    border-radius: 4px;
+    display: inline-block;
 }
 
 /* Dark Mode for Collapsible Sections */

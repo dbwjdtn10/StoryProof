@@ -162,33 +162,10 @@ class ChatbotService:
             logger.error(f"Error during search: {e}")
             return []
     
-    def generate_answer(self, question: str, context: str, bible: str = "") -> str:
-        """
-        Google Gemini를 사용하여 질문에 대한 답변을 생성합니다.
-
-        RAG (Retrieval-Augmented Generation) 방식:
-        1. 검색된 씬들을 컨텍스트로 제공
-        2. Gemini가 컨텍스트를 참고하여 답변 생성
-        3. 컨텍스트에 정보가 부족하면 LLM의 지식 활용
-
-        Method C: bible 파라미터로 소설 바이블 요약을 프롬프트에 직접 주입.
-
-        Args:
-            question (str): 사용자 질문
-            context (str): 검색된 씬들의 텍스트 (여러 씬이 결합된 형태)
-            bible (str): Analysis DB에서 추출한 바이블 요약 (선택)
-        """
-        # Gemini 클라이언트가 초기화되지 않은 경우
-        if not self.client:
-            return "LLM이 설정되지 않았습니다. GOOGLE_API_KEY를 확인해주세요."
-
+    def _build_rag_prompt(self, question: str, context: str, bible: str = "") -> str:
+        """RAG Q&A 프롬프트 구성 (generate_answer/stream_answer 공유)."""
         bible_block = f"\n\n[소설 바이블 (등장인물/관계/사건)]:\n{bible}" if bible else ""
-
-        # 프롬프트 구성
-        # - 컨텍스트는 SEARCH_CONTEXT_MAX_CHARS로 제한 (Gemini 토큰 제한 고려)
-        # - 답변 형식을 명확히 지정하여 일관된 출력 유도
-        # - 할루시네이션 방지: 컨텍스트 외부 지식 사용 금지
-        prompt = f"""당신은 소설 내용 전용 질의응답 시스템입니다.
+        return f"""당신은 소설 내용 전용 질의응답 시스템입니다.
 반드시 아래 [소설 문맥]에 있는 내용만 사용하여 답변하세요.
 
 [핵심 규칙]
@@ -211,68 +188,38 @@ class ChatbotService:
 질문: {question}
 
 답변:"""
-        
-        # Gemini API 호출
-        # 할루시네이션 방지를 위한 생성 파라미터 설정:
-        # - temperature=0.1: 낮은 온도로 일관성 및 사실성 향상
-        # - top_p=0.8: 확률 분포 제한으로 예측 가능성 증가
-        # - top_k=20: 후보 토큰 제한
+
+    _LLM_CONFIG = {
+        'temperature': settings.GEMINI_RESPONSE_TEMPERATURE,
+        'top_p': settings.GEMINI_RESPONSE_TOP_P,
+        'top_k': settings.GEMINI_RESPONSE_TOP_K,
+        'max_output_tokens': 1024,
+    }
+
+    def generate_answer(self, question: str, context: str, bible: str = "") -> str:
+        """Google Gemini로 RAG 답변 생성. Method C: bible 주입."""
+        if not self.client:
+            return "LLM이 설정되지 않았습니다. GOOGLE_API_KEY를 확인해주세요."
         try:
             response = self.client.models.generate_content(
                 model=settings.GEMINI_CHAT_MODEL,
-                contents=prompt,
-                config={
-                    'temperature': settings.GEMINI_RESPONSE_TEMPERATURE,
-                    'top_p': settings.GEMINI_RESPONSE_TOP_P,
-                    'top_k': settings.GEMINI_RESPONSE_TOP_K,
-                    'max_output_tokens': 1024
-                }
+                contents=self._build_rag_prompt(question, context, bible),
+                config=self._LLM_CONFIG,
             )
             return response.text
         except Exception as e:
             return f"답변 생성 중 오류가 발생했습니다: {str(e)}"
-    
+
     def stream_answer(self, question: str, context: str, bible: str = ""):
         """Gemini 스트리밍으로 답변을 텍스트 청크 단위로 yield (동기 제너레이터)."""
         if not self.client:
             yield "LLM이 설정되지 않았습니다."
             return
-
-        bible_block = f"\n\n[소설 바이블 (등장인물/관계/사건)]:\n{bible}" if bible else ""
-        prompt = f"""당신은 소설 내용 전용 질의응답 시스템입니다.
-반드시 아래 [소설 문맥]에 있는 내용만 사용하여 답변하세요.
-
-[핵심 규칙]
-1. **[소설 문맥]에 있는 정보만 사용하세요. 사전 학습 지식, 추론, 상상은 절대 사용하지 마세요.**
-2. **[소설 문맥]에 답이 없으면 반드시 "소설에서 해당 내용을 찾을 수 없습니다."라고만 답하세요. 일반 지식이나 추측으로 채우지 마세요.**
-3. **[Context N]과 같은 출처 표시는 포함하지 마세요.**
-
-[답변 형식]
-두 섹션 사이에는 빈 줄을 두세요.
-
-[핵심 요약]
-(소설 문맥에서 찾은 핵심 답변을 1~2문장으로 요약. 문맥에 없으면 "찾을 수 없습니다."로 시작)
-
-[상세 설명]
-(소설 문맥에 있는 구체적인 내용과 근거만 서술){bible_block}
-
-[소설 문맥]:
-{context[:settings.SEARCH_CONTEXT_MAX_CHARS]}
-
-질문: {question}
-
-답변:"""
-
         try:
             for chunk in self.client.models.generate_content_stream(
                 model=settings.GEMINI_CHAT_MODEL,
-                contents=prompt,
-                config={
-                    'temperature': settings.GEMINI_RESPONSE_TEMPERATURE,
-                    'top_p': settings.GEMINI_RESPONSE_TOP_P,
-                    'top_k': settings.GEMINI_RESPONSE_TOP_K,
-                    'max_output_tokens': 1024
-                }
+                contents=self._build_rag_prompt(question, context, bible),
+                config=self._LLM_CONFIG,
             ):
                 if chunk.text:
                     yield chunk.text
@@ -540,13 +487,13 @@ class ChatbotService:
         # novel title 가져오기
         novel_title = "Unknown Novel"
         if best_chunk.get('novel_id'):
-            db = SessionLocal()
+            db_local = SessionLocal()
             try:
-                novel = db.query(Novel).filter(Novel.id == best_chunk['novel_id']).first()
+                novel = db_local.query(Novel).filter(Novel.id == best_chunk['novel_id']).first()
                 if novel:
                     novel_title = novel.title
             finally:
-                db.close()
+                db_local.close()
 
         return {
             "answer": answer,
