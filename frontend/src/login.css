@@ -397,6 +397,5 @@
 
 /* Sepia Mode Specific Styles */
 [data-theme="sepia"] .login-container::before {
-    opacity: 0.8;
-    filter: saturate(2);
+    opacity: 0.85;
 }
