@@ -363,7 +363,7 @@ export function PredictionSidebar({ isOpen, onClose, messages, onSendMessage, is
                     animation: spin 1s linear infinite;
                 }
                 .resize-handle:hover {
-                    background-color: #DDD6FE !important;
+                    background-color: var(--accent) !important;
                 }
             `}</style>
         </div>

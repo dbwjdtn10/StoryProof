@@ -54,7 +54,7 @@ function ChatMessageItem({ msg, onNavigateToScene, chapterId }: { msg: Message, 
                                 alignItems: 'center',
                                 gap: '4px',
                                 fontSize: '0.75rem',
-                                color: '#495057',
+                                color: 'var(--muted-foreground)',
                                 fontWeight: '600'
                             }}
                         >
@@ -62,7 +62,7 @@ function ChatMessageItem({ msg, onNavigateToScene, chapterId }: { msg: Message, 
                             상세 설명
                         </button>
                         {isDetailOpen && (
-                            <p style={{ whiteSpace: 'pre-wrap', marginTop: '0.5rem', fontSize: '0.9rem', color: '#495057', lineHeight: '1.5' }}>{detailContent}</p>
+                            <p style={{ whiteSpace: 'pre-wrap', marginTop: '0.5rem', fontSize: '0.9rem', color: 'var(--muted-foreground)', lineHeight: '1.5' }}>{detailContent}</p>
                         )}
                     </div>
                 )}
@@ -80,7 +80,7 @@ function ChatMessageItem({ msg, onNavigateToScene, chapterId }: { msg: Message, 
                                 alignItems: 'center',
                                 gap: '4px',
                                 fontSize: '0.75rem',
-                                color: msg.role === 'user' ? 'rgba(255,255,255,0.9)' : '#495057',
+                                color: msg.role === 'user' ? 'rgba(255,255,255,0.9)' : 'var(--muted-foreground)',
                                 fontWeight: '600'
                             }}
                         >
@@ -110,7 +110,7 @@ function ChatMessageItem({ msg, onNavigateToScene, chapterId }: { msg: Message, 
                                         padding: '6px',
                                         borderRadius: '4px',
                                         marginTop: '2px',
-                                        borderLeft: '2px solid #6366f1',
+                                        borderLeft: '2px solid var(--primary)',
                                         fontSize: '0.8rem',
                                         lineHeight: '1.4'
                                     }}>
@@ -124,7 +124,7 @@ function ChatMessageItem({ msg, onNavigateToScene, chapterId }: { msg: Message, 
                                         }}
                                         disabled={!!(msg.source.chapter_id && chapterId && msg.source.chapter_id !== chapterId)}
                                         style={{
-                                            background: msg.role === 'user' ? 'rgba(255,255,255,0.2)' : '#4F46E5',
+                                            background: msg.role === 'user' ? 'rgba(255,255,255,0.2)' : 'var(--primary)',
                                             border: msg.role === 'user' ? '1px solid rgba(255,255,255,0.3)' : 'none',
                                             borderRadius: '4px',
                                             color: 'white',
@@ -266,7 +266,7 @@ export function ChatInterface({ onNavigateToScene, novelId, chapterId }: ChatInt
                     className="chatbot-send"
                     onClick={handleSend}
                     disabled={isLoading || !message.trim()}
-                    style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white', border: 'none', borderRadius: '0.5rem', padding: '0.75rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'transform 0.2s', minWidth: '45px' }}
+                    style={{ background: 'var(--primary)', color: 'var(--primary-foreground)', border: 'none', borderRadius: '0.5rem', padding: '0.75rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'transform 0.2s', minWidth: '45px' }}
                 >
                     {isLoading ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} />}
                 </button>
@@ -296,17 +296,17 @@ export function ChatBot({ novelId, chapterId, onNavigateToScene }: { novelId?: n
                 }}>
                     <div className="chatbot-header" style={{
                         padding: '1rem',
-                        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                        color: 'white',
+                        background: 'var(--modal-header-bg)',
+                        color: 'var(--modal-header-text)',
                         borderTopLeftRadius: '1rem',
                         borderTopRightRadius: '1rem',
                         borderBottom: 'none',
                         display: 'flex',
                         justifyContent: 'flex-end',
                         alignItems: 'center',
-                        boxShadow: '0 2px 8px rgba(102, 126, 234, 0.3)'
+                        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)'
                     }}>
-                        <button className="chatbot-close" onClick={() => setIsOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'white', transition: 'opacity 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.opacity = '0.7'} onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}>
+                        <button className="chatbot-close" onClick={() => setIsOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--modal-header-text)', transition: 'opacity 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.opacity = '0.7'} onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}>
                             <X size={20} />
                         </button>
                     </div>
@@ -326,8 +326,8 @@ export function ChatBot({ novelId, chapterId, onNavigateToScene }: { novelId?: n
                     width: '50px',
                     height: '50px',
                     borderRadius: '50%',
-                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                    color: 'white',
+                    background: 'var(--primary)',
+                    color: 'var(--primary-foreground)',
                     border: 'none',
                     boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
                     cursor: 'pointer',
