@@ -437,12 +437,9 @@ class ChatbotService:
         # 짧은 질문 바이패스: 단순 질문은 multi-query 스킵하여 Gemini 호출 절약
         words = question.strip().split()
         if len(question) < 20 and len(words) <= 4:
-            logger.warning(f"[HYBRID-DEBUG] short question bypass: '{question}'")
-            logger.warning(f"[HYBRID-DEBUG] _extract_keywords START")
+            logger.info(f"[MultiQuery] Skipped (short question): '{question}'")
             keywords = self._extract_keywords(question)
-            logger.warning(f"[HYBRID-DEBUG] _extract_keywords DONE → {keywords}")
-            logger.warning(f"[HYBRID-DEBUG] find_similar_chunks START")
-            result = self.find_similar_chunks(
+            return self.find_similar_chunks(
                 question=question,
                 top_k=top_k,
                 novel_id=novel_id,
@@ -452,8 +449,6 @@ class ChatbotService:
                 original_query=question,
                 **kwargs
             )
-            logger.warning(f"[HYBRID-DEBUG] find_similar_chunks DONE → {len(result)} results")
-            return result
 
         # 1. 원본 질문에서 키워드 1회 추출 (모든 쿼리에서 재사용)
         base_keywords = self._extract_keywords(question)
@@ -509,13 +504,8 @@ class ChatbotService:
 
         Method C: db와 novel_id가 있으면 바이블 요약을 조회해 LLM에 주입.
         """
-        import time as _t
-        _t0 = _t.time()
-        def _log(msg): logger.warning(f"[ASK-DEBUG] {msg} (+{_t.time()-_t0:.1f}s)")
-        _log(f"ask() START q='{question}' novel_id={novel_id}")
         # 1. 하이브리드 검색 실행
         logger.info(f"[Search] 원본 질문: '{question}'")
-        _log("hybrid_search() START")
         top_chunks = self.hybrid_search(
             question=question,
             alpha=alpha,
@@ -524,7 +514,6 @@ class ChatbotService:
             chapter_id=chapter_id,
             novel_filter=novel_filter
         )
-        _log(f"hybrid_search() DONE → {len(top_chunks)} chunks")
 
         # 2. 결과 없으면 임계값을 낮춰 원본 쿼리로 재시도 (키워드 포함)
         if not top_chunks:
@@ -558,7 +547,6 @@ class ChatbotService:
                 "found_context": False
             }
         
-        _log("context build START")
         # 4. 컨텍스트 생성 (상위 청크 텍스트 결합)
         context_texts = []
         for i, chunk in enumerate(top_chunks):
@@ -581,9 +569,7 @@ class ChatbotService:
                 bible_summary = AnalysisService.get_bible_summary(db, novel_id, chapter_id)
             except Exception as e:
                 logger.warning(f"바이블 요약 조회 실패 (novel={novel_id}): {e}")
-        _log("generate_answer() START (Gemini)")
         answer = self.generate_answer(question, context, bible=bible_summary)
-        _log("generate_answer() DONE")
         
         # 가장 높은 유사도 정보
         best_chunk = top_chunks[0]
