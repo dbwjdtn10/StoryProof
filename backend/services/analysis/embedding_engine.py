@@ -416,9 +416,16 @@ class EmbeddingSearchEngine:
                 logger.warning("Pinecone 사용 불가. BM25-only 폴백 검색 수행")
                 return self._bm25_only_search(query, novel_id, top_k, keywords)
 
+        import time as _t
+        _s0 = _t.time()
+        def _slog(msg): logger.warning(f"[SEARCH-DEBUG] {msg} (+{_t.time()-_s0:.1f}s)")
+        _slog(f"search() START q='{query[:50]}' novel_id={novel_id}")
+
         # --- 1. Dense Search (Pinecone) ---
+        _slog("embed_text START")
         query_embedding = self.embed_text(query)
-        
+        _slog("embed_text DONE")
+
         filter_dict = {}
         if novel_id:
             filter_dict['novel_id'] = novel_id
@@ -426,7 +433,8 @@ class EmbeddingSearchEngine:
             filter_dict['chapter_id'] = chapter_id
         elif exclude_chapter_id:
             filter_dict['chapter_id'] = {"$ne": exclude_chapter_id}
-        
+
+        _slog("pinecone query START")
         dense_results = self.index.query(
             vector=query_embedding,
             top_k=top_k * 10,
@@ -434,9 +442,11 @@ class EmbeddingSearchEngine:
             filter=filter_dict if filter_dict else None
         )
         
+        _slog(f"pinecone query DONE → {len(dense_results.matches)} matches")
         dense_matches = {m.id: m for m in dense_results.matches}
-        
+
         # --- 2. Sparse Search (BM25) ---
+        _slog("BM25 START")
         sparse_scores_dict = {}
         sparse_top_parents = []
         
@@ -470,6 +480,7 @@ class EmbeddingSearchEngine:
                     sparse_top_parents.sort(key=lambda x: x[1], reverse=True)
                     sparse_top_parents = sparse_top_parents[:top_k * 10]
         
+        _slog("BM25 DONE")
         # --- 3. Union & Hybrid Scoring ---
         candidate_child_ids = set(dense_matches.keys())
         sparse_parent_ids_to_fetch = set()
@@ -498,6 +509,7 @@ class EmbeddingSearchEngine:
                 except (ValueError, IndexError):
                     continue
 
+        _slog("union fetch DONE")
         # --- 3. Result Merging & Scoring ---
         combined_candidates = self._merge_results(
             dense_matches=dense_matches,
@@ -506,6 +518,7 @@ class EmbeddingSearchEngine:
             sparse_weight=(1.0 - alpha)
         )
         
+        _slog(f"merge DONE → {len(combined_candidates)} candidates")
         # --- 4. Reranking (Cross-Encoder) ---
         rerank_candidates = combined_candidates[:top_k * 10]
         final_results = []
@@ -538,6 +551,7 @@ class EmbeddingSearchEngine:
         else:
             final_results = rerank_candidates
 
+        _slog(f"reranking DONE → {len(final_results)} results")
         # --- 5. Result Formatting & Parent Aggregation (Batch DB query) ---
         seen_keys = set()
         unique_matches = []  # (match, parent_vector_id)
@@ -577,7 +591,8 @@ class EmbeddingSearchEngine:
                     })
         finally:
             db.close()
-        
+
+        _slog(f"search() DONE → {len(hits)} hits")
         return hits
 
     def _bm25_only_search(
