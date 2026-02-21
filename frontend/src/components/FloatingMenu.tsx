@@ -1,4 +1,4 @@
-import { MessageCircle, MoreVertical, ShieldAlert, X, Sparkles, MessageSquare, Users, Settings as SettingsIcon } from 'lucide-react';
+import { MessageCircle, MoreVertical, ShieldAlert, X, Sparkles, MessageSquare, Users, Settings as SettingsIcon, Network } from 'lucide-react';
 import { useState } from 'react';
 import { ChatInterface } from './ChatBot';
 import { useTheme } from '../contexts/ThemeContext';
@@ -10,12 +10,13 @@ interface FloatingMenuProps {
     onPredictStory?: () => void;
     onOpenCharacterChat?: () => void;
     onOpenSettings?: () => void;
+    onOpenRelGraph?: () => void;
     novelId?: number;
     chapterId?: number;
     mode?: 'reader' | 'writer';
 }
 
-export function FloatingMenu({ onNavigateToScene, onCheckConsistency, onPredictStory, onOpenCharacterChat, onOpenSettings, novelId, chapterId, mode = 'writer' }: FloatingMenuProps) {
+export function FloatingMenu({ onNavigateToScene, onCheckConsistency, onPredictStory, onOpenCharacterChat, onOpenSettings, onOpenRelGraph, novelId, chapterId, mode = 'writer' }: FloatingMenuProps) {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [isChatOpen, setIsChatOpen] = useState(false);
     const { theme } = useTheme();
@@ -51,6 +52,12 @@ export function FloatingMenu({ onNavigateToScene, onCheckConsistency, onPredictS
                             setIsMenuOpen(false);
                         }} title="스토리 예측 (What-If)">
                             <Sparkles size={20} strokeWidth={2.5} />
+                        </button>
+                        <button className="menu-option" onClick={() => {
+                            if (onOpenRelGraph) onOpenRelGraph();
+                            setIsMenuOpen(false);
+                        }} title="인물 관계도" style={{ background: '#10B981', color: '#fff', border: 'none' }}>
+                            <Network size={20} strokeWidth={2.5} />
                         </button>
                         {mode !== 'reader' && (
                             <>
