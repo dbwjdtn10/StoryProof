@@ -48,7 +48,7 @@ class StoryConsistencyAgent:
         except Exception:
             self.search_engine = EmbeddingSearchEngine()
 
-    def _fetch_context_for_novel(self, novel_id: int, query: str, top_k: int = 5):
+    def _fetch_context_for_novel(self, novel_id: int, query: str, top_k: int = 7):
         """Pinecone 벡터 검색 + DB 소설 요약 조회를 단일 메서드로 통합.
 
         Returns:
@@ -233,7 +233,7 @@ class StoryConsistencyAgent:
             formatted.append(f"[Scene {scene_idx}]")
             if summary:
                 formatted.append(f"요약: {summary}")
-            formatted.append(f"{text[:500]}...")  # 처음 500자만
+            formatted.append(f"{text[:1000]}...")  # 처음 1000자
             formatted.append("")
         
         return "\n".join(formatted)

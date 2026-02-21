@@ -319,7 +319,7 @@ class AnalysisService:
         db: Session,
         novel_id: int,
         chapter_id: int = None,
-        max_chars: int = 1000
+        max_chars: int = 2000
     ) -> str:
         """
         Analysis DB에서 압축된 바이블 요약 텍스트 반환.
@@ -351,7 +351,7 @@ class AnalysisService:
         result = analysis.result
         parts = []
 
-        characters = result.get('characters', [])[:5]
+        characters = result.get('characters', [])[:8]
         if characters:
             lines = []
             for c in characters:
@@ -360,7 +360,7 @@ class AnalysisService:
                 lines.append(f"- {c.get('name','')}: {desc} [{traits}]")
             parts.append("[등장인물]\n" + "\n".join(lines))
 
-        relationships = result.get('relationships', [])[:5]
+        relationships = result.get('relationships', [])[:8]
         if relationships:
             lines = [
                 f"- {r.get('character1','')}-{r.get('character2','')}: {r.get('relation', '')} - {r.get('description','')[:60]}"

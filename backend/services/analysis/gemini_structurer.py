@@ -116,7 +116,10 @@ class GeminiStructurer:
 **중요 규칙:**
 - 정확히 JSON 형식으로만 응답
 - 없는 정보는 빈 리스트([]) 또는 null로 표시
-- 인물 이름은 일관성 있게 표기 (별칭이 있으면 대표 이름으로 통일)
+- 인물 이름은 일관성 있게 표기:
+  * 경칭/호칭 제거: "씨", "님", "선생님", "교수", "박사", "군", "양" 등을 제거한 순수 이름만 사용 (예: "어터슨 씨" → "어터슨", "김 박사" → "김")
+  * 영문 경칭도 제거: "Mr.", "Ms.", "Dr." 등 (예: "Mr. Hyde" → "Hyde")
+  * 같은 인물의 별칭/다른 표기를 대표 이름 하나로 통일 (예: "Utterson", "어터슨 씨" → "어터슨")
 - visual_description은 이미지 생성에 사용되므로, 소설 본문에서 언급된 외모/시각적 정보를 최대한 구체적으로 추출
 - relationships는 이 씬에서 상호작용하는 인물 쌍만 추출 (단순 언급은 제외)
 - summary에는 핵심 갈등이나 변화를 반드시 포함
@@ -784,6 +787,33 @@ Output Format (JSON List of Strings):
         
         return json_text
 
+    @staticmethod
+    def _normalize_character_name(name: str) -> str:
+        """경칭/호칭 접미사를 제거하여 인물 이름 정규화.
+        예: "어터슨 씨" → "어터슨", "Mr. Hyde" → "Hyde", "김 박사" → "김"
+        """
+        if not name or not isinstance(name, str):
+            return name
+        name = name.strip()
+        # 한국어 경칭 접미사 (긴 것부터 매칭)
+        kr_suffixes = ['선생님', '교수님', '박사님', '사장님', '부장님', '과장님',
+                       '선생', '교수', '박사', '사장', '부장', '과장',
+                       '씨', '님', '군', '양']
+        for suffix in kr_suffixes:
+            if name.endswith(' ' + suffix):
+                name = name[:-len(suffix) - 1].strip()
+                break
+            elif name.endswith(suffix) and len(name) > len(suffix):
+                name = name[:-len(suffix)].strip()
+                break
+        # 영문 경칭 접두사
+        en_titles = ['Mr.', 'Ms.', 'Mrs.', 'Miss', 'Dr.', 'Prof.', 'Sir', 'Madam', 'Lord', 'Lady']
+        for title in en_titles:
+            if name.startswith(title + ' ') and len(name) > len(title) + 1:
+                name = name[len(title) + 1:].strip()
+                break
+        return name
+
     def extract_global_entities(
         self,
         structured_scenes: List[StructuredScene],
@@ -816,15 +846,17 @@ Output Format (JSON List of Strings):
             for char in scene.characters:
                 # 하위 호환성: 문자열이면 객체로 변환
                 if isinstance(char, str):
-                    name = char
+                    raw_name = char
                     desc = ""
                     visual_desc = ""
+                    traits = []
                 else:
-                    name = char.get('name') or 'Unknown'
+                    raw_name = char.get('name') or 'Unknown'
                     desc = char.get('description') or ''
                     visual_desc = char.get('visual_description') or ''
                     traits = char.get('traits') or []
 
+                name = self._normalize_character_name(raw_name)
                 if name not in all_characters:
                     all_characters[name] = {
                         "name": name,
@@ -914,8 +946,8 @@ Output Format (JSON List of Strings):
             # 4. Relationships 통합
             for rel in getattr(scene, 'relationships', []) or []:
                 if isinstance(rel, dict):
-                    src = rel.get('source', '')
-                    tgt = rel.get('target', '')
+                    src = self._normalize_character_name(rel.get('source', ''))
+                    tgt = self._normalize_character_name(rel.get('target', ''))
                     if src and tgt:
                         key = tuple(sorted([src, tgt]))
                         desc = rel.get('description', '')

@@ -10,6 +10,7 @@ import { Settings } from './Settings';
 import { getChapter, getChapters, getStoryboardStatus, updateChapter, getChapterBible, reanalyzeChapter, exportBible, exportChapter, BibleData, Chapter, ChapterListItem, Character, Item, Location } from '../api/novel';
 import { API_BASE_URL } from '../api/client';
 import { AnalysisSidebar, AnalysisResult } from './AnalysisSidebar';
+import { RelationshipGraph } from './RelationshipGraph';
 import { PredictionSidebar, Message } from './predictions/PredictionSidebar';
 import { requestPrediction, getPredictionTaskStatus, getPredictionHistory, clearPredictionHistory } from '../api/prediction';
 import { getCachedConsistency } from '../api/analysis';
@@ -37,6 +38,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
     const [isLocationsOpen, setIsLocationsOpen] = useState(false);
     const [isKeyEventsOpen, setIsKeyEventsOpen] = useState(false);
     const [isRelationshipsOpen, setIsRelationshipsOpen] = useState(false);
+    const [showRelGraph, setShowRelGraph] = useState(false);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
     const [content, setContent] = useState("");
@@ -1393,21 +1395,54 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                         </button>
                         {isRelationshipsOpen && (
                             <div className="section-content">
-                                {filteredRelationships.length === 0 && bibleQuery ? (
-                                    <div style={{ padding: '10px', fontSize: '12px', color: '#999' }}>매칭 결과 없음</div>
-                                ) : filteredRelationships.map((rel: any, index: number) => (
-                                    <div key={index} className="section-item">
-                                        <div className="item-name" style={{ fontSize: '0.9rem' }}>
-                                            {rel.source} → {rel.target}
+                                {/* 관계도/목록 토글 */}
+                                <div style={{ display: 'flex', gap: '4px', marginBottom: '8px' }}>
+                                    <button
+                                        onClick={() => setShowRelGraph(false)}
+                                        style={{
+                                            flex: 1, padding: '4px 8px', fontSize: '0.75rem', fontWeight: 600,
+                                            border: '1px solid var(--border)', borderRadius: '6px', cursor: 'pointer',
+                                            background: !showRelGraph ? 'var(--primary)' : 'transparent',
+                                            color: !showRelGraph ? '#fff' : 'var(--muted-foreground)'
+                                        }}
+                                    >목록</button>
+                                    <button
+                                        onClick={() => setShowRelGraph(true)}
+                                        style={{
+                                            flex: 1, padding: '4px 8px', fontSize: '0.75rem', fontWeight: 600,
+                                            border: '1px solid var(--border)', borderRadius: '6px', cursor: 'pointer',
+                                            background: showRelGraph ? 'var(--primary)' : 'transparent',
+                                            color: showRelGraph ? '#fff' : 'var(--muted-foreground)'
+                                        }}
+                                    >관계도</button>
+                                </div>
+
+                                {showRelGraph ? (
+                                    <RelationshipGraph
+                                        relationships={filteredRelationships.map((r: any) => ({
+                                            source: r.source, target: r.target,
+                                            relation: r.relation, description: r.description
+                                        }))}
+                                        width={320}
+                                        height={300}
+                                    />
+                                ) : (
+                                    filteredRelationships.length === 0 && bibleQuery ? (
+                                        <div style={{ padding: '10px', fontSize: '12px', color: '#999' }}>매칭 결과 없음</div>
+                                    ) : filteredRelationships.map((rel: any, index: number) => (
+                                        <div key={index} className="section-item">
+                                            <div className="item-name" style={{ fontSize: '0.9rem' }}>
+                                                {rel.source} → {rel.target}
+                                            </div>
+                                            <div className="item-description">
+                                                <span className="trait-tag">{rel.relation || '관계'}</span>
+                                                {rel.description && (
+                                                    <span style={{ marginLeft: '6px' }}>{rel.description.length > 40 ? rel.description.slice(0, 40) + '...' : rel.description}</span>
+                                                )}
+                                            </div>
                                         </div>
-                                        <div className="item-description">
-                                            <span className="trait-tag">{rel.relation || '관계'}</span>
-                                            {rel.description && (
-                                                <span style={{ marginLeft: '6px' }}>{rel.description.length > 40 ? rel.description.slice(0, 40) + '...' : rel.description}</span>
-                                            )}
-                                        </div>
-                                    </div>
-                                ))}
+                                    ))
+                                )}
                             </div>
                         )}
                     </div>

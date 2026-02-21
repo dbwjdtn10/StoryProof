@@ -283,7 +283,12 @@ class NovelService:
             HTTPException: 파일이 비어있거나, 중복 챕터 번호인 경우
         """
         # 1. 소설 조회 및 권한 확인
-        NovelService._check_novel_ownership(db, novel_id, user_id, is_admin)
+        novel = NovelService._check_novel_ownership(db, novel_id, user_id, is_admin)
+
+        # 1-1. 소설 제목이 기본값이면 파일명으로 업데이트
+        if novel.title in ("My First Novel", "Default created novel") and file.filename:
+            import os
+            novel.title = os.path.splitext(file.filename)[0]
 
         # 2. 중복 확인
         existing = db.query(Chapter).filter(
