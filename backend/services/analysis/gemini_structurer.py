@@ -58,6 +58,7 @@ class StructuredScene:
     original_text: str
     summary: str
     characters: List[Dict] # [{"name": "...", "description": "...", "traits": ["..."]}]
+    relationships: List[Dict]  # [{"source": "...", "target": "...", "relation": "...", "description": "..."}]
     locations: List[Dict]
     items: List[Dict]
     key_events: List[Dict]
@@ -102,20 +103,23 @@ class GeminiStructurer:
 주어진 씬에서 다음 정보를 JSON 형식으로 추출하세요:
 
 {
-  "summary": "씬의 핵심 요약 (2-3 문장)",
-  "characters": [{"name": "인물 이름", "description": "행동/성격 묘사 (1문장)", "visual_description": "외모 묘사 (머리색, 눈 색, 체형, 복장, 나이대, 인상 등 시각적 특징을 최대한 상세하게)", "traits": ["특성1", "특성2"]}],
+  "summary": "씬의 핵심 요약 (2-3문장. 누가 무엇을 왜 했는지, 결과는 어떠한지 포함)",
+  "characters": [{"name": "인물 이름", "description": "이 씬에서의 행동과 감정 상태 (1-2문장)", "visual_description": "외모 묘사 (머리색, 눈색, 체형, 복장, 나이대, 인상 등 시각적 특징을 최대한 상세하게. 언급 없으면 빈 문자열)", "traits": ["특성1", "특성2"]}],
+  "relationships": [{"source": "인물A", "target": "인물B", "relation": "관계 유형 (예: 연인, 적대, 상하, 동료, 가족)", "description": "이 씬에서 드러나는 두 인물의 관계 묘사"}],
   "locations": [{"name": "장소 이름", "description": "장소 묘사", "visual_description": "장소의 시각적 묘사 (건축 양식, 분위기, 조명, 색감, 크기 등)"}],
   "items": [{"name": "아이템 이름", "description": "용도/의미", "visual_description": "아이템의 시각적 묘사 (재질, 색상, 크기, 형태, 장식 등)"}],
-  "key_events": [{"summary": "사건 내용", "importance": "상/중/하"}],
+  "key_events": [{"summary": "사건 내용 (원인→경과→결과 구조로)", "importance": "상/중/하"}],
   "mood": "분위기 (예: 긴장감, 평온, 슬픔, 유쾌 등)",
   "time_period": "시간대 정보 (있다면)"
 }
 
 **중요 규칙:**
-- 정확히 JSON 형식으로만 응답하세요
+- 정확히 JSON 형식으로만 응답
 - 없는 정보는 빈 리스트([]) 또는 null로 표시
-- 인물 이름은 일관성 있게 표기 (별칭도 통일)
-- visual_description은 이미지 생성에 사용되므로, 소설에서 언급된 외모/시각적 정보를 최대한 구체적으로 추출하세요
+- 인물 이름은 일관성 있게 표기 (별칭이 있으면 대표 이름으로 통일)
+- visual_description은 이미지 생성에 사용되므로, 소설 본문에서 언급된 외모/시각적 정보를 최대한 구체적으로 추출
+- relationships는 이 씬에서 상호작용하는 인물 쌍만 추출 (단순 언급은 제외)
+- summary에는 핵심 갈등이나 변화를 반드시 포함
 """
 
     def _generate_with_retry(self, prompt: str):
@@ -600,13 +604,14 @@ Output Format (JSON List of Strings):
                 original_text=scene_text,
                 summary=data.get('summary', ''),
                 characters=data.get('characters', []),
+                relationships=data.get('relationships', []),
                 locations=data.get('locations', []),
                 items=data.get('items', []),
                 key_events=data.get('key_events', []),
                 mood=data.get('mood', ''),
                 time_period=data.get('time_period')
             )
-            
+
         except Exception as e:
             print(f"[Warning] 씬 {scene_index} 구조화 실패: {e}")
             # 실패 시 기본 객체 반환
@@ -615,6 +620,7 @@ Output Format (JSON List of Strings):
                 original_text=scene_text,
                 summary="분석 실패",
                 characters=[],
+                relationships=[],
                 locations=[],
                 items=[],
                 key_events=[],
@@ -794,6 +800,7 @@ Output Format (JSON List of Strings):
         all_items = {}
         all_locations = {}
         all_key_events = []
+        all_relationships = {}  # (source, target) → relationship dict
 
         # 원본 씬 데이터도 결과에 포함 (프론트엔드 요구사항)
         full_scenes_data = []
@@ -904,7 +911,31 @@ Output Format (JSON List of Strings):
                 if idx not in all_locations[name]['scenes']:
                     all_locations[name]['scenes'].append(idx)
             
-            # 4. Key Events 통합
+            # 4. Relationships 통합
+            for rel in getattr(scene, 'relationships', []) or []:
+                if isinstance(rel, dict):
+                    src = rel.get('source', '')
+                    tgt = rel.get('target', '')
+                    if src and tgt:
+                        key = tuple(sorted([src, tgt]))
+                        desc = rel.get('description', '')
+                        relation = rel.get('relation', '')
+                        if key not in all_relationships:
+                            all_relationships[key] = {
+                                "character1": key[0],
+                                "character2": key[1],
+                                "relation": relation,
+                                "description": desc,
+                                "scenes": []
+                            }
+                        if len(desc) > len(all_relationships[key]['description']):
+                            all_relationships[key]['description'] = desc
+                        if relation and len(relation) > len(all_relationships[key].get('relation', '')):
+                            all_relationships[key]['relation'] = relation
+                        if idx not in all_relationships[key]['scenes']:
+                            all_relationships[key]['scenes'].append(idx)
+
+            # 5. Key Events 통합
             for event in scene.key_events:
                 if isinstance(event, str):
                     summary = event
@@ -945,11 +976,19 @@ Output Format (JSON List of Strings):
             loc['appearance_count'] = len(loc['scenes'])
         final_locations.sort(key=lambda x: x['appearance_count'], reverse=True)
 
+        # Relationships: 등장 횟수 순 정렬
+        final_relationships = sorted(
+            all_relationships.values(),
+            key=lambda x: len(x.get('scenes', [])),
+            reverse=True
+        )
+
         return {
             "characters": final_chars,
             "items": final_items,
             "locations": final_locations,
             "key_events": all_key_events,
+            "relationships": final_relationships,
             "scenes": full_scenes_data
         }
 

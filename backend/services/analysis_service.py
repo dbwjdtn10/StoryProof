@@ -359,15 +359,24 @@ class AnalysisService:
         relationships = result.get('relationships', [])[:5]
         if relationships:
             lines = [
-                f"- {r.get('character1','')}-{r.get('character2','')}: {r.get('description','')[:60]}"
+                f"- {r.get('character1','')}-{r.get('character2','')}: {r.get('relation', '')} - {r.get('description','')[:60]}"
                 for r in relationships
             ]
             parts.append("[관계]\n" + "\n".join(lines))
 
-        key_events = result.get('key_events', [])[:3]
+        key_events = result.get('key_events', [])[:5]
         if key_events:
-            lines = [f"- {e.get('summary', '')[:80]}" for e in key_events]
+            lines = []
+            for e in key_events:
+                importance = e.get('importance', '')
+                prefix = "★ " if importance == "상" else "- "
+                lines.append(f"{prefix}{e.get('summary', '')[:80]}")
             parts.append("[핵심사건]\n" + "\n".join(lines))
+
+        locations = result.get('locations', [])[:3]
+        if locations:
+            lines = [f"- {loc.get('name','')}: {loc.get('description','')[:50]}" for loc in locations]
+            parts.append("[주요장소]\n" + "\n".join(lines))
 
         summary = "\n\n".join(parts)[:max_chars]
         # 캐시 크기 제한: 초과 시 만료 항목 먼저 제거, 여전히 초과 시 가장 오래된 절반 제거
