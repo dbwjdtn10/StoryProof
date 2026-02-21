@@ -14,7 +14,7 @@ class NovelBase(BaseModel):
     title: str = Field(..., min_length=1, max_length=255, description="소설 제목")
     description: Optional[str] = Field(None, description="소설 설명")
     genre: Optional[str] = Field(None, max_length=100, description="장르")
-    custom_prompt: Optional[str] = Field(None, description="사용자 정의 분석 프롬프트")
+    custom_prompt: Optional[str] = Field(None, max_length=2000, description="사용자 정의 분석 프롬프트")
 
 
 class NovelCreate(NovelBase):
@@ -27,7 +27,7 @@ class NovelUpdate(BaseModel):
     title: Optional[str] = Field(None, min_length=1, max_length=255)
     description: Optional[str] = None
     genre: Optional[str] = None
-    custom_prompt: Optional[str] = None
+    custom_prompt: Optional[str] = Field(None, max_length=2000)
     is_public: Optional[bool] = None
     is_completed: Optional[bool] = None
 

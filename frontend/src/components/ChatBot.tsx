@@ -258,8 +258,9 @@ export function ChatInterface({ onNavigateToScene, novelId, chapterId }: ChatInt
                     className="chatbot-input"
                     placeholder="메시지를 입력하세요..."
                     value={message}
+                    maxLength={500}
                     onChange={(e) => setMessage(e.target.value)}
-                    onKeyPress={handleKeyPress}
+                    onKeyDown={handleKeyPress}
                     disabled={isLoading}
                     style={{
                         flex: 1,

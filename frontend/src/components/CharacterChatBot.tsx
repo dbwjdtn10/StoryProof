@@ -510,6 +510,7 @@ function ChatRoom({ room }: ChatRoomProps) {
                     onChange={(e) => setInputText(e.target.value)}
                     onKeyDown={handleKeyDown}
                     placeholder="메시지를 입력하세요..."
+                    maxLength={500}
                     style={{
                         flex: 1,
                         border: '1px solid var(--input-border)',

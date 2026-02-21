@@ -35,6 +35,7 @@ export function Settings({ onClose }: { onClose: () => void }) {
             setUserEmail(data.email);
         } catch (error) {
             console.error("Failed to fetch profile:", error);
+            toast.error("프로필 정보를 불러올 수 없습니다.");
         }
     };
 

@@ -6,6 +6,7 @@
 """
 
 import time
+import threading
 from typing import Dict, Any, List, Optional
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
@@ -18,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 # Bible summary TTL 캐시 (키: (novel_id, chapter_id), 값: (summary_str, timestamp))
 _bible_summary_cache: Dict[tuple, tuple] = {}
+_bible_summary_lock = threading.Lock()
 _BIBLE_SUMMARY_TTL = 300  # 5분
 _BIBLE_SUMMARY_MAX_SIZE = 200  # 캐시 최대 항목 수
 
@@ -328,9 +330,10 @@ class AnalysisService:
         # TTL 캐시 확인
         cache_key = (novel_id, chapter_id)
         now = time.time()
-        cached = _bible_summary_cache.get(cache_key)
-        if cached and (now - cached[1]) < _BIBLE_SUMMARY_TTL:
-            return cached[0]
+        with _bible_summary_lock:
+            cached = _bible_summary_cache.get(cache_key)
+            if cached and (now - cached[1]) < _BIBLE_SUMMARY_TTL:
+                return cached[0]
 
         query = db.query(Analysis).filter(
             Analysis.novel_id == novel_id,
@@ -341,7 +344,8 @@ class AnalysisService:
         analysis = query.order_by(Analysis.updated_at.desc()).first()
 
         if not analysis or not analysis.result:
-            _bible_summary_cache[cache_key] = ("", now)
+            with _bible_summary_lock:
+                _bible_summary_cache[cache_key] = ("", now)
             return ""
 
         result = analysis.result
@@ -380,13 +384,14 @@ class AnalysisService:
 
         summary = "\n\n".join(parts)[:max_chars]
         # 캐시 크기 제한: 초과 시 만료 항목 먼저 제거, 여전히 초과 시 가장 오래된 절반 제거
-        if len(_bible_summary_cache) > _BIBLE_SUMMARY_MAX_SIZE:
-            expired = [k for k, v in _bible_summary_cache.items() if (now - v[1]) >= _BIBLE_SUMMARY_TTL]
-            for k in expired:
-                del _bible_summary_cache[k]
+        with _bible_summary_lock:
             if len(_bible_summary_cache) > _BIBLE_SUMMARY_MAX_SIZE:
-                sorted_keys = sorted(_bible_summary_cache.keys(), key=lambda k: _bible_summary_cache[k][1])
-                for k in sorted_keys[:len(_bible_summary_cache) // 2]:
+                expired = [k for k, v in _bible_summary_cache.items() if (now - v[1]) >= _BIBLE_SUMMARY_TTL]
+                for k in expired:
                     del _bible_summary_cache[k]
-        _bible_summary_cache[cache_key] = (summary, now)
+                if len(_bible_summary_cache) > _BIBLE_SUMMARY_MAX_SIZE:
+                    sorted_keys = sorted(_bible_summary_cache.keys(), key=lambda k: _bible_summary_cache[k][1])
+                    for k in sorted_keys[:len(_bible_summary_cache) // 2]:
+                        del _bible_summary_cache[k]
+            _bible_summary_cache[cache_key] = (summary, now)
         return summary
