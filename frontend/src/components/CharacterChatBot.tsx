@@ -9,6 +9,7 @@ import {
     CharacterChatRoom, CharacterChatMessage,
     generatePersona, createRoom, getRooms, sendMessage, getMessages, updateRoom, deleteRoom
 } from '../api/characterChat';
+import { getChapterBible } from '../api/novel';
 
 // ------------------------------------------------------------------
 // Components
@@ -32,6 +33,19 @@ function CreateRoomModal({ novelId, chapterId, onClose, onCreated, onUpdated, in
     const [step, setStep] = useState<'input' | 'review'>(mode === 'edit' ? 'review' : 'input');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [bibleCharacters, setBibleCharacters] = useState<string[]>([]);
+
+    // 바이블에서 캐릭터 목록 로드
+    useEffect(() => {
+        if (mode === 'edit') return;
+        getChapterBible(novelId, chapterId || 0)
+            .then(data => {
+                const names = (data?.characters || []).map((c: any) => c.name).filter(Boolean);
+                setBibleCharacters(names);
+                if (names.length > 0 && !characterName) setCharacterName(names[0]);
+            })
+            .catch(() => {}); // 바이블 없으면 빈 목록
+    }, [novelId, chapterId, mode]);
 
     const handleGenerate = async () => {
         if (!characterName.trim()) return;
@@ -106,23 +120,42 @@ function CreateRoomModal({ novelId, chapterId, onClose, onCreated, onUpdated, in
             {step === 'input' ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                     <div>
-                        <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '0.9rem' }}>캐릭터 이름</label>
-                        <input
-                            type="text"
-                            value={characterName}
-                            onChange={(e) => setCharacterName(e.target.value)}
-                            placeholder="예: 셜록 홈즈"
-                            maxLength={100}
-                            style={{
-                                width: '100%', padding: '12px', borderRadius: '8px',
-                                border: '1px solid var(--input-border)',
-                                fontSize: '1rem',
-                                backgroundColor: 'var(--input-bg)',
-                                color: 'var(--input-text)'
-                            }}
-                        />
+                        <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '0.9rem' }}>캐릭터 선택</label>
+                        {bibleCharacters.length > 0 ? (
+                            <select
+                                value={characterName}
+                                onChange={(e) => setCharacterName(e.target.value)}
+                                style={{
+                                    width: '100%', padding: '12px', borderRadius: '8px',
+                                    border: '1px solid var(--input-border)',
+                                    fontSize: '1rem',
+                                    backgroundColor: 'var(--input-bg)',
+                                    color: 'var(--input-text)',
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                {bibleCharacters.map(name => (
+                                    <option key={name} value={name}>{name}</option>
+                                ))}
+                            </select>
+                        ) : (
+                            <input
+                                type="text"
+                                value={characterName}
+                                onChange={(e) => setCharacterName(e.target.value)}
+                                placeholder="예: 셜록 홈즈"
+                                maxLength={100}
+                                style={{
+                                    width: '100%', padding: '12px', borderRadius: '8px',
+                                    border: '1px solid var(--input-border)',
+                                    fontSize: '1rem',
+                                    backgroundColor: 'var(--input-bg)',
+                                    color: 'var(--input-text)'
+                                }}
+                            />
+                        )}
                         <p style={{ fontSize: '0.8rem', color: 'var(--muted-foreground)', marginTop: '4px' }}>
-                            * 분석된 데이터에 있는 캐릭터 이름을 입력하세요.
+                            {bibleCharacters.length > 0 ? '* 바이블에서 추출된 인물 목록입니다.' : '* 바이블 데이터가 없습니다. 이름을 직접 입력하세요.'}
                         </p>
                     </div>
 

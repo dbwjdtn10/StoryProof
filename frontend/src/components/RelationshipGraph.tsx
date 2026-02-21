@@ -56,11 +56,27 @@ export function RelationshipGraphModal({ isOpen, onClose, relationships, charact
         charMap.current = map;
     }, [characters]);
 
-    // 캔버스 크기 동적 계산
+    // 캔버스 크기 동적 계산 (DOM 렌더 후 측정)
     useEffect(() => {
         if (!isOpen || !containerRef.current) return;
-        const rect = containerRef.current.getBoundingClientRect();
-        setCanvasSize({ w: rect.width, h: rect.height });
+        // DOM 렌더 완료 후 측정
+        const measure = () => {
+            if (!containerRef.current) return;
+            const rect = containerRef.current.getBoundingClientRect();
+            if (rect.width > 0 && rect.height > 0) {
+                setCanvasSize({ w: rect.width, h: rect.height });
+            }
+        };
+        // 초기 측정 + 약간의 딜레이
+        requestAnimationFrame(measure);
+        const timer = setTimeout(measure, 100);
+        // 리사이즈 감지
+        const observer = new ResizeObserver(measure);
+        observer.observe(containerRef.current);
+        return () => {
+            clearTimeout(timer);
+            observer.disconnect();
+        };
     }, [isOpen]);
 
     // 노드 배치 계산

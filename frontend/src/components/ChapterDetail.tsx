@@ -783,7 +783,11 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
         );
     }, [key_events, bibleQuery]);
 
-    const relationships = useMemo(() => bibleData?.relationships || [], [bibleData]);
+    const relationships = useMemo(() => (bibleData?.relationships || []).map((r: any) => ({
+        ...r,
+        source: r.source || r.character1 || '',
+        target: r.target || r.character2 || '',
+    })), [bibleData]);
 
     const filteredRelationships = useMemo(() => {
         if (!bibleQuery) return relationships;
@@ -2383,7 +2387,8 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                 isOpen={isRelGraphOpen}
                 onClose={() => setIsRelGraphOpen(false)}
                 relationships={relationships.map((r: any) => ({
-                    source: r.source, target: r.target,
+                    source: r.source || r.character1,
+                    target: r.target || r.character2,
                     relation: r.relation, description: r.description
                 }))}
                 characters={bibleData?.characters?.map((c: any) => ({
