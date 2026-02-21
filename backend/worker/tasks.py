@@ -285,8 +285,24 @@ def analyze_chapter_task(self, analysis_id: int, novel_id: int, chapter_id: int,
         if not chapter:
             raise ValueError(f"Chapter {chapter_id} not found")
 
-        input_text = chapter.content
+        full_text = chapter.content or ""
         custom_prompt = novel.custom_prompt if novel else None
+
+        # 텍스트 길이 제한: 20,000자 초과 시 앞+중간+끝 샘플링
+        MAX_ANALYSIS_TEXT = 20000
+        if len(full_text) > MAX_ANALYSIS_TEXT:
+            chunk = MAX_ANALYSIS_TEXT // 3
+            mid_start = len(full_text) // 2 - chunk // 2
+            input_text = (
+                full_text[:chunk]
+                + "\n\n[...중략...]\n\n"
+                + full_text[mid_start:mid_start + chunk]
+                + "\n\n[...중략...]\n\n"
+                + full_text[-chunk:]
+            )
+            logger.info(f"텍스트 샘플링: {len(full_text)}자 → {len(input_text)}자")
+        else:
+            input_text = full_text
 
         # 3. 에이전트로 분석 수행
         from backend.services.agent import get_consistency_agent
