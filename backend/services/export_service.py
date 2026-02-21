@@ -1,9 +1,11 @@
 """
 바이블 데이터 내보내기 서비스 (TXT / PDF / DOCX)
++ 챕터 본문 내보내기 서비스
 """
 
 import io
 import os
+import re
 from typing import Any, Dict, List
 
 from fpdf import FPDF
@@ -318,3 +320,232 @@ class BibleExportService:
         buf = io.BytesIO()
         doc.save(buf)
         return buf.getvalue()
+
+
+class ChapterExportService:
+    """챕터 본문 HTML을 TXT / PDF / DOCX로 변환"""
+
+    @staticmethod
+    def html_to_plain(html: str) -> str:
+        """HTML을 plain text로 변환 (p/br → 줄바꿈, 태그 제거)"""
+        if not html:
+            return ""
+        text = html
+        # <br>, <br/>, <br /> → 줄바꿈
+        text = re.sub(r"<br\s*/?>", "\n", text, flags=re.IGNORECASE)
+        # </p>, </div>, </li> → 줄바꿈
+        text = re.sub(r"</(?:p|div|li|h[1-6])>", "\n", text, flags=re.IGNORECASE)
+        # <li> → bullet prefix
+        text = re.sub(r"<li[^>]*>", "  - ", text, flags=re.IGNORECASE)
+        # 나머지 태그 제거
+        text = re.sub(r"<[^>]+>", "", text)
+        # HTML entities
+        text = text.replace("&nbsp;", " ").replace("&amp;", "&")
+        text = text.replace("&lt;", "<").replace("&gt;", ">")
+        text = text.replace("&quot;", '"')
+        # 연속 빈줄 정리
+        text = re.sub(r"\n{3,}", "\n\n", text)
+        return text.strip()
+
+    @staticmethod
+    def _parse_html_blocks(html: str) -> List[Dict[str, Any]]:
+        """HTML을 블록 단위로 파싱 (heading, paragraph, list item 등)"""
+        blocks: List[Dict[str, Any]] = []
+        if not html:
+            return blocks
+
+        # heading 패턴
+        heading_pat = re.compile(
+            r"<(h[1-6])[^>]*>(.*?)</\1>", re.IGNORECASE | re.DOTALL
+        )
+        # paragraph/div 패턴
+        para_pat = re.compile(
+            r"<(p|div)[^>]*>(.*?)</\1>", re.IGNORECASE | re.DOTALL
+        )
+        # list item 패턴
+        li_pat = re.compile(r"<li[^>]*>(.*?)</li>", re.IGNORECASE | re.DOTALL)
+
+        # 순서대로 매칭하기 위해 통합 패턴 사용
+        combined = re.compile(
+            r"<(h[1-6]|p|div|li)[^>]*>(.*?)</\1>",
+            re.IGNORECASE | re.DOTALL,
+        )
+
+        for m in combined.finditer(html):
+            tag = m.group(1).lower()
+            inner = m.group(2)
+
+            if tag.startswith("h") and len(tag) == 2:
+                level = int(tag[1])
+                plain = re.sub(r"<[^>]+>", "", inner).strip()
+                if plain:
+                    blocks.append({"type": "heading", "level": level, "text": plain})
+            elif tag == "li":
+                plain = re.sub(r"<[^>]+>", "", inner).strip()
+                if plain:
+                    blocks.append({"type": "list_item", "text": plain})
+            else:
+                # p / div — inline 서식 유지
+                blocks.append({"type": "paragraph", "html": inner})
+
+        # 매칭이 없으면 전체를 plain text paragraph로
+        if not blocks:
+            plain = ChapterExportService.html_to_plain(html)
+            if plain:
+                blocks.append({"type": "paragraph", "html": plain})
+
+        return blocks
+
+    @staticmethod
+    def _strip_tags(html: str) -> str:
+        """태그 제거 + 기본 entity 변환"""
+        text = re.sub(r"<br\s*/?>", "\n", html, flags=re.IGNORECASE)
+        text = re.sub(r"<[^>]+>", "", text)
+        text = text.replace("&nbsp;", " ").replace("&amp;", "&")
+        text = text.replace("&lt;", "<").replace("&gt;", ">")
+        text = text.replace("&quot;", '"')
+        return text.strip()
+
+    # ---- TXT ----
+
+    @staticmethod
+    def export_chapter_txt(content_html: str, title: str = "") -> bytes:
+        """챕터 본문을 TXT로 내보내기"""
+        lines: List[str] = []
+        if title:
+            lines.append(title)
+            lines.append("=" * 40)
+            lines.append("")
+
+        plain = ChapterExportService.html_to_plain(content_html)
+        lines.append(plain)
+        return "\n".join(lines).encode("utf-8")
+
+    # ---- PDF ----
+
+    @staticmethod
+    def export_chapter_pdf(content_html: str, title: str = "") -> bytes:
+        """챕터 본문을 PDF로 내보내기 (NanumGothic 한글 폰트)"""
+        pdf = FPDF()
+        pdf.set_auto_page_break(auto=True, margin=15)
+
+        font_regular = os.path.join(FONTS_DIR, "NanumGothic.ttf")
+        font_bold = os.path.join(FONTS_DIR, "NanumGothicBold.ttf")
+
+        pdf.add_font("NanumGothic", "", font_regular)
+        if os.path.exists(font_bold):
+            pdf.add_font("NanumGothic", "B", font_bold)
+
+        pdf.add_page()
+        content_w = pdf.w - pdf.l_margin - pdf.r_margin
+
+        # 제목
+        if title:
+            pdf.set_font("NanumGothic", "B", 16)
+            pdf.cell(0, 12, title, new_x="LMARGIN", new_y="NEXT", align="C")
+            pdf.ln(8)
+
+        blocks = ChapterExportService._parse_html_blocks(content_html)
+
+        for block in blocks:
+            if block["type"] == "heading":
+                level = block["level"]
+                size = max(10, 16 - (level - 1) * 2)  # h1=16, h2=14, h3=12 ...
+                pdf.set_font("NanumGothic", "B", size)
+                pdf.ln(4)
+                pdf.multi_cell(content_w, 8, block["text"])
+                pdf.ln(2)
+            elif block["type"] == "list_item":
+                pdf.set_font("NanumGothic", "", 10)
+                pdf.set_x(pdf.l_margin + 5)
+                pdf.multi_cell(content_w - 5, 6, f"  \u2022  {block['text']}")
+            else:
+                # paragraph
+                text = ChapterExportService._strip_tags(block.get("html", ""))
+                if text:
+                    pdf.set_font("NanumGothic", "", 10)
+                    pdf.multi_cell(content_w, 6, text)
+                    pdf.ln(2)
+
+        return bytes(pdf.output())
+
+    # ---- DOCX ----
+
+    @staticmethod
+    def export_chapter_docx(content_html: str, title: str = "") -> bytes:
+        """챕터 본문을 DOCX로 내보내기"""
+        doc = Document()
+
+        if title:
+            t = doc.add_heading(title, level=0)
+            t.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        blocks = ChapterExportService._parse_html_blocks(content_html)
+
+        for block in blocks:
+            if block["type"] == "heading":
+                level = min(block["level"], 4)  # docx heading max 9, 4가 적절
+                doc.add_heading(block["text"], level=level)
+            elif block["type"] == "list_item":
+                doc.add_paragraph(block["text"], style="List Bullet")
+            else:
+                # paragraph — bold / italic 인라인 서식 처리
+                inner = block.get("html", "")
+                para = doc.add_paragraph()
+                ChapterExportService._add_formatted_runs(para, inner)
+
+        buf = io.BytesIO()
+        doc.save(buf)
+        return buf.getvalue()
+
+    @staticmethod
+    def _add_formatted_runs(para, html: str):
+        """HTML inline 서식(bold, italic)을 docx run으로 변환"""
+        # <strong>/<b> → bold, <em>/<i> → italic, 나머지 → normal
+        # 간단한 토큰 분리
+        token_pat = re.compile(
+            r"(</?(?:strong|b|em|i|u)>|<br\s*/?>)", re.IGNORECASE
+        )
+        parts = token_pat.split(html)
+
+        bold = False
+        italic = False
+        underline = False
+
+        for part in parts:
+            lower = part.lower().strip()
+            if lower in ("<strong>", "<b>"):
+                bold = True
+                continue
+            elif lower in ("</strong>", "</b>"):
+                bold = False
+                continue
+            elif lower in ("<em>", "<i>"):
+                italic = True
+                continue
+            elif lower in ("</em>", "</i>"):
+                italic = False
+                continue
+            elif lower in ("<u>",):
+                underline = True
+                continue
+            elif lower in ("</u>",):
+                underline = False
+                continue
+            elif lower.startswith("<br"):
+                run = para.add_run("\n")
+                continue
+
+            # 나머지 태그 제거
+            text = re.sub(r"<[^>]+>", "", part)
+            text = text.replace("&nbsp;", " ").replace("&amp;", "&")
+            text = text.replace("&lt;", "<").replace("&gt;", ">")
+            text = text.replace("&quot;", '"')
+            if not text:
+                continue
+
+            run = para.add_run(text)
+            run.bold = bold
+            run.italic = italic
+            run.underline = underline
+            run.font.size = Pt(11)

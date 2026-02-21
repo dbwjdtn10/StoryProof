@@ -864,3 +864,83 @@
         background-color: rgba(181, 137, 0, 0);
     }
 }
+
+/* Chapter Export Button & Dropdown */
+.chapter-export-wrapper {
+    position: relative;
+}
+
+.chapter-export-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--background);
+    color: var(--foreground);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.chapter-export-btn:hover {
+    background: var(--secondary);
+    border-color: var(--primary);
+    color: var(--primary);
+}
+
+.chapter-export-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.chapter-export-dropdown {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 4px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 100;
+    min-width: 160px;
+    overflow: hidden;
+}
+
+/* Dark Mode */
+[data-theme="dark"] .chapter-export-btn {
+    background: #262626;
+    border-color: #444444;
+    color: #e0e0e0;
+}
+
+[data-theme="dark"] .chapter-export-btn:hover {
+    background: #333333;
+    border-color: #fafaf9;
+    color: #fafaf9;
+}
+
+[data-theme="dark"] .chapter-export-dropdown {
+    background: #262626;
+    border-color: #444444;
+}
+
+/* Sepia Mode */
+[data-theme="sepia"] .chapter-export-btn {
+    background: #fdf6e3;
+    border-color: rgba(107, 79, 58, 0.2);
+    color: #311900;
+}
+
+[data-theme="sepia"] .chapter-export-btn:hover {
+    background: rgba(107, 79, 58, 0.08);
+    border-color: var(--botanical-brown-rich);
+    color: var(--botanical-brown-rich);
+}
+
+[data-theme="sepia"] .chapter-export-dropdown {
+    background: #fdf6e3;
+    border-color: rgba(107, 79, 58, 0.2);
+}

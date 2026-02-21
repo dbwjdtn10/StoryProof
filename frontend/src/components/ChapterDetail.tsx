@@ -7,7 +7,7 @@ import { ReaderToolbar } from './ReaderToolbar';
 import { FloatingMenu } from './FloatingMenu';
 import { ThemeToggle } from './ThemeToggle';
 import { Settings } from './Settings';
-import { getChapter, getChapters, getStoryboardStatus, updateChapter, getChapterBible, reanalyzeChapter, exportBible, BibleData, Chapter, ChapterListItem, Character, Item, Location } from '../api/novel';
+import { getChapter, getChapters, getStoryboardStatus, updateChapter, getChapterBible, reanalyzeChapter, exportBible, exportChapter, BibleData, Chapter, ChapterListItem, Character, Item, Location } from '../api/novel';
 import { API_BASE_URL } from '../api/client';
 import { AnalysisSidebar, AnalysisResult } from './AnalysisSidebar';
 import { PredictionSidebar, Message } from './predictions/PredictionSidebar';
@@ -56,6 +56,11 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
     const [isExporting, setIsExporting] = useState(false);
     const exportDropdownRef = useRef<HTMLDivElement>(null);
     const searchDebounceRef = useRef<ReturnType<typeof setTimeout>>();
+
+    // Chapter export (본문 내보내기)
+    const [isChapterExportOpen, setIsChapterExportOpen] = useState(false);
+    const [isChapterExporting, setIsChapterExporting] = useState(false);
+    const chapterExportRef = useRef<HTMLDivElement>(null);
 
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [isImageGenerating, setIsImageGenerating] = useState(false);
@@ -807,7 +812,27 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
         };
     }, [isExportDropdownOpen]);
 
-    const highlightMatch = (text: string, query: string, maxLen: number = 80): JSX.Element => {
+    // Close chapter export dropdown on outside click or Escape
+    useEffect(() => {
+        const handleClick = (e: MouseEvent) => {
+            if (chapterExportRef.current && !chapterExportRef.current.contains(e.target as Node)) {
+                setIsChapterExportOpen(false);
+            }
+        };
+        const handleKey = (e: KeyboardEvent) => {
+            if (e.key === 'Escape' && isChapterExportOpen) {
+                setIsChapterExportOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClick);
+        document.addEventListener('keydown', handleKey);
+        return () => {
+            document.removeEventListener('mousedown', handleClick);
+            document.removeEventListener('keydown', handleKey);
+        };
+    }, [isChapterExportOpen]);
+
+    const highlightMatch =(text: string, query: string, maxLen: number = 80): JSX.Element => {
         if (!query) return <span>{text.length > maxLen ? text.slice(0, maxLen) + '...' : text}</span>;
         const lowerText = text.toLowerCase();
         const idx = lowerText.indexOf(query.toLowerCase());
@@ -840,6 +865,20 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
             toast.error('내보내기에 실패했습니다.');
         } finally {
             setIsExporting(false);
+        }
+    };
+
+    const handleChapterExport = async (format: 'txt' | 'pdf' | 'docx') => {
+        if (!novelId || !chapterId) return;
+        setIsChapterExporting(true);
+        setIsChapterExportOpen(false);
+        try {
+            await exportChapter(novelId, chapterId, format);
+            toast.success(`${format.toUpperCase()} 파일이 다운로드되었습니다.`);
+        } catch (error) {
+            toast.error('내보내기에 실패했습니다.');
+        } finally {
+            setIsChapterExporting(false);
         }
     };
 
@@ -1040,6 +1079,29 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                             <Save size={18} />
                             {isSaving ? '저장 중...' : '저장'}
                         </button>
+                        <div className="chapter-export-wrapper" ref={chapterExportRef}>
+                            <button
+                                className="chapter-export-btn"
+                                onClick={() => setIsChapterExportOpen(!isChapterExportOpen)}
+                                disabled={isChapterExporting}
+                                title="본문 내보내기"
+                            >
+                                <Download size={16} />
+                            </button>
+                            {isChapterExportOpen && (
+                                <div className="chapter-export-dropdown">
+                                    <button onClick={() => handleChapterExport('txt')} className="export-dropdown-item">
+                                        <FileText size={14} /> TXT (텍스트)
+                                    </button>
+                                    <button onClick={() => handleChapterExport('pdf')} className="export-dropdown-item">
+                                        <FileIcon size={14} /> PDF
+                                    </button>
+                                    <button onClick={() => handleChapterExport('docx')} className="export-dropdown-item">
+                                        <FileIcon size={14} /> DOCX (워드)
+                                    </button>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 )}
             </div>

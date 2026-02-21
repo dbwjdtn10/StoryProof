@@ -194,6 +194,45 @@ export const mergeChapters = async (novelId: number, targetId: number, sourceIds
     });
 };
 
+export const exportChapter = async (
+    novelId: number,
+    chapterId: number,
+    format: 'txt' | 'pdf' | 'docx'
+): Promise<void> => {
+    const params = new URLSearchParams({ format });
+
+    const token = localStorage.getItem('token');
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const response = await fetch(`${API_BASE_URL}/novels/${novelId}/chapters/${chapterId}/export?${params}`, {
+        method: 'GET',
+        headers,
+    });
+
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Export failed');
+    }
+
+    const disposition = response.headers.get('Content-Disposition') || '';
+    let filename = `chapter_${chapterId}.${format}`;
+    const filenameMatch = disposition.match(/filename\*=UTF-8''(.+?)(?:;|$)/);
+    if (filenameMatch) {
+        filename = decodeURIComponent(filenameMatch[1]);
+    }
+
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+};
+
 export const exportBible = async (
     novelId: number,
     chapterId: number,

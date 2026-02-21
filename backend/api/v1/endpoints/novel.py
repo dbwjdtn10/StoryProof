@@ -13,7 +13,7 @@ from backend.db.session import get_db
 from backend.core.security import get_current_user
 from backend.services.novel_service import NovelService
 from backend.services.analysis_service import AnalysisService
-from backend.services.export_service import BibleExportService
+from backend.services.export_service import BibleExportService, ChapterExportService
 from backend.schemas.novel_schema import (
     NovelCreate, NovelUpdate, NovelResponse, NovelListResponse,
     ChapterResponse, ChapterListItem, ChapterUpdate, ChapterMergeRequest
@@ -189,6 +189,50 @@ def get_storyboard_status(
         "message": chapter.storyboard_message,
         "error": chapter.storyboard_error
     }
+
+@router.get("/{novel_id}/chapters/{chapter_id}/export")
+def export_chapter(
+    novel_id: int,
+    chapter_id: int,
+    format: str = Query(..., pattern="^(txt|pdf|docx)$"),
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """챕터 본문을 TXT/PDF/DOCX 파일로 내보내기"""
+    is_admin = _is_admin(current_user)
+    chapter = NovelService.get_chapter(db, novel_id, chapter_id, current_user.id, is_admin)
+    novel = NovelService.get_novel(db, novel_id, current_user.id)
+
+    content_html = chapter.content or ""
+    chapter_title = getattr(chapter, "title", "") or ""
+    novel_title = getattr(novel, "title", "") or ""
+    display_title = f"{novel_title} - {chapter_title}" if novel_title and chapter_title else chapter_title or novel_title
+
+    if format == "txt":
+        content_bytes = ChapterExportService.export_chapter_txt(content_html, display_title)
+        media_type = "text/plain; charset=utf-8"
+        ext = "txt"
+    elif format == "pdf":
+        content_bytes = ChapterExportService.export_chapter_pdf(content_html, display_title)
+        media_type = "application/pdf"
+        ext = "pdf"
+    else:
+        content_bytes = ChapterExportService.export_chapter_docx(content_html, display_title)
+        media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        ext = "docx"
+
+    safe_title = "".join(c for c in chapter_title if c.isalnum() or c in " _-").strip()[:30]
+    display_name = f"{safe_title}.{ext}" if safe_title else f"chapter_{chapter_id}.{ext}"
+    ascii_fallback = f"chapter_{chapter_id}.{ext}"
+    encoded_name = quote(display_name)
+
+    return Response(
+        content=content_bytes,
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f'attachment; filename="{ascii_fallback}"; filename*=UTF-8\'\'{encoded_name}'
+        },
+    )
 
 @router.get("/{novel_id}/chapters/{chapter_id}/bible/export")
 def export_bible(
