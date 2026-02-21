@@ -1,6 +1,4 @@
-import axios from 'axios';
-
-const API_BASE_URL = `${window.location.protocol}//${window.location.host}/api/v1`;
+import { request as apiRequest, API_BASE_URL } from './client';
 
 export interface ChatQuestionRequest {
     question: string;
@@ -23,19 +21,18 @@ export interface ChatAnswerResponse {
     found_context: boolean;
 }
 
-export const askQuestion = async (request: ChatQuestionRequest): Promise<ChatAnswerResponse> => {
-    const response = await axios.post<ChatAnswerResponse>(
-        `${API_BASE_URL}/chat/ask`,
-        {
-            question: request.question,
-            novel_id: request.novel_id,
-            chapter_id: request.chapter_id,
-            novel_filter: request.novel_filter,
-            alpha: request.alpha ?? 0.32,
-            similarity_threshold: request.similarity_threshold ?? 0.5
-        }
-    );
-    return response.data;
+export const askQuestion = async (req: ChatQuestionRequest): Promise<ChatAnswerResponse> => {
+    return apiRequest<ChatAnswerResponse>('/chat/ask', {
+        method: 'POST',
+        body: JSON.stringify({
+            question: req.question,
+            novel_id: req.novel_id,
+            chapter_id: req.chapter_id,
+            novel_filter: req.novel_filter,
+            alpha: req.alpha ?? 0.32,
+            similarity_threshold: req.similarity_threshold ?? 0.5,
+        }),
+    });
 };
 
 export interface StreamMeta {

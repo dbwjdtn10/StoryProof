@@ -2,9 +2,7 @@
  * 설정파괴 분석 API 클라이언트
  */
 
-import axios from 'axios';
-
-import { API_BASE_URL } from './client';
+import { request } from './client';
 
 export interface ConsistencyRequest {
     novel_id: number;
@@ -42,30 +40,32 @@ export interface PredictionResult {
  * 설정 파괴 분석 캐시 조회
  */
 export async function getCachedConsistency(novelId: number, chapterId: number): Promise<{ cached: boolean; result: any }> {
-    const response = await axios.get(`${API_BASE_URL}/analysis/consistency/${novelId}/${chapterId}`);
-    return response.data;
+    return request<{ cached: boolean; result: any }>(`/analysis/consistency/${novelId}/${chapterId}`);
 }
 
 /**
  * 설정 일관성 검사 요청
  */
 export async function requestConsistencyCheck(data: ConsistencyRequest): Promise<{ task_id: string; status: string }> {
-    const response = await axios.post(`${API_BASE_URL}/analysis/consistency`, data);
-    return response.data;
+    return request<{ task_id: string; status: string }>('/analysis/consistency', {
+        method: 'POST',
+        body: JSON.stringify(data),
+    });
 }
 
 /**
  * 작업 결과 조회
  */
 export async function getTaskResult(taskId: string): Promise<ConsistencyResult> {
-    const response = await axios.get(`${API_BASE_URL}/analysis/task/${taskId}`);
-    return response.data;
+    return request<ConsistencyResult>(`/analysis/task/${taskId}`);
 }
 
 /**
  * 스토리 예측 요청
  */
 export async function requestPrediction(data: PredictionRequest): Promise<PredictionResult> {
-    const response = await axios.post(`${API_BASE_URL}/analysis/prediction`, data);
-    return response.data;
+    return request<PredictionResult>('/analysis/prediction', {
+        method: 'POST',
+        body: JSON.stringify(data),
+    });
 }

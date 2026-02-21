@@ -14,6 +14,12 @@ export async function request<T>(endpoint: string, options?: RequestInit): Promi
     });
 
     if (!response.ok) {
+        if (response.status === 401) {
+            localStorage.removeItem('token');
+            localStorage.removeItem('userMode');
+            window.location.href = '/';
+            throw new Error('인증이 만료되었습니다. 다시 로그인해주세요.');
+        }
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.detail || `API request failed: ${response.statusText}`);
     }

@@ -4,15 +4,16 @@ Story Prediction API Endpoints
 - 대화 히스토리 DB 저장/조회/삭제
 """
 
-from fastapi import APIRouter, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from celery.result import AsyncResult
 
 from backend.worker.celery_app import celery_app
 from backend.worker.prediction_tasks import predict_story_task
+from backend.core.security import get_current_user
 from backend.db.session import get_db
-from backend.db.models import Analysis, AnalysisType, AnalysisStatus
+from backend.db.models import Analysis, AnalysisType, AnalysisStatus, Novel
 
 router = APIRouter()
 
@@ -22,13 +23,29 @@ class PredictionRequest(BaseModel):
     text: str
 
 
+def _verify_novel_access(db: Session, novel_id: int, user_id: int):
+    """소설 존재 여부 및 소유권 확인"""
+    novel = db.query(Novel).filter(Novel.id == novel_id).first()
+    if not novel:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="소설을 찾을 수 없습니다.")
+    if novel.author_id != user_id and not novel.is_public:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="권한이 없습니다.")
+    return novel
+
+
 @router.post("/request", status_code=status.HTTP_202_ACCEPTED)
-def request_prediction(request: PredictionRequest, db: Session = Depends(get_db)):
+def request_prediction(
+    request: PredictionRequest,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """
     스토리 예측 요청 (비동기 Celery)
 
     Analysis 레코드를 생성하고 Celery 작업으로 비동기 처리합니다.
     """
+    _verify_novel_access(db, request.novel_id, current_user.id)
+
     analysis = Analysis(
         novel_id=request.novel_id,
         chapter_id=None,
@@ -57,13 +74,19 @@ async def get_prediction_task_status(task_id: str):
 
 
 @router.get("/history/{novel_id}")
-def get_prediction_history(novel_id: int, db: Session = Depends(get_db)):
+def get_prediction_history(
+    novel_id: int,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """
     해당 소설의 prediction 대화 이력 조회
 
     COMPLETED 상태의 prediction Analysis 레코드를 시간순으로 반환합니다.
     각 레코드의 result에 user_input과 prediction이 포함됩니다.
     """
+    _verify_novel_access(db, novel_id, current_user.id)
+
     analyses = db.query(Analysis).filter(
         Analysis.novel_id == novel_id,
         Analysis.analysis_type == AnalysisType.PREDICTION,
@@ -83,10 +106,16 @@ def get_prediction_history(novel_id: int, db: Session = Depends(get_db)):
 
 
 @router.delete("/history/{novel_id}")
-def clear_prediction_history(novel_id: int, db: Session = Depends(get_db)):
+def clear_prediction_history(
+    novel_id: int,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """
     해당 소설의 prediction 대화 이력 삭제
     """
+    _verify_novel_access(db, novel_id, current_user.id)
+
     deleted = db.query(Analysis).filter(
         Analysis.novel_id == novel_id,
         Analysis.analysis_type == AnalysisType.PREDICTION,
