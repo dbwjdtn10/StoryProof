@@ -71,7 +71,7 @@ export function PredictionSidebar({ isOpen, onClose, messages, onSendMessage, is
                 height: '850px',
                 backgroundColor: 'var(--modal-bg)',
                 boxShadow: '0 8px 32px rgba(0,0,0,0.15)',
-                zIndex: 900,
+                zIndex: 1000,
                 display: 'flex',
                 flexDirection: 'column',
                 borderRadius: '16px',

@@ -107,7 +107,6 @@ function ChatMessageItem({ msg, onNavigateToScene, chapterId }: { msg: Message, 
                                 <div>
                                     <strong>출처:</strong> {msg.source.filename}
                                     {msg.source.scene_index !== undefined && ` (Scene ${msg.source.scene_index + 1})`}
-                                    {` (유사도: ${(msg.similarity! * 100).toFixed(1)}%)`}
                                 </div>
                                 {msg.source.summary && (
                                     <div style={{

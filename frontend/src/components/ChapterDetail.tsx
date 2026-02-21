@@ -1,4 +1,4 @@
-import { ArrowLeft, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Users, Package, Clock, Save, MapPin, Search, Download, FileText, File as FileIcon, X } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Users, Package, Clock, Save, MapPin, Search, Download, FileText, File as FileIcon, X, Link2 } from 'lucide-react';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { Editor } from '@tiptap/react';
 import { NovelEditor } from './NovelEditor';
@@ -36,6 +36,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
     const [isItemsOpen, setIsItemsOpen] = useState(false);
     const [isLocationsOpen, setIsLocationsOpen] = useState(false);
     const [isKeyEventsOpen, setIsKeyEventsOpen] = useState(false);
+    const [isRelationshipsOpen, setIsRelationshipsOpen] = useState(false);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
     const [content, setContent] = useState("");
@@ -774,6 +775,18 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
         );
     }, [key_events, bibleQuery]);
 
+    const relationships = useMemo(() => bibleData?.relationships || [], [bibleData]);
+
+    const filteredRelationships = useMemo(() => {
+        if (!bibleQuery) return relationships;
+        return relationships.filter((r: any) =>
+            (r.source || '').toLowerCase().includes(bibleQuery) ||
+            (r.target || '').toLowerCase().includes(bibleQuery) ||
+            (r.relation || '').toLowerCase().includes(bibleQuery) ||
+            (r.description || '').toLowerCase().includes(bibleQuery)
+        );
+    }, [relationships, bibleQuery]);
+
     const matchingScenes = useMemo(() => {
         if (!bibleQuery || !bibleData?.scenes) return [];
         return bibleData.scenes.filter(s =>
@@ -1307,13 +1320,23 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                                         key={index}
                                         className="section-item interactable"
                                         onClick={() => setSelectedItem(item)}
-                                        style={{ cursor: 'pointer' }}
+                                        style={{ cursor: 'pointer', display: 'flex', alignItems: 'flex-start', gap: '8px' }}
                                     >
-                                        <div className="item-name">{item.name}</div>
-                                        <div className="item-description">
-                                            {typeof (item as any).description === 'string' && (item as any).description
-                                                ? (item as any).description
-                                                : `첫 등장: ${(item as any).first_appearance + 1}씬`}
+                                        <span style={{
+                                            minWidth: '22px', height: '22px', borderRadius: '50%',
+                                            backgroundColor: 'var(--primary, #4F46E5)', color: '#fff',
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            fontSize: '0.7rem', fontWeight: 'bold', flexShrink: 0, marginTop: '2px'
+                                        }}>{index + 1}</span>
+                                        <div style={{ flex: 1 }}>
+                                            <div className="item-name">{item.name}</div>
+                                            <div className="item-description">
+                                                {typeof (item as any).significance === 'string' && (item as any).significance
+                                                    ? (item as any).significance
+                                                    : typeof (item as any).description === 'string' && (item as any).description
+                                                        ? (item as any).description
+                                                        : `첫 등장: ${(item as any).first_appearance + 1}씬`}
+                                            </div>
                                         </div>
                                     </div>
                                 ))}
@@ -1355,6 +1378,41 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                             </div>
                         )}
                     </div>
+                    {/* Relationships Section */}
+                    {relationships.length > 0 && (
+                    <div className="sidebar-section">
+                        <button
+                            className={`section-header ${isRelationshipsOpen ? 'active' : ''}`}
+                            onClick={() => setIsRelationshipsOpen(!isRelationshipsOpen)}
+                        >
+                            <div className="section-header-content">
+                                <Link2 size={18} />
+                                <h3 className="section-title">인물 관계 {bibleQuery && `(${filteredRelationships.length})`}</h3>
+                            </div>
+                            {isRelationshipsOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                        </button>
+                        {isRelationshipsOpen && (
+                            <div className="section-content">
+                                {filteredRelationships.length === 0 && bibleQuery ? (
+                                    <div style={{ padding: '10px', fontSize: '12px', color: '#999' }}>매칭 결과 없음</div>
+                                ) : filteredRelationships.map((rel: any, index: number) => (
+                                    <div key={index} className="section-item">
+                                        <div className="item-name" style={{ fontSize: '0.9rem' }}>
+                                            {rel.source} → {rel.target}
+                                        </div>
+                                        <div className="item-description">
+                                            <span className="trait-tag">{rel.relation || '관계'}</span>
+                                            {rel.description && (
+                                                <span style={{ marginLeft: '6px' }}>{rel.description.length > 40 ? rel.description.slice(0, 40) + '...' : rel.description}</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                    )}
+
                     {/* Key Events Section */}
                     <div className="sidebar-section">
                         <button
@@ -1394,7 +1452,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                     </div>
 
                     {/* Dynamic Sections for Extra Keys */}
-                    {bibleData && Object.keys(bibleData).filter(key => !['characters', 'items', 'timeline', 'locations', 'key_events', 'scenes'].includes(key)).map(key => {
+                    {bibleData && Object.keys(bibleData).filter(key => !['characters', 'items', 'timeline', 'locations', 'key_events', 'scenes', 'relationships', 'chapter_id'].includes(key)).map(key => {
                         const data = bibleData[key];
                         if (!Array.isArray(data)) return null;
 
