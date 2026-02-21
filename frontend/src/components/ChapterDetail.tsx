@@ -62,6 +62,10 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
     const [isChapterExporting, setIsChapterExporting] = useState(false);
     const chapterExportRef = useRef<HTMLDivElement>(null);
 
+    // Polling cleanup refs
+    const analysisPollingRef = useRef<ReturnType<typeof setTimeout>>();
+    const predictionPollingRef = useRef<ReturnType<typeof setTimeout>>();
+
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [isImageGenerating, setIsImageGenerating] = useState(false);
 
@@ -207,6 +211,14 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
             if (timerId) clearTimeout(timerId);
         };
     }, [chapterStatus, novelId, chapterId]);
+
+    // Cleanup all polling timers on unmount
+    useEffect(() => {
+        return () => {
+            if (analysisPollingRef.current) clearTimeout(analysisPollingRef.current);
+            if (predictionPollingRef.current) clearTimeout(predictionPollingRef.current);
+        };
+    }, []);
 
     const loadChapterContent = async () => {
         if (!novelId || !chapterId) {
@@ -463,9 +475,9 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                     return;
                 }
                 pollInterval = Math.min(pollInterval * 1.5, 15000);
-                setTimeout(pollTask, pollInterval);
+                analysisPollingRef.current = setTimeout(pollTask, pollInterval);
             };
-            setTimeout(pollTask, pollInterval);
+            analysisPollingRef.current = setTimeout(pollTask, pollInterval);
         } catch (error) {
             console.error("Analysis error:", error);
             setAnalysisResult({ status: "오류 발생", message: "서버와 통신 중 오류가 발생했습니다." });
@@ -553,11 +565,15 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                         setChatMessages(prev => [...prev, newBotMsg]);
                         setIsPredictionLoading(false);
 
-                        if (Notification.permission === "granted" && document.hidden) {
-                            new Notification("StoryProof 답변 도착", {
-                                body: "챗봇이 응답했습니다.",
-                                icon: "/favicon.ico"
-                            });
+                        if (document.hidden && 'Notification' in window) {
+                            if (Notification.permission === "granted") {
+                                new Notification("StoryProof 답변 도착", {
+                                    body: "챗봇이 응답했습니다.",
+                                    icon: "/favicon.ico"
+                                });
+                            } else if (Notification.permission === "default") {
+                                Notification.requestPermission();
+                            }
                         }
                         return;
                     } else if (data.status === "FAILED") {
@@ -569,9 +585,9 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                     // Continue polling
                 }
                 predPollInterval = Math.min(predPollInterval * 1.5, 15000);
-                setTimeout(pollPrediction, predPollInterval);
+                predictionPollingRef.current = setTimeout(pollPrediction, predPollInterval);
             };
-            setTimeout(pollPrediction, predPollInterval);
+            predictionPollingRef.current = setTimeout(pollPrediction, predPollInterval);
 
         } catch (error) {
             setIsPredictionLoading(false);
@@ -1141,6 +1157,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                                 className="bible-search-input"
                                 placeholder="바이블 검색..."
                                 value={bibleSearchInput}
+                                maxLength={100}
                                 onChange={(e) => setBibleSearchInput(e.target.value)}
                             />
                             {bibleSearchInput && (

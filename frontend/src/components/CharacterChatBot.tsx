@@ -248,6 +248,7 @@ function RoomList({ novelId, chapterId, onSelectRoom }: RoomListProps) {
             setRooms(data);
         } catch (error) {
             console.error("Failed to fetch rooms:", error);
+            toast.error("채팅방 목록을 불러오지 못했습니다.");
         } finally {
             setLoading(false);
         }
@@ -375,6 +376,7 @@ function ChatRoom({ room }: ChatRoomProps) {
             scrollToBottom();
         } catch (error) {
             console.error("Failed to fetch messages:", error);
+            toast.error("메시지 기록을 불러오지 못했습니다.");
         }
     };
 

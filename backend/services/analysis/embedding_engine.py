@@ -25,6 +25,8 @@ _global_kiwi = None
 _global_bm25_map = {}  # novel_id -> BM25Okapi
 _global_bm25_dirty = set()  # lazy rebuild 대상 novel_id
 _global_corpus_indices_map = {}  # novel_id -> doc_id list
+_global_bm25_access = {}  # novel_id -> last access timestamp (LRU eviction용)
+_BM25_CACHE_MAX_SIZE = 20  # 최대 캐시 소설 수
 _bm25_lock = threading.Lock()  # BM25 캐시 동시 접근 보호
 
 # EmbeddingSearchEngine 싱글톤
@@ -105,16 +107,18 @@ class EmbeddingSearchEngine:
         특정 소설(novel_id)의 BM25 인덱스 초기화 (Global Singleton Map 사용)
         dirty 플래그가 설정된 경우 강제 재구축합니다.
         """
-        global _global_bm25_map, _global_corpus_indices_map, _global_bm25_dirty
+        global _global_bm25_map, _global_corpus_indices_map, _global_bm25_dirty, _global_bm25_access
 
         with _bm25_lock:
             # dirty 플래그가 있으면 기존 캐시 삭제 후 재구축
             if novel_id in _global_bm25_dirty:
                 _global_bm25_map.pop(novel_id, None)
                 _global_corpus_indices_map.pop(novel_id, None)
+                _global_bm25_access.pop(novel_id, None)
                 _global_bm25_dirty.discard(novel_id)
 
             if novel_id in _global_bm25_map:
+                _global_bm25_access[novel_id] = time.time()
                 return
 
         logger.info(f"Building BM25 Index for Novel {novel_id} (with Kiwi POS filtering)...")
@@ -142,10 +146,19 @@ class EmbeddingSearchEngine:
                 corpus_indices.append(doc.vector_id)
 
             with _bm25_lock:
+                # LRU 캐시 eviction: 최대 크기 초과 시 가장 오래된 항목 제거
+                if len(_global_bm25_map) >= _BM25_CACHE_MAX_SIZE:
+                    oldest_id = min(_global_bm25_access, key=_global_bm25_access.get)
+                    _global_bm25_map.pop(oldest_id, None)
+                    _global_corpus_indices_map.pop(oldest_id, None)
+                    _global_bm25_access.pop(oldest_id, None)
+                    logger.info(f"BM25 cache evicted novel_id={oldest_id} (LRU)")
+
                 if corpus:
                     bm25 = BM25Okapi(corpus)
                     _global_bm25_map[novel_id] = bm25
                     _global_corpus_indices_map[novel_id] = corpus_indices
+                    _global_bm25_access[novel_id] = time.time()
                     logger.info(f"BM25 Index built for Novel {novel_id} with {len(corpus)} documents")
                 else:
                     logger.warning(f"No documents found for BM25 (Novel {novel_id})")
@@ -566,7 +579,7 @@ class EmbeddingSearchEngine:
             for match, parent_vector_id in unique_matches:
                 doc = doc_map.get(parent_vector_id)
                 if doc:
-                    scene_data = doc.metadata_json
+                    scene_data = dict(doc.metadata_json or {})
                     scene_data['matched_chunk'] = match.metadata.get('text', '')
                     scene_data['similarity'] = match.score
                     hits.append({
@@ -621,7 +634,7 @@ class EmbeddingSearchEngine:
                     VectorDocument.vector_id == parent_vector_id
                 ).first()
                 if doc and doc.metadata_json:
-                    scene_data = doc.metadata_json
+                    scene_data = dict(doc.metadata_json)
                     # BM25 점수를 0~1 범위로 정규화
                     max_score = float(np.max(scores)) if np.max(scores) > 0 else 1.0
                     norm_score = float(scores[idx]) / max_score
