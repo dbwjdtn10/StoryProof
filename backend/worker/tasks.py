@@ -415,7 +415,7 @@ def detect_inconsistency_task(self, novel_id: int, text_fragment: str, chapter_i
             except Exception as db_exc:
                 logger.warning(f"설정 일관성 검사 실패 DB 상태 업데이트 중 오류: {db_exc}")
         logger.error(f"설정 일관성 검사 실패: {exc}")
-        raise self.retry(exc=exc, countdown=30)
+        raise self.retry(exc=exc, countdown=min(30 * (2 ** self.request.retries), 300))
     finally:
         if db:
             db.close()

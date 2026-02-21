@@ -105,8 +105,8 @@ class Chapter(Base):
     __tablename__ = "chapters"
     
     id = Column(Integer, primary_key=True, index=True)
-    novel_id = Column(Integer, ForeignKey("novels.id"), nullable=False)
-    
+    novel_id = Column(Integer, ForeignKey("novels.id"), nullable=False, index=True)
+
     chapter_number = Column(Integer, nullable=False)
     title = Column(String(255), nullable=False)
     content = Column(Text, nullable=False)
@@ -137,9 +137,9 @@ class Analysis(Base):
     __tablename__ = "analyses"
     
     id = Column(Integer, primary_key=True, index=True)
-    novel_id = Column(Integer, ForeignKey("novels.id"), nullable=False)
-    chapter_id = Column(Integer, ForeignKey("chapters.id"), nullable=True)
-    
+    novel_id = Column(Integer, ForeignKey("novels.id"), nullable=False, index=True)
+    chapter_id = Column(Integer, ForeignKey("chapters.id"), nullable=True, index=True)
+
     analysis_type = Column(Enum(AnalysisType, values_callable=lambda obj: [e.value for e in obj]), nullable=False)
     status = Column(Enum(AnalysisStatus, values_callable=lambda obj: [e.value for e in obj]), default=AnalysisStatus.PENDING)
     
@@ -194,9 +194,9 @@ class VectorDocument(Base):
     __tablename__ = "vector_documents"
     
     id = Column(Integer, primary_key=True, index=True)
-    novel_id = Column(Integer, ForeignKey("novels.id"), nullable=False)
-    chapter_id = Column(Integer, ForeignKey("chapters.id"), nullable=True)
-    
+    novel_id = Column(Integer, ForeignKey("novels.id"), nullable=False, index=True)
+    chapter_id = Column(Integer, ForeignKey("chapters.id"), nullable=True, index=True)
+
     # Pinecone 벡터 ID
     vector_id = Column(String(255), unique=True, index=True, nullable=False)
     
@@ -220,9 +220,9 @@ class CharacterChatRoom(Base):
     __tablename__ = "character_chat_rooms"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    novel_id = Column(Integer, ForeignKey("novels.id"), nullable=False)
-    chapter_id = Column(Integer, ForeignKey("chapters.id"), nullable=True) # 파일(챕터) 단위 채팅방을 위해 추가
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    novel_id = Column(Integer, ForeignKey("novels.id"), nullable=False, index=True)
+    chapter_id = Column(Integer, ForeignKey("chapters.id"), nullable=True, index=True)
     
     character_name = Column(String(100), nullable=False)
     persona_prompt = Column(Text, nullable=False) # 페르소나 시스템 프롬프트
@@ -244,8 +244,8 @@ class CharacterChatMessage(Base):
     __tablename__ = "character_chat_messages"
 
     id = Column(Integer, primary_key=True, index=True)
-    room_id = Column(Integer, ForeignKey("character_chat_rooms.id"), nullable=False)
-    
+    room_id = Column(Integer, ForeignKey("character_chat_rooms.id"), nullable=False, index=True)
+
     role = Column(String(20), nullable=False) # 'user', 'assistant'
     content = Column(Text, nullable=False)
     

@@ -122,6 +122,8 @@ async def generate_entity_image(
     # 5. Generate Image
     # Filename: novel_{id}_{type}_{name}_{timestamp}.png
     safe_name = "".join(c for c in request.entity_name if c.isalnum() or c in (' ', '_', '-')).strip().replace(' ', '_')
+    if not safe_name:
+        raise HTTPException(status_code=400, detail="entity_name에 유효한 문자가 없습니다.")
     timestamp = int(time.time())
     filename = f"novel_{request.novel_id}_{request.entity_type}_{safe_name}_{timestamp}.png"
 

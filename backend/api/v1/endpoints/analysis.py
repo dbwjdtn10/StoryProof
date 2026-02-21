@@ -13,9 +13,10 @@ from datetime import datetime
 from backend.worker.tasks import detect_inconsistency_task
 from backend.worker.celery_app import celery_app
 from backend.core.config import settings
+from backend.core.security import get_current_user
 from backend.schemas.analysis_schema import ConsistencyRequest
 from backend.db.session import get_db
-from backend.db.models import Analysis, AnalysisType, AnalysisStatus
+from backend.db.models import Analysis, AnalysisType, AnalysisStatus, Novel
 
 router = APIRouter()
 
@@ -23,12 +24,22 @@ router = APIRouter()
 # ===== 설정 파괴 분석 - 캐시 조회 =====
 
 @router.get("/consistency/{novel_id}/{chapter_id}")
-def get_cached_consistency(novel_id: int, chapter_id: int, db: Session = Depends(get_db)):
+def get_cached_consistency(
+    novel_id: int,
+    chapter_id: int,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """
     설정 파괴 분석 캐시 조회
 
     DB에서 가장 최근 COMPLETED 결과를 반환합니다.
     """
+    # 소설 소유권 확인
+    novel = db.query(Novel).filter(Novel.id == novel_id).first()
+    if not novel or (novel.author_id != current_user.id and not novel.is_public):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="권한이 없습니다.")
+
     analysis = db.query(Analysis).filter(
         Analysis.novel_id == novel_id,
         Analysis.chapter_id == chapter_id,
@@ -44,7 +55,11 @@ def get_cached_consistency(novel_id: int, chapter_id: int, db: Session = Depends
 # ===== 설정 파괴 분석 =====
 
 @router.post("/consistency", status_code=status.HTTP_202_ACCEPTED)
-def request_consistency(request: ConsistencyRequest, db: Session = Depends(get_db)):
+def request_consistency(
+    request: ConsistencyRequest,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """
     설정 파괴 분석 비동기 요청
 

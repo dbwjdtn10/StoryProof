@@ -343,8 +343,12 @@ class NovelService:
         Raises:
             HTTPException: 지원하지 않는 인코딩인 경우
         """
+        # 파일 크기 제한 (10MB)
+        MAX_FILE_SIZE = 10 * 1024 * 1024
         raw_data = await file.read()
-        
+        if len(raw_data) > MAX_FILE_SIZE:
+            raise HTTPException(status_code=413, detail="파일 크기가 10MB를 초과합니다.")
+
         # 1. chardet으로 감지
         result = chardet.detect(raw_data)
         if result['confidence'] > 0.7 and result['encoding']:
