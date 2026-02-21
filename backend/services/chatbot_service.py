@@ -293,6 +293,19 @@ class ChatbotService:
             question=question, alpha=alpha, similarity_threshold=similarity_threshold,
             novel_id=novel_id, chapter_id=chapter_id, novel_filter=novel_filter
         )
+        # Iterative Retrieval: 결과는 있지만 best_similarity < 임계값이면 쿼리 재구성 후 재검색
+        if top_chunks and top_chunks[0].get('similarity', 0.0) < settings.ITERATIVE_RETRIEVAL_THRESHOLD:
+            best_sim = top_chunks[0]['similarity']
+            logger.info(f"[IterativeRetrieval][Stream] best_similarity={best_sim:.4f} < {settings.ITERATIVE_RETRIEVAL_THRESHOLD} → 쿼리 재구성 시도")
+            reformulated = self._reformulate_query(question)
+            if reformulated != question:
+                retry_chunks = self.hybrid_search(
+                    question=reformulated, alpha=alpha, similarity_threshold=similarity_threshold,
+                    novel_id=novel_id, chapter_id=chapter_id, novel_filter=novel_filter
+                )
+                top_chunks = self._merge_and_deduplicate(top_chunks, retry_chunks, settings.SEARCH_DEFAULT_TOP_K)
+                new_best = top_chunks[0]['similarity'] if top_chunks else 0.0
+                logger.info(f"[IterativeRetrieval][Stream] 병합 후 best_similarity: {best_sim:.4f} → {new_best:.4f}")
         if not top_chunks:
             lowered = max(similarity_threshold - 0.1, 0.0)
             fallback_kw = self._extract_keywords(question)
@@ -422,6 +435,56 @@ class ChatbotService:
             logger.warning(f"[Warning] Keyword Extraction Failed: {e}")
             return text.split()
 
+    def _reformulate_query(self, question: str) -> str:
+        """
+        검색 결과가 낮은 신뢰도일 때, 소설 텍스트에 실제 등장할 법한 표현으로 쿼리를 재구성합니다.
+        _generate_multi_queries()와 달리 1개의 쿼리만 생성하며, 원본 검색이 실패한 이유를 고려합니다.
+        """
+        if not self.client:
+            return question
+
+        prompt = f"""소설 검색 시스템에서 다음 질문으로 검색했으나 관련 장면을 찾지 못했습니다.
+소설 원문에 실제로 등장할 법한 표현, 장면 묘사, 대사 패턴으로 검색 쿼리를 재구성해주세요.
+
+[원본 질문]
+"{question}"
+
+[재구성 규칙]
+- 추상적/분석적 표현 → 구체적 장면 묘사로 변환
+- 메타적 질문(예: "주제가 뭐야") → 관련 장면에서 나올 법한 키워드/상황으로 변환
+- 인물의 감정이나 행동을 묻는 경우 → 해당 감정/행동이 드러나는 장면 묘사로 변환
+- 쿼리 1개만 출력, 설명 없이 쿼리만 출력
+
+재구성된 쿼리:"""
+
+        try:
+            response = self.client.models.generate_content(
+                model=settings.GEMINI_CHAT_MODEL,
+                contents=prompt,
+                config={'temperature': 0.4, 'max_output_tokens': 150}
+            )
+            reformulated = response.text.strip().strip('"').strip()
+            if len(reformulated) > 3:
+                logger.info(f"[IterativeRetrieval] Query reformulated: '{question}' → '{reformulated}'")
+                return reformulated
+            return question
+        except Exception as e:
+            logger.warning(f"[IterativeRetrieval] Query reformulation failed: {e}")
+            return question
+
+    def _merge_and_deduplicate(self, chunks1: List[Dict], chunks2: List[Dict], top_k: int) -> List[Dict]:
+        """
+        두 검색 결과를 (chapter_id, scene_index) 기준으로 중복 제거하고 병합합니다.
+        동일 청크는 유사도 최대값을 보존합니다.
+        """
+        merged: Dict[tuple, Dict] = {}
+        for chunk in chunks1 + chunks2:
+            key = (chunk.get('chapter_id'), chunk.get('scene_index'))
+            if key not in merged or chunk['similarity'] > merged[key]['similarity']:
+                merged[key] = chunk
+        sorted_results = sorted(merged.values(), key=lambda x: x['similarity'], reverse=True)
+        return sorted_results[:top_k]
+
     def hybrid_search(
         self,
         question: str,
@@ -441,7 +504,7 @@ class ChatbotService:
 
         # 짧은 질문 바이패스: 단순 질문은 multi-query 스킵하여 Gemini 호출 절약
         words = question.strip().split()
-        if len(question) < 20 and len(words) <= 4:
+        if len(question) < 10 and len(words) <= 2:
             logger.info(f"[MultiQuery] Skipped (short question): '{question}'")
             keywords = self._extract_keywords(question)
             return self.find_similar_chunks(
@@ -520,7 +583,25 @@ class ChatbotService:
             novel_filter=novel_filter
         )
 
-        # 2. 결과 없으면 임계값을 낮춰 원본 쿼리로 재시도 (키워드 포함)
+        # 2. Iterative Retrieval: 결과는 있지만 best_similarity < 임계값이면 쿼리 재구성 후 재검색
+        if top_chunks and top_chunks[0].get('similarity', 0.0) < settings.ITERATIVE_RETRIEVAL_THRESHOLD:
+            best_sim = top_chunks[0]['similarity']
+            logger.info(f"[IterativeRetrieval] best_similarity={best_sim:.4f} < {settings.ITERATIVE_RETRIEVAL_THRESHOLD} → 쿼리 재구성 시도")
+            reformulated = self._reformulate_query(question)
+            if reformulated != question:
+                retry_chunks = self.hybrid_search(
+                    question=reformulated,
+                    alpha=alpha,
+                    similarity_threshold=similarity_threshold,
+                    novel_id=novel_id,
+                    chapter_id=chapter_id,
+                    novel_filter=novel_filter
+                )
+                top_chunks = self._merge_and_deduplicate(top_chunks, retry_chunks, settings.SEARCH_DEFAULT_TOP_K)
+                new_best = top_chunks[0]['similarity'] if top_chunks else 0.0
+                logger.info(f"[IterativeRetrieval] 병합 후 best_similarity: {best_sim:.4f} → {new_best:.4f}")
+
+        # 3. 결과 없으면 임계값을 낮춰 원본 쿼리로 재시도 (키워드 포함)
         if not top_chunks:
             lowered_threshold = max(similarity_threshold - 0.1, 0.0)
             logger.warning(f"하이브리드 검색 결과 없음. 임계값 {similarity_threshold}→{lowered_threshold}으로 원본 쿼리 재시도")
@@ -537,7 +618,7 @@ class ChatbotService:
                 original_query=question
             )
 
-        # 3. 여전히 유사한 스토리보드가 없는 경우
+        # 4. 여전히 유사한 스토리보드가 없는 경우
         if not top_chunks:
             error_msg = "죄송합니다. 관련 내용을 찾을 수 없습니다."
             if not self.engine:
@@ -552,7 +633,7 @@ class ChatbotService:
                 "found_context": False
             }
         
-        # 4. 컨텍스트 생성 (상위 청크 텍스트 결합)
+        # 5. 컨텍스트 생성 (상위 청크 텍스트 결합)
         context_texts = []
         for i, chunk in enumerate(top_chunks):
             # 씬 번호나 요약이 있으면 포함
@@ -566,7 +647,7 @@ class ChatbotService:
         
         context = "\n\n".join(context_texts)
         
-        # 4. LLM으로 답변 생성 (Method C: 바이블 주입)
+        # 6. LLM으로 답변 생성 (Method C: 바이블 주입)
         bible_summary = ""
         if db and novel_id:
             try:
