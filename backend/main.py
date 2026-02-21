@@ -11,7 +11,13 @@ from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 from fastapi.staticfiles import StaticFiles
 import os
+import logging
 import threading
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+)
 
 # ... (Previous imports)
 from backend.api.v1.endpoints import auth, novel, chat, analysis, prediction, character_chat, images
