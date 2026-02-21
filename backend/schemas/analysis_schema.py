@@ -38,6 +38,13 @@ class ConsistencyRequest(BaseModel):
     text: str
 
 
+class ChapterAnalysisRequest(BaseModel):
+    """회차 분석 요청 (플롯/문체/종합)"""
+    novel_id: int
+    chapter_id: int
+    analysis_type: str = Field(..., description="분석 유형: plot, style, overall")
+
+
 class PredictionRequest(BaseModel):
     """스토리 예측 요청"""
     novel_id: int

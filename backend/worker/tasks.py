@@ -222,25 +222,114 @@ def process_chapter_storyboard(novel_id: int, chapter_id: int):
                 logger.debug(f"임시 파일 삭제 실패 (무시): {cleanup_exc}")
 
 
-# @celery_app.task(bind=True, max_retries=3)
-def analyze_chapter_task(self, analysis_id: int, chapter_id: int, analysis_type: str) -> Dict[str, Any]:
+def _build_overall_analysis(plot_result: dict, style_result: dict) -> dict:
+    """플롯 + 문체 분석 결과를 종합 분석 결과로 병합."""
+    plot_score = plot_result.get("evaluation", {}).get("score", 0)
+    style_score = style_result.get("evaluation", {}).get("score", 0)
+    overall_score = round((plot_score + style_score) / 2)
+
+    strengths = (
+        plot_result.get("evaluation", {}).get("strengths", []) +
+        style_result.get("evaluation", {}).get("strengths", [])
+    )
+    weaknesses = (
+        plot_result.get("evaluation", {}).get("weaknesses", []) +
+        style_result.get("evaluation", {}).get("weaknesses", [])
+    )
+    suggestions = (
+        plot_result.get("evaluation", {}).get("suggestions", []) +
+        style_result.get("evaluation", {}).get("suggestions", [])
+    )
+
+    return {
+        "plot": plot_result,
+        "style": style_result,
+        "evaluation": {
+            "strengths": strengths,
+            "weaknesses": weaknesses,
+            "suggestions": suggestions,
+            "score": overall_score,
+        },
+    }
+
+
+@celery_app.task(name="analyze_chapter_task", bind=True, max_retries=3)
+def analyze_chapter_task(self, analysis_id: int, novel_id: int, chapter_id: int, analysis_type: str) -> Dict[str, Any]:
     """
-    회차 분석 비동기 작업
-    
+    회차 분석 비동기 작업 (플롯/문체/종합)
+
     Args:
         self: Celery task 인스턴스
-        analysis_id: 분석 ID
+        analysis_id: Analysis 레코드 ID
+        novel_id: 소설 ID
         chapter_id: 회차 ID
-        analysis_type: 분석 유형
-        
+        analysis_type: 분석 유형 ('plot', 'style', 'overall')
+
     Returns:
         Dict: 분석 결과
     """
-    # TODO: 분석 상태 업데이트
-    # TODO: 회차 텍스트 조회
-    # TODO: AI 엔진으로 분석 수행
-    # TODO: 결과 저장
-    pass
+    db = None
+    try:
+        from backend.db.models import Analysis, AnalysisStatus
+        db = SessionLocal()
+
+        # 1. 상태 → PROCESSING
+        analysis = db.query(Analysis).filter(Analysis.id == analysis_id).first()
+        if analysis:
+            analysis.status = AnalysisStatus.PROCESSING
+            db.commit()
+
+        # 2. 챕터 텍스트 조회
+        chapter = db.query(Chapter).filter(Chapter.id == chapter_id).first()
+        novel = db.query(Novel).filter(Novel.id == novel_id).first()
+        if not chapter:
+            raise ValueError(f"Chapter {chapter_id} not found")
+
+        input_text = chapter.content
+        custom_prompt = novel.custom_prompt if novel else None
+
+        # 3. 에이전트로 분석 수행
+        from backend.services.agent import get_consistency_agent
+        agent = get_consistency_agent()
+
+        if analysis_type == "plot":
+            result = agent.analyze_plot(novel_id, input_text, custom_prompt=custom_prompt)
+        elif analysis_type == "style":
+            result = agent.analyze_style(novel_id, input_text, custom_prompt=custom_prompt)
+        elif analysis_type == "overall":
+            plot_result = agent.analyze_plot(novel_id, input_text, custom_prompt=custom_prompt)
+            style_result = agent.analyze_style(novel_id, input_text, custom_prompt=custom_prompt)
+            result = _build_overall_analysis(plot_result, style_result)
+        else:
+            raise ValueError(f"Unknown analysis_type: {analysis_type}")
+
+        # 4. 결과 저장
+        analysis = db.query(Analysis).filter(Analysis.id == analysis_id).first()
+        if analysis:
+            analysis.status = AnalysisStatus.COMPLETED
+            analysis.result = result
+            analysis.completed_at = datetime.utcnow()
+            db.commit()
+
+        return result
+    except Exception as exc:
+        if analysis_id:
+            try:
+                if not db:
+                    db = SessionLocal()
+                from backend.db.models import Analysis, AnalysisStatus
+                analysis = db.query(Analysis).filter(Analysis.id == analysis_id).first()
+                if analysis:
+                    analysis.status = AnalysisStatus.FAILED
+                    analysis.error_message = str(exc)
+                    db.commit()
+            except Exception as db_exc:
+                logger.warning(f"분석 실패 DB 상태 업데이트 중 오류: {db_exc}")
+        logger.error(f"회차 분석 실패 ({analysis_type}): {exc}", exc_info=True)
+        raise self.retry(exc=exc, countdown=min(30 * (2 ** self.request.retries), 300))
+    finally:
+        if db:
+            db.close()
 
 
 # ===== 벡터 스토어 작업 =====
@@ -388,7 +477,16 @@ def detect_inconsistency_task(self, novel_id: int, text_fragment: str, chapter_i
                 db.commit()
 
         from backend.services.agent import get_consistency_agent
-        result = get_consistency_agent().check_consistency(novel_id, text_fragment)
+        # 소설의 커스텀 프롬프트 조회
+        custom_prompt = None
+        try:
+            if not db:
+                db = SessionLocal()
+            novel = db.query(Novel).filter(Novel.id == novel_id).first()
+            custom_prompt = novel.custom_prompt if novel else None
+        except Exception:
+            pass
+        result = get_consistency_agent().check_consistency(novel_id, text_fragment, custom_prompt=custom_prompt)
 
         # DB 상태 업데이트: COMPLETED + 결과 저장
         if analysis_id and db:

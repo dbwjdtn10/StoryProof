@@ -10,11 +10,11 @@ from sqlalchemy.orm import Session
 from celery.result import AsyncResult
 from datetime import datetime
 
-from backend.worker.tasks import detect_inconsistency_task
+from backend.worker.tasks import detect_inconsistency_task, analyze_chapter_task
 from backend.worker.celery_app import celery_app
 from backend.core.config import settings
 from backend.core.security import get_current_user
-from backend.schemas.analysis_schema import ConsistencyRequest
+from backend.schemas.analysis_schema import ConsistencyRequest, ChapterAnalysisRequest
 from backend.db.session import get_db
 from backend.db.models import Analysis, AnalysisType, AnalysisStatus, Novel
 
@@ -100,3 +100,86 @@ async def get_task_result(task_id: str):
     elif result.state == 'FAILURE':
         return {"status": "FAILED", "error": str(result.info)}
     return {"status": "PROCESSING"}
+
+
+# ===== 회차 분석 (플롯/문체/종합) =====
+
+@router.post("/chapter-analysis", status_code=status.HTTP_202_ACCEPTED)
+def request_chapter_analysis(
+    request: ChapterAnalysisRequest,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    회차 분석 비동기 요청 (플롯/문체/종합)
+
+    Analysis 레코드를 생성하고 Celery 작업으로 비동기 처리합니다.
+    """
+    # 소설 소유권 확인
+    novel = db.query(Novel).filter(Novel.id == request.novel_id).first()
+    if not novel or (novel.author_id != current_user.id and not novel.is_public):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="권한이 없습니다.")
+
+    # analysis_type 매핑
+    type_map = {
+        "plot": AnalysisType.PLOT,
+        "style": AnalysisType.STYLE,
+        "overall": AnalysisType.OVERALL,
+    }
+    db_type = type_map.get(request.analysis_type)
+    if not db_type:
+        raise HTTPException(status_code=400, detail=f"지원하지 않는 분석 유형: {request.analysis_type}")
+
+    analysis = Analysis(
+        novel_id=request.novel_id,
+        chapter_id=request.chapter_id,
+        analysis_type=db_type,
+        status=AnalysisStatus.PENDING,
+    )
+    db.add(analysis)
+    db.commit()
+    db.refresh(analysis)
+
+    task = analyze_chapter_task.delay(
+        analysis.id, request.novel_id, request.chapter_id, request.analysis_type
+    )
+    return {"task_id": task.id, "status": "PENDING", "analysis_id": analysis.id}
+
+
+@router.get("/chapter-analysis/{novel_id}/{chapter_id}/{analysis_type}")
+def get_cached_chapter_analysis(
+    novel_id: int,
+    chapter_id: int,
+    analysis_type: str,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    회차 분석 캐시 조회
+
+    DB에서 가장 최근 COMPLETED 결과를 반환합니다.
+    """
+    novel = db.query(Novel).filter(Novel.id == novel_id).first()
+    if not novel or (novel.author_id != current_user.id and not novel.is_public):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="권한이 없습니다.")
+
+    type_map = {
+        "plot": AnalysisType.PLOT,
+        "style": AnalysisType.STYLE,
+        "overall": AnalysisType.OVERALL,
+        "consistency": AnalysisType.CONSISTENCY,
+    }
+    db_type = type_map.get(analysis_type)
+    if not db_type:
+        raise HTTPException(status_code=400, detail=f"지원하지 않는 분석 유형: {analysis_type}")
+
+    analysis = db.query(Analysis).filter(
+        Analysis.novel_id == novel_id,
+        Analysis.chapter_id == chapter_id,
+        Analysis.analysis_type == db_type,
+        Analysis.status == AnalysisStatus.COMPLETED,
+    ).order_by(Analysis.completed_at.desc()).first()
+
+    if analysis:
+        return {"cached": True, "result": analysis.result}
+    return {"cached": False, "result": None}

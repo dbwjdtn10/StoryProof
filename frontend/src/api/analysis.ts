@@ -11,17 +11,25 @@ export interface ConsistencyRequest {
 }
 
 export interface ConsistencyResult {
-    status: 'SUCCESS' | 'FAILED' | 'PENDING' | 'PROCESSING';
+    status: 'COMPLETED' | 'FAILED' | 'PENDING' | 'PROCESSING';
     result?: {
         status: '설정 파괴 감지' | '설정 일치';
         results: Array<{
             type: '설정 충돌' | '개연성 경고';
+            severity?: '치명적' | '주의' | '참고';
             quote: string;
+            evidence?: string;
             description: string;
             suggestion: string;
         }>;
     };
     error?: string;
+}
+
+export interface ChapterAnalysisRequest {
+    novel_id: number;
+    chapter_id: number;
+    analysis_type: 'plot' | 'style' | 'overall' | 'consistency';
 }
 
 export interface PredictionRequest {
@@ -68,4 +76,21 @@ export async function requestPrediction(data: PredictionRequest): Promise<Predic
         method: 'POST',
         body: JSON.stringify(data),
     });
+}
+
+/**
+ * 회차 분석 요청 (플롯/문체/종합)
+ */
+export async function requestChapterAnalysis(data: ChapterAnalysisRequest): Promise<{ task_id: string; status: string; analysis_id: number }> {
+    return request<{ task_id: string; status: string; analysis_id: number }>('/analysis/chapter-analysis', {
+        method: 'POST',
+        body: JSON.stringify(data),
+    });
+}
+
+/**
+ * 회차 분석 캐시 조회
+ */
+export async function getCachedChapterAnalysis(novelId: number, chapterId: number, analysisType: string): Promise<{ cached: boolean; result: any }> {
+    return request<{ cached: boolean; result: any }>(`/analysis/chapter-analysis/${novelId}/${chapterId}/${analysisType}`);
 }

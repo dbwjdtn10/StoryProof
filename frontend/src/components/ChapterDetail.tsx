@@ -7,13 +7,12 @@ import { ReaderToolbar } from './ReaderToolbar';
 import { FloatingMenu } from './FloatingMenu';
 import { ThemeToggle } from './ThemeToggle';
 import { Settings } from './Settings';
-import { getChapter, getChapters, getStoryboardStatus, updateChapter, getChapterBible, reanalyzeChapter, exportBible, exportChapter, BibleData, Chapter, ChapterListItem, Character, Item, Location } from '../api/novel';
-import { API_BASE_URL } from '../api/client';
+import { getChapter, getChapters, getStoryboardStatus, updateChapter, getChapterBible, reanalyzeChapter, exportBible, exportChapter, BibleData, ChapterListItem, Character, Item, Location } from '../api/novel';
 import { AnalysisSidebar, AnalysisResult } from './AnalysisSidebar';
 import { RelationshipGraphModal } from './RelationshipGraph';
 import { PredictionSidebar, Message } from './predictions/PredictionSidebar';
 import { requestPrediction, getPredictionTaskStatus, getPredictionHistory, clearPredictionHistory } from '../api/prediction';
-import { getCachedConsistency } from '../api/analysis';
+import { getCachedConsistency, requestConsistencyCheck, getTaskResult, requestChapterAnalysis, getCachedChapterAnalysis } from '../api/analysis';
 import { toast } from 'sonner';
 import { generateImage } from '../api/images';
 import { useTheme } from '../contexts/ThemeContext';
@@ -118,7 +117,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
     // 1. Sync globalTheme -> readerSettings.theme (when global toggle is clicked)
     useEffect(() => {
         if (mode === 'reader' && readerSettings.theme !== globalTheme) {
-            setReaderSettings(prev => ({ ...prev, theme: globalTheme }));
+            setReaderSettings((prev: any) => ({ ...prev, theme: globalTheme }));
         }
     }, [globalTheme, mode]);
 
@@ -287,6 +286,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
     const [isAnalysisSidebarOpen, setIsAnalysisSidebarOpen] = useState(false);
     const [isAnalysisLoading, setIsAnalysisLoading] = useState(false);
     const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
+    const [currentAnalysisType, setCurrentAnalysisType] = useState<string>('consistency');
 
 
     const [selectedLocation, setSelectedLocation] = useState<any | null>(null);
@@ -422,35 +422,35 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
         }, 100);
     };
 
-    // 설정 파괴 분석 실행 (캐시 확인 → 없으면 새 분석)
-    const runConsistencyAnalysis = async () => {
+    // 통합 회차 분석 실행 (consistency/plot/style/overall)
+    const runChapterAnalysis = async (analysisType: string) => {
         setIsAnalysisLoading(true);
         setAnalysisResult(null);
+        setCurrentAnalysisType(analysisType);
 
         try {
-            const allText = sceneTexts.length > 0
-                ? sceneTexts.join('\n\n')
-                : content;
+            let task_id: string;
 
-            const token = localStorage.getItem('token');
-            const response = await fetch(`${API_BASE_URL}/analysis/consistency`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-                },
-                body: JSON.stringify({
-                    novel_id: novelId,
+            if (analysisType === 'consistency') {
+                const allText = sceneTexts.length > 0
+                    ? sceneTexts.join('\n\n')
+                    : content;
+                const res = await requestConsistencyCheck({
+                    novel_id: novelId!,
                     chapter_id: chapterId,
                     text: allText
-                })
-            });
+                });
+                task_id = res.task_id;
+            } else {
+                const res = await requestChapterAnalysis({
+                    novel_id: novelId!,
+                    chapter_id: chapterId!,
+                    analysis_type: analysisType as any
+                });
+                task_id = res.task_id;
+            }
 
-            if (!response.ok) throw new Error('분석 요청 실패');
-
-            const { task_id } = await response.json();
-
-            // 지수 백오프 폴링 (2초 시작, ×1.5, 최대 15초, 최대 60회)
+            // 지수 백오프 폴링 (2초 시작, x1.5, 최대 15초, 최대 60회)
             let pollInterval = 2000;
             let pollCount = 0;
             const pollTask = async () => {
@@ -461,13 +461,10 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                     return;
                 }
                 try {
-                    const statusRes = await fetch(`${API_BASE_URL}/analysis/task/${task_id}`, {
-                        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
-                    });
-                    const data = await statusRes.json();
+                    const data = await getTaskResult(task_id);
 
                     if (data.status === "COMPLETED") {
-                        setAnalysisResult(data.result);
+                        setAnalysisResult(data.result as any);
                         setIsAnalysisLoading(false);
                         toast.success("분석이 완료되었습니다.");
                         return;
@@ -494,16 +491,20 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
         }
     };
 
-    const handleCheckConsistency = async () => {
+    const handleAnalyze = async (analysisType: string = 'consistency') => {
         setIsAnalysisSidebarOpen(true);
         setIsPredictionSidebarOpen(false);
+        setCurrentAnalysisType(analysisType);
         onCloseCharacterChat?.();
 
         // 캐시 확인
         if (novelId && chapterId) {
             try {
                 setIsAnalysisLoading(true);
-                const cache = await getCachedConsistency(novelId, chapterId);
+                const cacheEndpoint = analysisType === 'consistency'
+                    ? getCachedConsistency(novelId, chapterId)
+                    : getCachedChapterAnalysis(novelId, chapterId, analysisType);
+                const cache = await cacheEndpoint;
                 if (cache.cached && cache.result) {
                     setAnalysisResult(cache.result);
                     setIsAnalysisLoading(false);
@@ -514,7 +515,25 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
             }
         }
 
-        await runConsistencyAnalysis();
+        await runChapterAnalysis(analysisType);
+    };
+
+    const handleApplySuggestion = (original: string, suggestion: string) => {
+        if (sceneTexts.length > 0) {
+            const newSceneTexts = sceneTexts.map(scene => scene.replace(original, suggestion));
+            setSceneTexts(newSceneTexts);
+            setHasUnsavedChanges(true);
+            toast.success("제안이 적용되었습니다.");
+        } else {
+            const newContent = content.replace(original, suggestion);
+            if (newContent !== content) {
+                setContent(newContent);
+                setHasUnsavedChanges(true);
+                toast.success("제안이 적용되었습니다.");
+            } else {
+                toast.error("해당 문장을 본문에서 찾을 수 없습니다.");
+            }
+        }
     };
 
     const handlePredictionSidebarOpen = async () => {
@@ -2353,7 +2372,9 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                 result={analysisResult}
                 isLoading={isAnalysisLoading}
                 onNavigateToQuote={handleNavigateToQuote}
-                onReanalyze={runConsistencyAnalysis}
+                onReanalyze={() => runChapterAnalysis(currentAnalysisType)}
+                onApplySuggestion={handleApplySuggestion}
+                analysisType={currentAnalysisType}
             />
 
             {/* 스토리 예측 사이드바 */}
@@ -2372,7 +2393,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
             {/* Floating Menu - Settings, Analysis, Prediction, Chatbot */}
             <FloatingMenu
                 onNavigateToScene={scrollToScene}
-                onCheckConsistency={handleCheckConsistency}
+                onAnalyze={handleAnalyze}
                 onPredictStory={handlePredictStoryTrigger}
                 onOpenCharacterChat={onOpenCharacterChat}
                 onOpenSettings={handleOpenSettings}

@@ -138,7 +138,7 @@ class StoryConsistencyAgent:
         except Exception:
             return []
 
-    def check_consistency(self, novel_id: int, input_text: str) -> dict:
+    def check_consistency(self, novel_id: int, input_text: str, custom_prompt: str = None) -> dict:
         """
         설정 일관성 검사
 
@@ -149,11 +149,13 @@ class StoryConsistencyAgent:
         """
         relevant_context, summary, bible_block = self._fetch_enriched_context(novel_id, input_text)
 
+        custom_block = f"\n\n[작가 지시사항]:\n{custom_prompt}" if custom_prompt else ""
+
         from backend.core.prompts import STORY_GUARD_SYSTEM_PROMPT
         prompt = f"""{STORY_GUARD_SYSTEM_PROMPT}
 
 [기존 설정]:
-{relevant_context}{bible_block}
+{relevant_context}{bible_block}{custom_block}
 
 [요약]:
 {summary}
@@ -210,6 +212,72 @@ class StoryConsistencyAgent:
             logger.error(f"스토리 예측 실패: {e}")
             return {"prediction": f"예측 생성 중 오류가 발생했습니다: {str(e)}"}
     
+    def analyze_plot(self, novel_id: int, input_text: str, custom_prompt: str = None) -> dict:
+        """
+        플롯 구조 분석
+
+        주어진 텍스트의 플롯 구조, 갈등, 전개 속도, 복선을 분석합니다.
+        """
+        relevant_context, summary, bible_block = self._fetch_enriched_context(novel_id, input_text[:500])
+
+        custom_block = f"\n\n[작가 지시사항]:\n{custom_prompt}" if custom_prompt else ""
+
+        from backend.core.prompts import PLOT_ANALYSIS_SYSTEM_PROMPT
+        prompt = f"""{PLOT_ANALYSIS_SYSTEM_PROMPT}
+
+[기존 설정]:
+{relevant_context}{bible_block}{custom_block}
+
+[요약]:
+{summary}
+
+[분석 대상 텍스트]:
+{input_text}"""
+
+        try:
+            response = self.client.models.generate_content(
+                model=settings.GEMINI_STRUCTURING_MODEL,
+                contents=prompt,
+                config={'temperature': 0.1, 'response_mime_type': 'application/json'}
+            )
+            return self._parse_json_response(response.text)
+        except Exception as e:
+            logger.error(f"플롯 분석 실패: {e}")
+            return {"error": str(e)}
+
+    def analyze_style(self, novel_id: int, input_text: str, custom_prompt: str = None) -> dict:
+        """
+        문체 분석
+
+        주어진 텍스트의 어조, 문장 구조, 어휘, 서술 시점을 분석합니다.
+        """
+        relevant_context, summary, bible_block = self._fetch_enriched_context(novel_id, input_text[:500])
+
+        custom_block = f"\n\n[작가 지시사항]:\n{custom_prompt}" if custom_prompt else ""
+
+        from backend.core.prompts import STYLE_ANALYSIS_SYSTEM_PROMPT
+        prompt = f"""{STYLE_ANALYSIS_SYSTEM_PROMPT}
+
+[기존 설정]:
+{relevant_context}{bible_block}{custom_block}
+
+[요약]:
+{summary}
+
+[분석 대상 텍스트]:
+{input_text}"""
+
+        try:
+            response = self.client.models.generate_content(
+                model=settings.GEMINI_STRUCTURING_MODEL,
+                contents=prompt,
+                config={'temperature': 0.1, 'response_mime_type': 'application/json'}
+            )
+            return self._parse_json_response(response.text)
+        except Exception as e:
+            logger.error(f"문체 분석 실패: {e}")
+            return {"error": str(e)}
+
     def _format_search_results(self, search_results: list) -> str:
         """
         검색 결과를 텍스트로 포맷팅
