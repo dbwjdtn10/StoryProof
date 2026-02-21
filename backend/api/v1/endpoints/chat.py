@@ -44,7 +44,12 @@ def ask_question(
     3. 검색된 컨텍스트를 바탕으로 Gemini가 답변 생성
     4. (Method C) novel_id가 있으면 바이블 요약을 LLM 프롬프트에 주입
     """
+    import logging, time
+    logger = logging.getLogger(__name__)
+    logger.warning(f"[CHAT] /ask called: q='{request.question}', novel_id={request.novel_id}")
+    t0 = time.time()
     chatbot = get_chatbot_service()
+    logger.warning(f"[CHAT] chatbot service obtained in {time.time()-t0:.1f}s")
     result = chatbot.ask(
         question=request.question,
         alpha=request.alpha,
@@ -54,6 +59,7 @@ def ask_question(
         novel_filter=request.novel_filter,
         db=db
     )
+    logger.warning(f"[CHAT] ask() completed in {time.time()-t0:.1f}s")
     return ChatAnswerResponse(**result)
 
 
