@@ -2394,7 +2394,8 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                 characters={bibleData?.characters?.map((c: any) => ({
                     name: c.name,
                     description: c.description,
-                    traits: c.traits
+                    traits: c.traits,
+                    appearance_count: c.appearance_count
                 })) || []}
             />
         </div >
