@@ -258,7 +258,17 @@ export const AuthorToolbar = ({ editor, onOpenSettings }: AuthorToolbarProps) =>
                 <button
                     onClick={() => {
                         const url = window.prompt('이미지 URL을 입력하세요');
-                        if (url) editor?.chain().focus().setImage({ src: url }).run();
+                        if (!url) return;
+                        try {
+                            const parsed = new URL(url);
+                            if (!['http:', 'https:'].includes(parsed.protocol)) {
+                                alert('http 또는 https URL만 허용됩니다.');
+                                return;
+                            }
+                            editor?.chain().focus().setImage({ src: url }).run();
+                        } catch {
+                            alert('유효한 URL을 입력해주세요.');
+                        }
                     }}
                     title="사진 삽입"
                     disabled={!editor}

@@ -112,6 +112,7 @@ function CreateRoomModal({ novelId, chapterId, onClose, onCreated, onUpdated, in
                             value={characterName}
                             onChange={(e) => setCharacterName(e.target.value)}
                             placeholder="예: 셜록 홈즈"
+                            maxLength={100}
                             style={{
                                 width: '100%', padding: '12px', borderRadius: '8px',
                                 border: '1px solid var(--input-border)',
@@ -171,6 +172,7 @@ function CreateRoomModal({ novelId, chapterId, onClose, onCreated, onUpdated, in
                         <textarea
                             value={personaPrompt}
                             onChange={(e) => setPersonaPrompt(e.target.value)}
+                            maxLength={2000}
                             style={{
                                 flex: 1,
                                 width: '100%',

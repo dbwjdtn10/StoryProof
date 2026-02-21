@@ -81,9 +81,12 @@ export default function App() {
   const [agreeToTerms, setAgreeToTerms] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
+    setIsSubmitting(true);
 
     try {
       const tokenResponse = await login({ email, password });
@@ -112,11 +115,14 @@ export default function App() {
     } catch (error) {
       console.error("Login failed:", error);
       toast.error("로그인에 실패했습니다. 이메일과 비밀번호를 확인해주세요.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleSignupSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
     if (password !== confirmPassword) {
       toast.error('비밀번호가 일치하지 않습니다.');
       return;
@@ -125,6 +131,7 @@ export default function App() {
       toast.error('이용약관 및 개인정보 처리방침에 동의해주세요.');
       return;
     }
+    setIsSubmitting(true);
 
     try {
       await register({
@@ -147,6 +154,8 @@ export default function App() {
         toast.error('회원가입 중 오류가 발생했습니다.');
       }
       console.error('Signup failed:', error);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -419,8 +428,8 @@ export default function App() {
               </div>
 
               {/* Signup Button */}
-              <button type="submit" className="login-button">
-                회원가입
+              <button type="submit" className="login-button" disabled={isSubmitting}>
+                {isSubmitting ? '처리 중...' : '회원가입'}
               </button>
             </form>
 
@@ -533,8 +542,8 @@ export default function App() {
             </div>
 
             {/* Login Button */}
-            <button type="submit" className="login-button">
-              로그인
+            <button type="submit" className="login-button" disabled={isSubmitting}>
+              {isSubmitting ? '로그인 중...' : '로그인'}
             </button>
           </form>
 

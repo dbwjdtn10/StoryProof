@@ -93,7 +93,7 @@ export const askQuestionStream = async (
                 const parsed = JSON.parse(data);
                 if (parsed.type === 'meta') onMeta(parsed as StreamMeta);
                 else if (parsed.type === 'token' && parsed.text) onToken(parsed.text);
-            } catch { /* ignore parse errors */ }
+            } catch (e) { console.warn('[SSE] parse error:', data, e); }
         }
     }
     onDone();

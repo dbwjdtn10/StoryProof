@@ -131,7 +131,7 @@ export const sendMessageStream = async (
                 } else if (parsed.type === 'done') {
                     onDone({ id: parsed.ai_id, room_id: roomId, role: 'assistant', content: parsed.ai_content, created_at: parsed.created_at });
                 }
-            } catch { /* ignore parse errors */ }
+            } catch (e) { console.warn('[SSE] parse error:', data, e); }
         }
     }
 };
