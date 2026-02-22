@@ -29,37 +29,35 @@ export const AuthorToolbar = ({ editor, onOpenSettings }: AuthorToolbarProps) =>
     const handleSearch = () => {
         if (!searchValue || !editor) return;
 
-        const { doc } = editor.state;
         const query = searchValue.toLowerCase();
-        const startFrom = searchIndexRef.current;
-        let matchFrom = -1;
-        let matchTo = -1;
 
-        // 전체 텍스트에서 위치 찾기
-        doc.descendants((node, pos) => {
-            if (matchFrom >= 0) return false;
-            if (!node.isText || !node.text) return;
+        // 전체 텍스트를 연결하여 검색 (노드 경계를 넘는 검색도 지원)
+        let fullText = '';
+        const posMap: { docPos: number }[] = []; // fullText index → document position 매핑
 
-            const text = node.text.toLowerCase();
-            if (pos + node.nodeSize <= startFrom) return;
-
-            const offset = Math.max(0, startFrom - pos);
-            const idx = text.indexOf(query, offset);
-            if (idx !== -1) {
-                matchFrom = pos + idx;
-                matchTo = matchFrom + searchValue.length;
-                return false;
+        editor.state.doc.descendants((node, pos) => {
+            if (node.isText && node.text) {
+                for (let i = 0; i < node.text.length; i++) {
+                    posMap.push({ docPos: pos + i });
+                }
+                fullText += node.text.toLowerCase();
             }
         });
 
-        if (matchFrom >= 0) {
-            // 선택 + Tiptap 내장 스크롤
-            editor.chain().setTextSelection({ from: matchFrom, to: matchTo }).scrollIntoView().run();
-            searchIndexRef.current = matchTo;
-        } else if (startFrom > 0) {
-            // 끝까지 못 찾으면 처음부터 다시
-            searchIndexRef.current = 0;
-            handleSearch();
+        // startFrom 이후에서 검색
+        const startFrom = searchIndexRef.current;
+        let idx = fullText.indexOf(query, startFrom);
+
+        // 끝까지 못 찾으면 처음부터 다시 (wrap around)
+        if (idx === -1 && startFrom > 0) {
+            idx = fullText.indexOf(query, 0);
+        }
+
+        if (idx !== -1) {
+            const from = posMap[idx].docPos;
+            const to = posMap[idx + query.length - 1].docPos + 1;
+            editor.chain().focus().setTextSelection({ from, to }).scrollIntoView().run();
+            searchIndexRef.current = idx + query.length;
         }
     };
 
