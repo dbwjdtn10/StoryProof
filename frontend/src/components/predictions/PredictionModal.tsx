@@ -1,5 +1,6 @@
 
 import { useState, useEffect, useRef } from 'react';
+import { toast } from 'sonner';
 import { X, Sparkles, Send, Loader, User, Bot } from 'lucide-react';
 
 interface PredictionModalProps {
@@ -56,6 +57,7 @@ export function PredictionModal({ isOpen, onClose, onSubmit }: PredictionModalPr
             }
         } catch (error) {
             console.error("Prediction failed", error);
+            toast.error("예측 분석에 실패했습니다. 다시 시도해주세요.");
         } finally {
             setIsLoading(false);
         }

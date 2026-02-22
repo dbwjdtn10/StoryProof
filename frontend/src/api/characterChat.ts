@@ -1,4 +1,4 @@
-import { request } from './client';
+import { request, getToken } from './client';
 
 export interface CharacterChatRoom {
     id: number;
@@ -92,7 +92,7 @@ export const sendMessageStream = async (
     onToken: (text: string) => void,
     onDone: (aiMsg: CharacterChatMessage) => void
 ): Promise<void> => {
-    const token = localStorage.getItem('token');
+    const token = getToken();
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (token) headers['Authorization'] = `Bearer ${token}`;
 

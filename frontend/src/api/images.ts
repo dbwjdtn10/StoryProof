@@ -1,5 +1,4 @@
-import { request } from './client';
-// Removed invalid import
+import { request, getToken } from './client';
 
 
 // Define types for image generation
@@ -18,7 +17,7 @@ export interface ImageGenerationResponse {
 
 // Helper to get headers with auth token
 const getHeaders = (): Record<string, string> => {
-    const token = localStorage.getItem('token');
+    const token = getToken();
     const headers: Record<string, string> = {
         'Content-Type': 'application/json',
     };

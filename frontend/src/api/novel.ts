@@ -1,5 +1,5 @@
 
-import { request, API_BASE_URL } from './client';
+import { request, API_BASE_URL, getToken } from './client';
 
 export interface Novel {
     id: number;
@@ -75,7 +75,7 @@ export const uploadChapter = async (
     formData.append('chapter_number', chapterNumber.toString());
     formData.append('title', title);
 
-    const token = localStorage.getItem('token');
+    const token = getToken();
     const headers: Record<string, string> = {};
     if (token) {
         headers['Authorization'] = `Bearer ${token}`;
@@ -201,7 +201,7 @@ export const exportChapter = async (
 ): Promise<void> => {
     const params = new URLSearchParams({ format });
 
-    const token = localStorage.getItem('token');
+    const token = getToken();
     const headers: Record<string, string> = {};
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
@@ -242,7 +242,7 @@ export const exportBible = async (
     const params = new URLSearchParams({ format });
     if (search) params.append('search', search);
 
-    const token = localStorage.getItem('token');
+    const token = getToken();
     const headers: Record<string, string> = {};
     if (token) headers['Authorization'] = `Bearer ${token}`;
 

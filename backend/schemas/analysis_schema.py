@@ -35,7 +35,7 @@ class ConsistencyRequest(BaseModel):
     """설정 파괴 분석 요청"""
     novel_id: int
     chapter_id: Optional[int] = None
-    text: str
+    text: str = Field(..., max_length=100000)
 
 
 class ChapterAnalysisRequest(BaseModel):
@@ -48,7 +48,7 @@ class ChapterAnalysisRequest(BaseModel):
 class PredictionRequest(BaseModel):
     """스토리 예측 요청"""
     novel_id: int
-    text: str
+    text: str = Field(..., max_length=100000)
 
 
 # ===== 분석 요청 =====

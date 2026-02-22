@@ -1,4 +1,4 @@
-import { request as apiRequest, API_BASE_URL } from './client';
+import { request as apiRequest, API_BASE_URL, getToken } from './client';
 
 export interface ChatQuestionRequest {
     question: string;
@@ -51,7 +51,7 @@ export const askQuestionStream = async (
     onMeta: (meta: StreamMeta) => void,
     onDone: () => void
 ): Promise<void> => {
-    const token = localStorage.getItem('token');
+    const token = getToken();
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
