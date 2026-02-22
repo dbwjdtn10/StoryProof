@@ -24,47 +24,26 @@ export const AuthorToolbar = ({ editor, onOpenSettings }: AuthorToolbarProps) =>
     }, [editor]);
 
     const [searchValue, setSearchValue] = React.useState('');
-    const searchIndexRef = React.useRef(0); // 다음 검색 시작 위치
 
     const handleSearch = () => {
-        if (!searchValue || !editor) return;
+        if (!searchValue) return;
 
-        const query = searchValue.toLowerCase();
+        // 에디터에 포커스를 주어 검색 시작점을 에디터 내부로 설정
+        editor?.commands.focus();
 
-        // 전체 텍스트를 연결하여 검색 (노드 경계를 넘는 검색도 지원)
-        let fullText = '';
-        const posMap: { docPos: number }[] = []; // fullText index → document position 매핑
+        // 브라우저 네이티브 검색 (자동으로 다음 매치 + 래핑)
+        const found = (window as any).find(searchValue, false, false, true);
 
-        editor.state.doc.descendants((node, pos) => {
-            if (node.isText && node.text) {
-                for (let i = 0; i < node.text.length; i++) {
-                    posMap.push({ docPos: pos + i });
-                }
-                fullText += node.text.toLowerCase();
+        if (found) {
+            const sel = window.getSelection();
+            if (sel && sel.rangeCount > 0) {
+                const range = sel.getRangeAt(0);
+                const node = range.startContainer;
+                const el = node instanceof HTMLElement ? node : node.parentElement;
+                el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
-        });
-
-        // startFrom 이후에서 검색
-        const startFrom = searchIndexRef.current;
-        let idx = fullText.indexOf(query, startFrom);
-
-        // 끝까지 못 찾으면 처음부터 다시 (wrap around)
-        if (idx === -1 && startFrom > 0) {
-            idx = fullText.indexOf(query, 0);
-        }
-
-        if (idx !== -1) {
-            const from = posMap[idx].docPos;
-            const to = posMap[idx + query.length - 1].docPos + 1;
-            editor.chain().focus().setTextSelection({ from, to }).scrollIntoView().run();
-            searchIndexRef.current = idx + query.length;
         }
     };
-
-    // 검색어 변경 시 위치 초기화
-    React.useEffect(() => {
-        searchIndexRef.current = 0;
-    }, [searchValue]);
 
     return (
         <div className="novel-toolbar author-toolbar">
