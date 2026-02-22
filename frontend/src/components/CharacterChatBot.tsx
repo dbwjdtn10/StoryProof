@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
     X, ArrowLeft, MoreVertical, Trash2, SquarePen,
-    Plus, Send, Sparkles
+    Plus, Send, Sparkles, Loader2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -530,8 +530,9 @@ function ChatRoom({ room }: ChatRoomProps) {
                 })}
                 {loading && (
                     <div style={{ display: 'flex', justifyContent: 'flex-start', paddingLeft: '44px' }}>
-                        <div style={{ backgroundColor: 'var(--input-bg)', padding: '8px 12px', borderRadius: '12px', fontSize: '0.8rem', color: 'var(--muted-foreground)', border: '1px solid var(--border)' }}>
-                            ...
+                        <div style={{ backgroundColor: 'var(--input-bg)', padding: '10px 14px', borderRadius: '12px', fontSize: '0.8rem', color: 'var(--muted-foreground)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <Loader2 size={14} strokeWidth={2.5} style={{ animation: 'spin 1s linear infinite' }} />
+                            답변 생성 중...
                         </div>
                     </div>
                 )}
@@ -609,6 +610,15 @@ export function CharacterChatBot({ onClose, novelId, chapterId }: CharacterChatW
         };
     }, []);
 
+    // ESC 키로 모달 닫기
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') onClose();
+        };
+        document.addEventListener('keydown', handleKeyDown);
+        return () => document.removeEventListener('keydown', handleKeyDown);
+    }, [onClose]);
+
     const handleDeleteRoom = () => {
         if (!activeRoom) return;
         toast("정말로 이 대화방을 삭제하시겠습니까?", {
@@ -638,18 +648,19 @@ export function CharacterChatBot({ onClose, novelId, chapterId }: CharacterChatW
     return (
         <div className="character-chat-window" style={{
             position: 'fixed',
-            bottom: '16px',
-            right: '20px',
-            width: '600px',
-            height: '850px',
+            bottom: window.innerWidth <= 640 ? '0' : '16px',
+            right: window.innerWidth <= 640 ? '0' : '20px',
+            width: window.innerWidth <= 640 ? '100%' : '600px',
+            height: window.innerWidth <= 640 ? '100%' : '850px',
+            maxHeight: '100dvh',
             backgroundColor: 'var(--modal-bg)',
-            borderRadius: '16px',
+            borderRadius: window.innerWidth <= 640 ? '0' : '16px',
             boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
             display: 'flex',
             flexDirection: 'column',
             zIndex: 1001,
             overflow: 'hidden',
-            border: '2px solid var(--modal-border)'
+            border: window.innerWidth <= 640 ? 'none' : '2px solid var(--modal-border)'
         }}>
             {/* Header */}
             <div className="chat-header" style={{

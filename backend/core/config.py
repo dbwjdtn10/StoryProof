@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     # ===== 기본 설정 =====
     APP_NAME: str = "StoryProof"
     APP_VERSION: str = "1.0.0"
-    DEBUG: bool = True
+    DEBUG: bool = False
     ENVIRONMENT: str = "development"  # development, production, staging
     
     # ===== 서버 설정 =====

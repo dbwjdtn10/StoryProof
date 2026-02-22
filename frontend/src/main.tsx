@@ -14,6 +14,6 @@ import "./splash-screen.css";
 createRoot(document.getElementById("root")!).render(
     <ThemeProvider>
         <App />
-        <Toaster position="top-right" richColors />
+        <Toaster position="top-right" richColors closeButton />
     </ThemeProvider>
 );

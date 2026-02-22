@@ -8,7 +8,6 @@
 """
 
 import time
-from collections import defaultdict
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
@@ -25,29 +24,42 @@ router = APIRouter()
 
 # ===== Rate Limiter (IP 기반, 의존성 없음) =====
 
-_rate_store: dict = defaultdict(list)  # IP → [timestamps]
+_rate_store: dict = {}  # IP → [timestamps]
 _RATE_LIMIT = 10  # 최대 요청 수
 _RATE_WINDOW = 60  # 윈도우 (초)
+_MAX_STORE_SIZE = 1000  # 최대 IP 저장 수
+_last_cleanup = 0.0
 
 
 def _check_rate_limit(request: Request):
     """IP 기반 rate limiting — 분당 10회 초과 시 429 반환"""
+    global _last_cleanup
     ip = request.client.host if request.client else "unknown"
     now = time.time()
+
+    # 주기적 정리 (30초마다)
+    if now - _last_cleanup > 30:
+        _last_cleanup = now
+        expired = [k for k, v in _rate_store.items() if not v or now - v[-1] >= _RATE_WINDOW]
+        for k in expired:
+            del _rate_store[k]
+        # 크기 제한: 가장 오래된 항목부터 제거
+        if len(_rate_store) > _MAX_STORE_SIZE:
+            sorted_ips = sorted(_rate_store, key=lambda k: _rate_store[k][-1] if _rate_store[k] else 0)
+            for k in sorted_ips[:len(_rate_store) - _MAX_STORE_SIZE]:
+                del _rate_store[k]
+
     # 윈도우 외 기록 제거
-    _rate_store[ip] = [t for t in _rate_store[ip] if now - t < _RATE_WINDOW]
-    if len(_rate_store[ip]) >= _RATE_LIMIT:
+    timestamps = _rate_store.get(ip, [])
+    timestamps = [t for t in timestamps if now - t < _RATE_WINDOW]
+    if len(timestamps) >= _RATE_LIMIT:
+        _rate_store[ip] = timestamps
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="요청이 너무 많습니다. 잠시 후 다시 시도해주세요."
         )
-    _rate_store[ip].append(now)
-
-    # 메모리 누수 방지: 오래된 항목 정리
-    if len(_rate_store) > 10000:
-        expired_ips = [k for k, v in _rate_store.items() if not v or now - v[-1] >= _RATE_WINDOW]
-        for k in expired_ips:
-            del _rate_store[k]
+    timestamps.append(now)
+    _rate_store[ip] = timestamps
 
 
 # ===== 회원가입 =====

@@ -50,3 +50,19 @@
 .chatbot-message-bubble.user-bubble * {
     color: var(--primary-foreground) !important;
 }
+
+/* Message fade-in animation */
+.chatbot-message {
+    animation: chatFadeIn 0.3s ease;
+}
+
+@keyframes chatFadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Spinner animation (shared) */
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}

@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { X, AlertTriangle, CheckCircle, Loader2, Navigation, RefreshCw, ChevronDown, Copy, BarChart3, Pen, BookOpen } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { X, AlertTriangle, CheckCircle, Loader2, Navigation, RefreshCw, ChevronDown, Copy, BarChart3, Pen, BookOpen, ClipboardCopy } from 'lucide-react';
+import { toast } from 'sonner';
 
 /** A generic issue with description and optional suggestion */
 interface AnalysisIssue {
@@ -134,10 +135,10 @@ interface AnalysisSidebarProps {
     analysisType?: string;
 }
 
-const SEVERITY_CONFIG: Record<string, { color: string; bg: string; label: string }> = {
-    '치명적': { color: '#DC2626', bg: 'rgba(220, 38, 38, 0.1)', label: '치명적' },
-    '주의': { color: '#D97706', bg: 'rgba(217, 119, 6, 0.1)', label: '주의' },
-    '참고': { color: '#2563EB', bg: 'rgba(37, 99, 235, 0.1)', label: '참고' },
+const SEVERITY_CONFIG: Record<string, { color: string; bg: string; label: string; icon: string }> = {
+    '치명적': { color: '#DC2626', bg: 'rgba(220, 38, 38, 0.1)', label: '치명적', icon: '✗' },
+    '주의': { color: '#D97706', bg: 'rgba(217, 119, 6, 0.1)', label: '주의', icon: '⚠' },
+    '참고': { color: '#2563EB', bg: 'rgba(37, 99, 235, 0.1)', label: '참고', icon: '✓' },
 };
 
 function SeverityBadge({ severity }: { severity?: string }) {
@@ -148,7 +149,7 @@ function SeverityBadge({ severity }: { severity?: string }) {
             fontSize: '0.75rem', fontWeight: '700', padding: '2px 8px', borderRadius: '10px',
             backgroundColor: config.bg, color: config.color, marginLeft: '6px'
         }}>
-            {config.label}
+            {config.icon} {config.label}
         </span>
     );
 }
@@ -443,6 +444,16 @@ const ANALYSIS_TYPE_LABELS: Record<string, { label: string; icon: typeof AlertTr
 export function AnalysisSidebar({ isOpen, onClose, result, isLoading, isCachedResult, onNavigateToQuote, onReanalyze, onApplySuggestion, analysisType = 'consistency' }: AnalysisSidebarProps) {
     const [severityFilter, setSeverityFilter] = useState('all');
 
+    // ESC 키로 사이드바 닫기
+    useEffect(() => {
+        if (!isOpen) return;
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') onClose();
+        };
+        document.addEventListener('keydown', handleKeyDown);
+        return () => document.removeEventListener('keydown', handleKeyDown);
+    }, [isOpen, onClose]);
+
     if (!isOpen) return null;
 
     const typeConfig = ANALYSIS_TYPE_LABELS[analysisType] || ANALYSIS_TYPE_LABELS.consistency;
@@ -514,11 +525,17 @@ export function AnalysisSidebar({ isOpen, onClose, result, isLoading, isCachedRe
     return (
         <div
             style={{
-                position: 'fixed', bottom: '16px', right: '20px', width: '450px', height: '750px',
+                position: 'fixed',
+                bottom: window.innerWidth <= 640 ? '0' : '16px',
+                right: window.innerWidth <= 640 ? '0' : '20px',
+                width: window.innerWidth <= 640 ? '100%' : '450px',
+                height: window.innerWidth <= 640 ? '100%' : '750px',
+                maxHeight: '100dvh',
+                borderRadius: window.innerWidth <= 640 ? '0' : '16px',
                 backgroundColor: 'var(--modal-bg)', color: 'var(--modal-text)',
                 boxShadow: '0 8px 32px rgba(0,0,0,0.15)', zIndex: 1000,
-                display: 'flex', flexDirection: 'column', borderRadius: '16px',
-                border: '1px solid var(--modal-border)', animation: 'slideUp 0.3s ease'
+                display: 'flex', flexDirection: 'column',
+                border: window.innerWidth <= 640 ? 'none' : '1px solid var(--modal-border)', animation: 'slideUp 0.3s ease'
             }}
         >
             {/* Header */}
@@ -533,6 +550,14 @@ export function AnalysisSidebar({ isOpen, onClose, result, isLoading, isCachedRe
                     <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: '600', color: 'inherit' }}>{typeConfig.label}</h2>
                 </div>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    {result && !isLoading && (
+                        <button onClick={() => {
+                            const text = JSON.stringify(result, null, 2);
+                            navigator.clipboard.writeText(text).then(() => toast.success('분석 결과가 복사되었습니다.'));
+                        }} title="결과 복사" aria-label="결과 복사" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: 'inherit', display: 'flex', alignItems: 'center' }}>
+                            <ClipboardCopy size={18} strokeWidth={2.5} />
+                        </button>
+                    )}
                     {onReanalyze && result && !isLoading && (
                         <button onClick={onReanalyze} title="재분석" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: 'inherit', display: 'flex', alignItems: 'center' }}>
                             <RefreshCw size={18} strokeWidth={2.5} />

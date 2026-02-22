@@ -4,7 +4,7 @@
 - User, Novel, Chapter, Analysis, ChatHistory 테이블
 """
 
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Boolean, JSON, Enum
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Boolean, JSON, Enum, Index
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship, declarative_base
 from sqlalchemy.sql import func
@@ -135,7 +135,10 @@ class Chapter(Base):
 class Analysis(Base):
     """분석 결과 모델"""
     __tablename__ = "analyses"
-    
+    __table_args__ = (
+        Index('ix_analysis_novel_chapter_type_status', 'novel_id', 'chapter_id', 'analysis_type', 'status'),
+    )
+
     id = Column(Integer, primary_key=True, index=True)
     novel_id = Column(Integer, ForeignKey("novels.id"), nullable=False, index=True)
     chapter_id = Column(Integer, ForeignKey("chapters.id"), nullable=True, index=True)
@@ -164,7 +167,10 @@ class Analysis(Base):
 class ChatHistory(Base):
     """채팅 히스토리 모델"""
     __tablename__ = "chat_histories"
-    
+    __table_args__ = (
+        Index('ix_chat_user_session', 'user_id', 'session_id'),
+    )
+
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     novel_id = Column(Integer, ForeignKey("novels.id"), nullable=True)
@@ -242,6 +248,9 @@ class CharacterChatRoom(Base):
 class CharacterChatMessage(Base):
     """캐릭터 챗봇 메시지 모델"""
     __tablename__ = "character_chat_messages"
+    __table_args__ = (
+        Index('ix_char_msg_room_created', 'room_id', 'created_at'),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     room_id = Column(Integer, ForeignKey("character_chat_rooms.id"), nullable=False, index=True)

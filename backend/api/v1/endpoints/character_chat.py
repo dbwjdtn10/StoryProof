@@ -409,24 +409,16 @@ async def _perform_rag_search(
 
 def _parse_self_check_response(ai_reply: str, room_id: int, character_name: str) -> str:
     """AI 응답에서 SELF_CHECK 파싱 및 로깅 후 정제된 메시지 반환."""
-    logger.info(f"{'='*70}")
-    logger.info(f"[AI RESPONSE DEBUG] Room {room_id} | Character: {character_name}")
-    logger.info(f"Full response length: {len(ai_reply)} chars")
-    logger.info(f"Contains [SELF_CHECK]: {'[SELF_CHECK]' in ai_reply}")
-    logger.info(f"{'='*70}")
+    logger.debug(f"[AI RESPONSE] Room {room_id} | Character: {character_name} | len={len(ai_reply)} | has_self_check={'[SELF_CHECK]' in ai_reply}")
 
     if "[SELF_CHECK]" in ai_reply:
         parts = ai_reply.split("[SELF_CHECK]", 1)
         user_message = parts[0].strip()
         self_check_log = parts[1].strip()
-        logger.info(f"[SELF-CHECK] Room {room_id} | Character: {character_name}")
-        logger.info(f"[SELF-CHECK] {self_check_log}")
+        logger.debug(f"[SELF-CHECK] Room {room_id} | {character_name}: {self_check_log}")
         return user_message
 
-    logger.warning(f"[SELF-CHECK] ⚠️ LLM did not include self-check for Room {room_id}")
-    logger.warning(f"[SELF-CHECK] Response length: {len(ai_reply)} chars")
-    logger.warning(f"[SELF-CHECK] First 200 chars: {ai_reply[:200]}...")
-    logger.warning(f"[SELF-CHECK] Tip: Check prompt or try regenerating persona")
+    logger.debug(f"[SELF-CHECK] No self-check in Room {room_id} response ({len(ai_reply)} chars)")
     return ai_reply
 
 
