@@ -30,6 +30,7 @@ class UserLogin(BaseModel):
     """로그인 요청 스키마"""
     email: EmailStr = Field(..., description="이메일 주소")
     password: str = Field(..., description="비밀번호")
+    remember_me: bool = Field(default=False, description="로그인 유지 여부")
 
 
 # ===== 토큰 =====

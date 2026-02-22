@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 from typing import Dict, Any
@@ -5,7 +7,7 @@ from typing import Dict, Any
 from backend.db.models import User
 from backend.schemas.auth_schema import UserRegister, UserLogin
 from backend.core.security import (
-    hash_password, verify_password, 
+    hash_password, verify_password,
     create_access_token, create_refresh_token
 )
 from backend.core.config import settings
@@ -67,16 +69,25 @@ class AuthService:
                 headers={"WWW-Authenticate": "Bearer"},
             )
             
-        # 3. 토큰 생성
-        access_token = create_access_token(data={"sub": str(user.id)})
+        # 3. 토큰 생성 — remember_me 시 7일, 아니면 기본 30분
+        if user_data.remember_me:
+            expires = timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+            expires_in_sec = int(expires.total_seconds())
+        else:
+            expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+            expires_in_sec = int(expires.total_seconds())
+
+        access_token = create_access_token(
+            data={"sub": str(user.id)}, expires_delta=expires
+        )
         refresh_token = create_refresh_token(data={"sub": str(user.id)})
-        
+
         return {
             "access_token": access_token,
             "token_type": "bearer",
             "refresh_token": refresh_token,
             "user_mode": user.user_mode,
-            "expires_in": settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
+            "expires_in": expires_in_sec
         }
 
     @staticmethod

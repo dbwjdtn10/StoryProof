@@ -1,7 +1,7 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
 import { toast } from 'sonner';
 import { Mail, Lock, Eye, EyeOff, User, ArrowLeft } from 'lucide-react';
-import { API_BASE_URL } from './api/client';
+import { API_BASE_URL, getToken, clearAuth } from './api/client';
 import logoImg from './assets/logo.png';
 import splashImg1 from './assets/KakaoTalk_20260219_151600086_01.png';
 import splashImg2 from './assets/KakaoTalk_20260219_151600086_02.png';
@@ -67,9 +67,47 @@ export default function App() {
     };
   }, []);
 
+  // 서버 준비 완료 후, 저장된 토큰으로 자동 로그인 시도
+  useEffect(() => {
+    if (!isServerReady) return;
+    const token = getToken();
+    if (!token) return;
+
+    const savedMode = (localStorage.getItem('userMode') || sessionStorage.getItem('userMode')) as 'reader' | 'writer' | null;
+
+    (async () => {
+      try {
+        // 토큰 유효성 검증
+        const res = await fetch(`${API_BASE_URL}/auth/me`, {
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (!res.ok) throw new Error('Token invalid');
+
+        if (savedMode) setUserMode(savedMode);
+
+        // 소설 로드
+        const novelsResponse = await getNovels();
+        if (novelsResponse.novels.length > 0) {
+          setCurrentNovel(novelsResponse.novels[0]);
+        } else {
+          const newNovel = await createNovel({
+            title: "My First Novel",
+            description: "Default created novel",
+            genre: "General"
+          });
+          setCurrentNovel(newNovel);
+        }
+        setCurrentScreen('upload');
+      } catch {
+        // 토큰 만료/무효 — 정리 후 로그인 화면으로
+        clearAuth();
+      }
+    })();
+  }, [isServerReady]);
+
   // Login/Signup form states
   const [userMode, setUserMode] = useState<'reader' | 'writer'>(
-    (localStorage.getItem('userMode') as 'reader' | 'writer') || 'writer'
+    ((localStorage.getItem('userMode') || sessionStorage.getItem('userMode')) as 'reader' | 'writer') || 'writer'
   );
   const [signupMode, setSignupMode] = useState<'reader' | 'writer'>('writer');
 
@@ -89,9 +127,14 @@ export default function App() {
     setIsSubmitting(true);
 
     try {
-      const tokenResponse = await login({ email, password });
-      localStorage.setItem('token', tokenResponse.access_token);
-      localStorage.setItem('userMode', tokenResponse.user_mode);
+      const tokenResponse = await login({ email, password, remember_me: rememberMe });
+      // rememberMe: localStorage (영구), 아니면 sessionStorage (브라우저 닫으면 삭제)
+      const storage = rememberMe ? localStorage : sessionStorage;
+      // 반대쪽 스토리지 정리
+      (rememberMe ? sessionStorage : localStorage).removeItem('token');
+      (rememberMe ? sessionStorage : localStorage).removeItem('userMode');
+      storage.setItem('token', tokenResponse.access_token);
+      storage.setItem('userMode', tokenResponse.user_mode);
       setUserMode(tokenResponse.user_mode);
 
       try {
