@@ -24,21 +24,77 @@ export const AuthorToolbar = ({ editor, onOpenSettings }: AuthorToolbarProps) =>
     }, [editor]);
 
     const [searchValue, setSearchValue] = React.useState('');
+    const searchIndexRef = React.useRef(0);
+
+    React.useEffect(() => {
+        searchIndexRef.current = 0;
+    }, [searchValue]);
 
     const handleSearch = () => {
         if (!searchValue) return;
 
-        // 브라우저 네이티브 검색 (자동으로 다음 매치 + 래핑)
-        // focus()를 호출하지 않아야 이전 검색 위치에서 이어서 검색됨
-        const found = (window as any).find(searchValue, false, false, true);
+        const query = searchValue.toLowerCase();
 
-        if (found) {
-            const sel = window.getSelection();
-            if (sel && sel.rangeCount > 0) {
-                const range = sel.getRangeAt(0);
-                const node = range.startContainer;
-                const el = node instanceof HTMLElement ? node : node.parentElement;
-                el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // 본문 에디터에서만 검색 (바이블/사이드바 제외)
+        const container = document.querySelector('.text-content');
+        if (!container) return;
+
+        const proseMirrors = container.querySelectorAll('.ProseMirror');
+        let fullText = '';
+        const nodeMap: { node: Text; offset: number }[] = [];
+
+        proseMirrors.forEach(pm => {
+            const walker = document.createTreeWalker(pm, NodeFilter.SHOW_TEXT);
+            let tn: Node | null;
+            while ((tn = walker.nextNode())) {
+                const t = tn.textContent || '';
+                for (let i = 0; i < t.length; i++) {
+                    nodeMap.push({ node: tn as Text, offset: i });
+                }
+                fullText += t.toLowerCase();
+            }
+        });
+
+        if (!fullText) return;
+
+        // 다음 매치 찾기
+        let idx = fullText.indexOf(query, searchIndexRef.current);
+        if (idx === -1 && searchIndexRef.current > 0) {
+            idx = fullText.indexOf(query, 0); // 처음부터 다시
+        }
+        if (idx === -1) return;
+
+        searchIndexRef.current = idx + query.length;
+
+        // Range로 정확한 텍스트 선택
+        const s = nodeMap[idx];
+        const e = nodeMap[idx + query.length - 1];
+        const range = document.createRange();
+        range.setStart(s.node, s.offset);
+        range.setEnd(e.node, e.offset + 1);
+
+        const sel = window.getSelection();
+        if (sel) {
+            sel.removeAllRanges();
+            sel.addRange(range);
+        }
+
+        // Range 좌표 기반으로 정확한 스크롤
+        const rect = range.getBoundingClientRect();
+        let scrollParent: HTMLElement | null = s.node.parentElement;
+        while (scrollParent) {
+            const { overflowY } = getComputedStyle(scrollParent);
+            if (overflowY === 'auto' || overflowY === 'scroll') break;
+            scrollParent = scrollParent.parentElement;
+        }
+
+        if (scrollParent) {
+            const cr = scrollParent.getBoundingClientRect();
+            if (rect.top < cr.top || rect.bottom > cr.bottom) {
+                scrollParent.scrollTo({
+                    top: Math.max(0, scrollParent.scrollTop + rect.top - cr.top - cr.height / 3),
+                    behavior: 'smooth'
+                });
             }
         }
     };
