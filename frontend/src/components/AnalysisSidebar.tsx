@@ -598,7 +598,10 @@ export function AnalysisSidebar({ isOpen, onClose, result, isLoading, isCachedRe
                 <div style={{
                     padding: '10px 20px', borderBottom: '1px solid var(--modal-border)',
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    backgroundColor: 'rgba(59, 130, 246, 0.08)'
+                    backgroundColor: (() => {
+                        const t = document.documentElement.getAttribute('data-theme') || 'light';
+                        return t === 'dark' ? '#1a1a1a' : 'rgba(59, 130, 246, 0.08)';
+                    })()
                 }}>
                     <span style={{ fontSize: '0.8rem', color: 'var(--muted-foreground)' }}>
                         이전 분석 결과입니다
@@ -608,7 +611,11 @@ export function AnalysisSidebar({ isOpen, onClose, result, isLoading, isCachedRe
                             onClick={onReanalyze}
                             style={{
                                 fontSize: '0.8rem', padding: '4px 12px', borderRadius: '6px',
-                                border: '1px solid var(--primary)', backgroundColor: 'var(--primary)',
+                                border: '1px solid var(--primary)',
+                                backgroundColor: (() => {
+                                    const t = document.documentElement.getAttribute('data-theme') || 'light';
+                                    return t === 'dark' ? '#000000' : 'var(--primary)';
+                                })(),
                                 color: 'white', cursor: 'pointer', fontWeight: '500'
                             }}
                         >

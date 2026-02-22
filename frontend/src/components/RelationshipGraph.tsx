@@ -284,7 +284,7 @@ export function RelationshipGraphModal({ isOpen, onClose, relationships, charact
             } else {
                 ctx.lineTo(tgt.x, tgt.y);
             }
-            ctx.strokeStyle = isHL ? src.color : `${theme.mutedForeground}66`;
+            ctx.strokeStyle = isHL ? src.color : theme.mutedForeground;
             ctx.lineWidth = edgeWidth;
             ctx.setLineDash([]);
             ctx.stroke();
@@ -301,7 +301,7 @@ export function RelationshipGraphModal({ isOpen, onClose, relationships, charact
             ctx.lineTo(arrowX - arrowLen * Math.cos(arrowAngle - 0.4), arrowY - arrowLen * Math.sin(arrowAngle - 0.4));
             ctx.lineTo(arrowX - arrowLen * Math.cos(arrowAngle + 0.4), arrowY - arrowLen * Math.sin(arrowAngle + 0.4));
             ctx.closePath();
-            ctx.fillStyle = isHL ? src.color : `${theme.mutedForeground}88`;
+            ctx.fillStyle = isHL ? src.color : theme.mutedForeground;
             ctx.fill();
 
             // 관계 라벨
@@ -522,7 +522,11 @@ export function RelationshipGraphModal({ isOpen, onClose, relationships, charact
                         {/* 왼쪽: 인물 선택 패널 */}
                         <div style={{
                             width: '220px', borderRight: '1px solid var(--border)',
-                            display: 'flex', flexDirection: 'column', background: 'var(--card-bg, #fafafa)'
+                            display: 'flex', flexDirection: 'column',
+                            background: (() => {
+                                const t = document.documentElement.getAttribute('data-theme') || 'light';
+                                return t === 'dark' ? '#0a0a0a' : t === 'sepia' ? '#fdf6e3' : '#fafafa';
+                            })()
                         }}>
                             <div style={{
                                 padding: '10px 14px', borderBottom: '1px solid var(--border)',
@@ -531,14 +535,20 @@ export function RelationshipGraphModal({ isOpen, onClose, relationships, charact
                                 <button onClick={selectAll} style={{
                                     flex: 1, padding: '5px', fontSize: '0.75rem', fontWeight: 600,
                                     border: '1px solid var(--border)', borderRadius: '6px',
-                                    cursor: 'pointer', background: 'transparent',
-                                    color: 'var(--foreground)'
+                                    cursor: 'pointer', color: 'var(--foreground)',
+                                    background: (() => {
+                                        const t = document.documentElement.getAttribute('data-theme') || 'light';
+                                        return t === 'dark' ? '#333333' : t === 'sepia' ? '#e6d3c1' : 'transparent';
+                                    })()
                                 }}>전체 선택</button>
                                 <button onClick={selectNone} style={{
                                     flex: 1, padding: '5px', fontSize: '0.75rem', fontWeight: 600,
                                     border: '1px solid var(--border)', borderRadius: '6px',
-                                    cursor: 'pointer', background: 'transparent',
-                                    color: 'var(--foreground)'
+                                    cursor: 'pointer', color: 'var(--foreground)',
+                                    background: (() => {
+                                        const t = document.documentElement.getAttribute('data-theme') || 'light';
+                                        return t === 'dark' ? '#333333' : t === 'sepia' ? '#e6d3c1' : 'transparent';
+                                    })()
                                 }}>선택 해제</button>
                             </div>
                             <div style={{ flex: 1, overflowY: 'auto', padding: '6px' }}>

@@ -743,7 +743,7 @@
   --accent-foreground: #1c1917;
   --destructive: #dc2626;
   --destructive-foreground: #ffffff;
-  --border: #e7e5e4;
+  --border: #dcd7d6;
   --input: transparent;
   --input-background: #ffffff;
   --switch-background: #cbced4;
@@ -812,7 +812,7 @@
   --muted-foreground: #78716c;
   --accent: #f5f5f4;
   --accent-foreground: #1c1917;
-  --border: #e7e5e4;
+  --border: #dcd7d6;
   --input: transparent;
   --input-background: #ffffff;
   --sidebar: #ffffff;
@@ -839,7 +839,7 @@
   --floating-btn-hover-bg: #f9fafb;
 
   /* Chatbot bubbles & inputs */
-  --chat-assistant-bg: #f9f7f2;
+  --chat-assistant-bg: #ffffff;
   --chat-assistant-text: #1c1917;
 }
 
@@ -874,7 +874,7 @@
   --modal-header-bg: #e6d3c1;
   --modal-header-text: #4a3728;
 
-  --input-bg: #FDF6E3;
+  --input-bg: #d4c4b7;
   --input-text: #4a3728;
   --input-border: #d4c4b7;
   --input-placeholder: #8c7b70;
@@ -885,7 +885,7 @@
   --floating-btn-hover-bg: #f7ebc6;
 
   /* Chatbot bubbles & inputs */
-  --chat-assistant-bg: #f0e4d7;
+  --chat-assistant-bg: #e2d1c3;
   --chat-assistant-text: #4a3728;
 }
 
@@ -899,7 +899,7 @@
   --popover-foreground: #fafaf9;
   --primary: #fafaf9;
   --primary-foreground: #1a1a1a;
-  --secondary: #292524;
+  --secondary: #262626;
   --secondary-foreground: #fafaf9;
   --muted: #292524;
   --muted-foreground: #a8a29e;
@@ -935,7 +935,7 @@
   --floating-btn-hover-bg: #333333;
 
   /* Chatbot bubbles & inputs */
-  --chat-assistant-bg: #262626;
+  --chat-assistant-bg: #1a1a1a;
   --chat-assistant-text: #e0e0e0;
 }
 }
@@ -958,7 +958,7 @@
   --input-bg: #ffffff;
   --input-text: #1c1917;
   --input-border: #e5e7eb;
-  --chat-assistant-bg: #f9f7f2;
+  --chat-assistant-bg: #ffffff;
   --chat-assistant-text: #1c1917;
 }
 
@@ -978,10 +978,10 @@
   --modal-border: #d4c4b7;
   --modal-header-bg: #e6d3c1;
   --modal-header-text: #4a3728;
-  --input-bg: #FDF6E3;
+  --input-bg: #d4c4b7;
   --input-text: #4a3728;
   --input-border: #d4c4b7;
-  --chat-assistant-bg: #f0e4d7;
+  --chat-assistant-bg: #e2d1c3;
   --chat-assistant-text: #4a3728;
 }
 

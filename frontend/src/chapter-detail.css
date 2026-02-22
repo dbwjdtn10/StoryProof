@@ -442,7 +442,7 @@
 }
 
 [data-theme="dark"] .bible-export-btn {
-    background: #262626;
+    background: #333333;
     border-color: #444444;
     color: #e0e0e0;
 }
@@ -476,7 +476,7 @@
 
 /* Sepia Mode for Bible Toolbar */
 [data-theme="sepia"] .bible-toolbar {
-    background: #f5ebe0;
+    background: #ede0d4;
     border-bottom-color: rgba(107, 79, 58, 0.15);
 }
 
@@ -652,8 +652,8 @@
 }
 
 [data-theme="dark"] .trait-tag {
-    background-color: #292524;
-    color: #a8a29e;
+    background-color: #f1efef;
+    color: #4b4035;
     border-color: #444444;
 }
 
@@ -874,8 +874,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 36px;
-    height: 36px;
+    width: 40px;
+    height: 40px;
     border: 1px solid var(--border);
     border-radius: 6px;
     background: var(--background);
@@ -911,7 +911,7 @@
 
 /* Dark Mode */
 [data-theme="dark"] .chapter-export-btn {
-    background: #262626;
+    background: #333333;
     border-color: #444444;
     color: #e0e0e0;
 }
