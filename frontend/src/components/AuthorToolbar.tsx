@@ -24,11 +24,54 @@ export const AuthorToolbar = ({ editor, onOpenSettings }: AuthorToolbarProps) =>
     }, [editor]);
 
     const [searchValue, setSearchValue] = React.useState('');
+    const searchIndexRef = React.useRef(0); // 다음 검색 시작 위치
 
     const handleSearch = () => {
-        if (!searchValue) return;
-        window.find(searchValue);
+        if (!searchValue || !editor) return;
+
+        const doc = editor.state.doc;
+        const query = searchValue.toLowerCase();
+        let found = false;
+
+        // 현재 위치 이후부터 검색
+        const startFrom = searchIndexRef.current;
+
+        doc.descendants((node, pos) => {
+            if (found || !node.isText) return;
+            const text = node.text?.toLowerCase() || '';
+            // startFrom 이후 위치에서만 찾기
+            const nodeEnd = pos + node.nodeSize;
+            if (nodeEnd <= startFrom) return;
+
+            const searchStart = Math.max(0, startFrom - pos);
+            const idx = text.indexOf(query, searchStart);
+            if (idx !== -1) {
+                const from = pos + idx;
+                const to = from + searchValue.length;
+                editor.chain().setTextSelection({ from, to }).focus().run();
+                // 해당 위치로 스크롤
+                const domAtPos = editor.view.domAtPos(from);
+                const element = domAtPos.node instanceof HTMLElement
+                    ? domAtPos.node
+                    : domAtPos.node.parentElement;
+                element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                // 다음 검색 위치 저장
+                searchIndexRef.current = to;
+                found = true;
+            }
+        });
+
+        // 끝까지 찾지 못하면 처음부터 다시
+        if (!found && startFrom > 0) {
+            searchIndexRef.current = 0;
+            handleSearch();
+        }
     };
+
+    // 검색어 변경 시 위치 초기화
+    React.useEffect(() => {
+        searchIndexRef.current = 0;
+    }, [searchValue]);
 
     return (
         <div className="novel-toolbar author-toolbar">
