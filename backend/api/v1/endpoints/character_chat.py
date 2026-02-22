@@ -85,22 +85,30 @@ def extract_character_dialogues(analysis_data: dict, character_name: str, max_di
 def _fetch_analysis_for_character(
     db: Session, novel_id: int, chapter_id: Optional[int], character_name: str
 ):
-    """분석 데이터 조회. 챕터별 분석 → 벡터 메타데이터 집계 → 글로벌 분석 순으로 시도."""
-    query = db.query(Analysis).filter(
-        Analysis.novel_id == novel_id,
-        Analysis.status == AnalysisStatus.COMPLETED
-    )
+    """분석 데이터 조회. CHARACTER 분석 → 벡터 메타데이터 집계 → 글로벌 분석 순으로 시도."""
+    analysis = None
+
+    # 1) CHARACTER 타입 분석만 우선 조회
     if chapter_id:
-        query = query.filter(Analysis.chapter_id == chapter_id)
+        analysis = db.query(Analysis).filter(
+            Analysis.novel_id == novel_id,
+            Analysis.chapter_id == chapter_id,
+            Analysis.analysis_type == AnalysisType.CHARACTER,
+            Analysis.status == AnalysisStatus.COMPLETED
+        ).order_by(desc(Analysis.created_at)).first()
 
-    analysis = query.order_by(desc(Analysis.created_at)).first()
-
+    # 2) CHARACTER 분석이 없으면 VectorDocument 메타데이터에서 집계
     if not analysis and chapter_id:
-        logger.info(f"[Persona] No Analysis found for chapter {chapter_id}. Aggregating from VectorDocument metadata...")
+        logger.info(f"[Persona] No CHARACTER Analysis found for chapter {chapter_id}. Aggregating from VectorDocument metadata...")
         vectors = db.query(VectorDocument).filter(
             VectorDocument.novel_id == novel_id,
             VectorDocument.chapter_id == chapter_id
         ).all()
+
+        def normalize(name: str) -> str:
+            return name.replace(" ", "").lower() if name else ""
+
+        target_norm = normalize(character_name)
 
         if vectors:
             aggregated_char = None
@@ -108,11 +116,11 @@ def _fetch_analysis_for_character(
                 meta = vec.metadata_json or {}
                 for char in meta.get('characters', []):
                     c_name = char.get('name') if isinstance(char, dict) else char
-                    if c_name != character_name:
+                    if normalize(c_name) != target_norm:
                         continue
                     if not aggregated_char:
                         aggregated_char = {
-                            "name": c_name,
+                            "name": character_name,
                             "description": char.get('description', '') if isinstance(char, dict) else '',
                             "traits": char.get('traits', []) if isinstance(char, dict) else []
                         }

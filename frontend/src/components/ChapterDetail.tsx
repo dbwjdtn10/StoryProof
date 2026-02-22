@@ -1022,7 +1022,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                 backgroundColor: 'var(--card)',
                 position: 'sticky',
                 top: 0,
-                zIndex: 10
+                zIndex: 51
             }}>
                 <button className="back-button" onClick={onBack} style={{
                     marginRight: '16px',
