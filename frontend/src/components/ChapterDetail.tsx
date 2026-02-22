@@ -115,6 +115,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
         isAnalysisSidebarOpen, setIsAnalysisSidebarOpen,
         isAnalysisLoading,
         analysisResult,
+        isCachedResult,
         currentAnalysisType,
         reanalyze: reanalyzeAnalysis,
     } = analysis;
@@ -2155,6 +2156,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                 onClose={() => setIsAnalysisSidebarOpen(false)}
                 result={analysisResult}
                 isLoading={isAnalysisLoading}
+                isCachedResult={isCachedResult}
                 onNavigateToQuote={handleNavigateToQuote}
                 onReanalyze={reanalyzeAnalysis}
                 onApplySuggestion={handleApplySuggestion}

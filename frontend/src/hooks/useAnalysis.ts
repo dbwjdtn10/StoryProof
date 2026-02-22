@@ -17,6 +17,7 @@ export function useAnalysis(
     setIsAnalysisSidebarOpen: (open: boolean) => void;
     isAnalysisLoading: boolean;
     analysisResult: AnalysisResult | null;
+    isCachedResult: boolean;
     currentAnalysisType: string;
     handleAnalyze: (analysisType?: string) => Promise<void>;
     reanalyze: () => Promise<void>;
@@ -24,6 +25,7 @@ export function useAnalysis(
     const [isAnalysisSidebarOpen, setIsAnalysisSidebarOpen] = useState(false);
     const [isAnalysisLoading, setIsAnalysisLoading] = useState(false);
     const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
+    const [isCachedResult, setIsCachedResult] = useState(false);
     const [currentAnalysisType, setCurrentAnalysisType] = useState<string>('consistency');
 
     const analysisPollingRef = useRef<ReturnType<typeof setTimeout>>();
@@ -39,6 +41,7 @@ export function useAnalysis(
     const runChapterAnalysis = async (analysisType: string) => {
         setIsAnalysisLoading(true);
         setAnalysisResult(null);
+        setIsCachedResult(false);
         setCurrentAnalysisType(analysisType);
 
         try {
@@ -117,6 +120,7 @@ export function useAnalysis(
                 const cache = await cacheEndpoint;
                 if (cache.cached && cache.result) {
                     setAnalysisResult(cache.result);
+                    setIsCachedResult(true);
                     setIsAnalysisLoading(false);
                     return;
                 }
@@ -137,6 +141,7 @@ export function useAnalysis(
         setIsAnalysisSidebarOpen,
         isAnalysisLoading,
         analysisResult,
+        isCachedResult,
         currentAnalysisType,
         handleAnalyze,
         reanalyze,
