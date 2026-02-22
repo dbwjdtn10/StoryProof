@@ -67,13 +67,15 @@ export default function App() {
     };
   }, []);
 
-  // 서버 준비 완료 후, 저장된 토큰으로 자동 로그인 시도
+  // 서버 준비 완료 후, "로그인 유지"된 토큰으로 자동 로그인 시도
   useEffect(() => {
     if (!isServerReady) return;
-    const token = getToken();
+    // remembered 플래그가 있는 경우에만 자동 로그인 (로그인 유지 체크한 경우)
+    if (localStorage.getItem('remembered') !== 'true') return;
+    const token = localStorage.getItem('token');
     if (!token) return;
 
-    const savedMode = (localStorage.getItem('userMode') || sessionStorage.getItem('userMode')) as 'reader' | 'writer' | null;
+    const savedMode = localStorage.getItem('userMode') as 'reader' | 'writer' | null;
 
     (async () => {
       try {
@@ -128,13 +130,18 @@ export default function App() {
 
     try {
       const tokenResponse = await login({ email, password, remember_me: rememberMe });
-      // rememberMe: localStorage (영구), 아니면 sessionStorage (브라우저 닫으면 삭제)
-      const storage = rememberMe ? localStorage : sessionStorage;
-      // 반대쪽 스토리지 정리
-      (rememberMe ? sessionStorage : localStorage).removeItem('token');
-      (rememberMe ? sessionStorage : localStorage).removeItem('userMode');
-      storage.setItem('token', tokenResponse.access_token);
-      storage.setItem('userMode', tokenResponse.user_mode);
+      // 양쪽 스토리지 초기화
+      clearAuth();
+      if (rememberMe) {
+        // 로그인 유지: localStorage (브라우저 닫아도 유지) + 플래그
+        localStorage.setItem('token', tokenResponse.access_token);
+        localStorage.setItem('userMode', tokenResponse.user_mode);
+        localStorage.setItem('remembered', 'true');
+      } else {
+        // 일반 로그인: sessionStorage (탭 닫으면 삭제)
+        sessionStorage.setItem('token', tokenResponse.access_token);
+        sessionStorage.setItem('userMode', tokenResponse.user_mode);
+      }
       setUserMode(tokenResponse.user_mode);
 
       try {

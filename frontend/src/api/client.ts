@@ -7,6 +7,7 @@ export function getToken(): string | null {
 export function clearAuth() {
     localStorage.removeItem('token');
     localStorage.removeItem('userMode');
+    localStorage.removeItem('remembered');
     sessionStorage.removeItem('token');
     sessionStorage.removeItem('userMode');
 }
