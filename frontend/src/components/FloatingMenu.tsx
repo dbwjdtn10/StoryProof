@@ -111,6 +111,8 @@ export function FloatingMenu({ onNavigateToScene, onAnalyze, onPredictStory, onO
                 <button
                     className="floating-menu-btn"
                     onClick={toggleMenu}
+                    aria-label="메뉴"
+                    title="메뉴"
                     style={{
                         backgroundColor: theme === 'sepia' ? 'var(--color-dark-brown)' : 'var(--primary)',
                         color: 'var(--primary-foreground)'

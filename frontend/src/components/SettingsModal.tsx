@@ -115,6 +115,8 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     </h2>
                     <button
                         onClick={onClose}
+                        aria-label="닫기"
+                        title="닫기"
                         className="p-1 hover:opacity-70 transition-opacity rounded-full"
                         style={{ color: '#3b1e1e' }}
                     >

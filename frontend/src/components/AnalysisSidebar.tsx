@@ -446,7 +446,7 @@ export function AnalysisSidebar({ isOpen, onClose, result, isLoading, onNavigate
                             <RefreshCw size={18} strokeWidth={2.5} />
                         </button>
                     )}
-                    <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: 'inherit' }}>
+                    <button onClick={onClose} aria-label="닫기" title="닫기" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: 'inherit' }}>
                         <X size={22} strokeWidth={2.5} />
                     </button>
                 </div>

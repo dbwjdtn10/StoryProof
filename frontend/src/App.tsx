@@ -3,11 +3,13 @@ import { toast } from 'sonner';
 import { Mail, Lock, Eye, EyeOff, User, ArrowLeft } from 'lucide-react';
 import { API_BASE_URL, getToken, clearAuth } from './api/client';
 import logoImg from './assets/logo.png';
-import splashImg1 from './assets/KakaoTalk_20260219_151600086_01.png';
-import splashImg2 from './assets/KakaoTalk_20260219_151600086_02.png';
-import splashImg3 from './assets/KakaoTalk_20260219_151600086_03.png';
-import splashImg4 from './assets/KakaoTalk_20260219_151600086_04.png';
-import splashImg5 from './assets/KakaoTalk_20260219_151600086.png';
+
+// Splash 이미지는 public 폴더에서 로드 (번들에 포함시키지 않음)
+const splashImg1 = '/static/images/splash/KakaoTalk_20260219_151600086_01.png';
+const splashImg2 = '/static/images/splash/KakaoTalk_20260219_151600086_02.png';
+const splashImg3 = '/static/images/splash/KakaoTalk_20260219_151600086_03.png';
+const splashImg4 = '/static/images/splash/KakaoTalk_20260219_151600086_04.png';
+const splashImg5 = '/static/images/splash/KakaoTalk_20260219_151600086.png';
 import { ThemeToggle } from './components/ThemeToggle';
 import { register, login } from './api/auth';
 import { getNovels, createNovel, Novel } from './api/novel';

@@ -7,7 +7,10 @@
 - 현재 사용자 프로필 조회
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+import time
+from collections import defaultdict
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from backend.db.session import get_db
@@ -20,14 +23,37 @@ from backend.core.security import get_current_user_id
 router = APIRouter()
 
 
+# ===== Rate Limiter (IP 기반, 의존성 없음) =====
+
+_rate_store: dict = defaultdict(list)  # IP → [timestamps]
+_RATE_LIMIT = 10  # 최대 요청 수
+_RATE_WINDOW = 60  # 윈도우 (초)
+
+
+def _check_rate_limit(request: Request):
+    """IP 기반 rate limiting — 분당 10회 초과 시 429 반환"""
+    ip = request.client.host if request.client else "unknown"
+    now = time.time()
+    # 윈도우 외 기록 제거
+    _rate_store[ip] = [t for t in _rate_store[ip] if now - t < _RATE_WINDOW]
+    if len(_rate_store[ip]) >= _RATE_LIMIT:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="요청이 너무 많습니다. 잠시 후 다시 시도해주세요."
+        )
+    _rate_store[ip].append(now)
+
+
 # ===== 회원가입 =====
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 def register(
+    request: Request,
     user_data: UserRegister,
     db: Session = Depends(get_db)
 ):
     """새 사용자 등록"""
+    _check_rate_limit(request)
     new_user = AuthService.register_user(db, user_data)
 
     return {
@@ -44,10 +70,12 @@ def register(
 
 @router.post("/login", response_model=TokenResponse)
 def login(
+    request: Request,
     user_data: UserLogin,
     db: Session = Depends(get_db)
 ):
     """사용자 로그인 및 JWT 토큰 발급"""
+    _check_rate_limit(request)
     return AuthService.login_user(db, user_data)
 
 
