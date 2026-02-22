@@ -225,7 +225,7 @@ export function FileUpload({ onFileClick, novelId, mode = 'writer' }: FileUpload
                 className="upload-input"
                 onChange={handleChange}
                 multiple
-                accept=".pdf,.doc,.docx,.txt"
+                accept=".txt,.pdf,.docx"
             />
 
             {/* Floating Upload Button */}
@@ -255,7 +255,7 @@ export function FileUpload({ onFileClick, novelId, mode = 'writer' }: FileUpload
                                         ? '작품 파일을 추가하여 읽기 시작하기'
                                         : '파일을 드래그하거나 클릭하여 업로드'}
                                 </p>
-                                <p className="upload-text-sub">PDF, HWP, TXT 파일 지원</p>
+                                <p className="upload-text-sub">TXT, PDF, DOCX 파일 지원</p>
                             </label>
                         </div>
                     )}

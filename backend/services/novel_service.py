@@ -298,8 +298,8 @@ class NovelService:
         if existing:
             raise HTTPException(status_code=400, detail=f"이미 존재하는 회차 번호입니다: {chapter_number}화")
 
-        # 3. 파일 로드
-        content = await NovelService._load_txt_content(file)
+        # 3. 파일 로드 (TXT/PDF/DOCX 지원)
+        content = await NovelService._load_file_content(file)
         if not content.strip():
              raise HTTPException(status_code=400, detail="파일 내용이 비어있습니다.")
 
@@ -332,45 +332,91 @@ class NovelService:
             raise HTTPException(status_code=500, detail=f"DB Error: {str(e)}")
 
     @staticmethod
-    async def _load_txt_content(file: UploadFile) -> str:
+    async def _load_file_content(file: UploadFile) -> str:
         """
-        TXT 파일 내용 읽기 (인코딩 자동 감지)
-        
-        chardet 라이브러리를 사용하여 파일 인코딩을 자동으로 감지하고,
-        실패 시 일반적인 인코딩들을 순차적으로 시도합니다.
-        
-        Args:
-            file: 업로드된 파일 객체
-            
-        Returns:
-            str: 디코딩된 파일 내용
-            
-        Raises:
-            HTTPException: 지원하지 않는 인코딩인 경우
+        파일 내용 읽기 (TXT/PDF/DOCX 지원, 인코딩 자동 감지)
+
+        파일 확장자에 따라 적절한 파서를 사용하여 텍스트를 추출합니다.
+        - TXT: chardet으로 인코딩 자동 감지
+        - PDF: pypdf로 텍스트 추출
+        - DOCX: python-docx로 텍스트 추출
         """
-        # 파일 크기 제한 (10MB)
         MAX_FILE_SIZE = 10 * 1024 * 1024
         raw_data = await file.read()
         if len(raw_data) > MAX_FILE_SIZE:
             raise HTTPException(status_code=413, detail="파일 크기가 10MB를 초과합니다.")
 
+        filename = (file.filename or "").lower()
+
+        # .doc (구형 Word) 파일 거부
+        if filename.endswith(".doc") and not filename.endswith(".docx"):
+            raise HTTPException(
+                status_code=400,
+                detail=".doc 형식은 지원하지 않습니다. .docx로 변환 후 업로드해주세요."
+            )
+
+        # PDF 파일 처리
+        if filename.endswith(".pdf"):
+            return NovelService._extract_pdf_text(raw_data)
+
+        # DOCX 파일 처리
+        if filename.endswith(".docx"):
+            return NovelService._extract_docx_text(raw_data)
+
+        # TXT 및 기타 텍스트 파일 처리
         # 1. chardet으로 감지
         result = chardet.detect(raw_data)
         if result['confidence'] > 0.7 and result['encoding']:
             try:
                 return raw_data.decode(result['encoding'])
-            except:
+            except Exception:
                 pass
-        
+
         # 2. 실패 시 일반적인 인코딩 시도
         encodings = ['utf-8', 'cp949', 'euc-kr', 'utf-16', 'latin-1']
         for enc in encodings:
             try:
                 return raw_data.decode(enc)
-            except:
+            except Exception:
                 continue
-                
+
         raise HTTPException(status_code=400, detail="지원하지 않는 인코딩입니다.")
+
+    @staticmethod
+    def _extract_pdf_text(raw_data: bytes) -> str:
+        """PDF 바이트에서 텍스트 추출 (pypdf 사용)"""
+        import io
+        try:
+            from pypdf import PdfReader
+        except ImportError:
+            raise HTTPException(
+                status_code=500,
+                detail="PDF 처리 라이브러리(pypdf)가 설치되지 않았습니다."
+            )
+
+        reader = PdfReader(io.BytesIO(raw_data))
+        pages_text = []
+        for page in reader.pages:
+            text = page.extract_text()
+            if text:
+                pages_text.append(text)
+
+        if not pages_text:
+            raise HTTPException(status_code=400, detail="PDF에서 텍스트를 추출할 수 없습니다.")
+        return "\n".join(pages_text)
+
+    @staticmethod
+    def _extract_docx_text(raw_data: bytes) -> str:
+        """DOCX 바이트에서 텍스트 추출 (python-docx 사용)"""
+        import io
+        from docx import Document
+
+        doc = Document(io.BytesIO(raw_data))
+        paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
+
+        if not paragraphs:
+            raise HTTPException(status_code=400, detail="DOCX에서 텍스트를 추출할 수 없습니다.")
+        return "\n".join(paragraphs)
 
     @staticmethod
     def update_chapter(

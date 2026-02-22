@@ -252,13 +252,21 @@ class BibleExportService:
 
     @staticmethod
     def export_docx(bible_data: Dict[str, Any], title: str = "") -> bytes:
-        """DOCX 형식으로 바이블 데이터 내보내기"""
+        """DOCX 형식으로 바이블 데이터 내보내기 (한글 폰트 적용)"""
         doc = Document()
+
+        # 기본 폰트를 한글 호환 폰트로 설정
+        style = doc.styles["Normal"]
+        font = style.font
+        font.name = "맑은 고딕"
+        font.size = Pt(11)
 
         # Title
         header = f"스토리보드 바이블 - {title}" if title else "스토리보드 바이블"
         title_para = doc.add_heading(header, level=0)
         title_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        for run in title_para.runs:
+            run.font.name = "맑은 고딕"
 
         # Characters
         chars = bible_data.get("characters", [])
@@ -445,27 +453,17 @@ class ChapterExportService:
             pdf.cell(0, 12, title, new_x="LMARGIN", new_y="NEXT", align="C")
             pdf.ln(8)
 
-        blocks = ChapterExportService._parse_html_blocks(content_html)
+        # html_to_plain으로 전체 텍스트 추출 (TXT와 동일 — 정상 동작 확인됨)
+        plain = ChapterExportService.html_to_plain(content_html)
+        paragraphs = plain.split("\n")
 
-        for block in blocks:
-            if block["type"] == "heading":
-                level = block["level"]
-                size = max(10, 16 - (level - 1) * 2)  # h1=16, h2=14, h3=12 ...
-                pdf.set_font("NanumGothic", "B", size)
-                pdf.ln(4)
-                pdf.multi_cell(content_w, 8, block["text"])
+        pdf.set_font("NanumGothic", "", 10)
+        for para in paragraphs:
+            if para.strip():
+                pdf.multi_cell(content_w, 6, para)
                 pdf.ln(2)
-            elif block["type"] == "list_item":
-                pdf.set_font("NanumGothic", "", 10)
-                pdf.set_x(pdf.l_margin + 5)
-                pdf.multi_cell(content_w - 5, 6, f"  \u2022  {block['text']}")
             else:
-                # paragraph
-                text = ChapterExportService._strip_tags(block.get("html", ""))
-                if text:
-                    pdf.set_font("NanumGothic", "", 10)
-                    pdf.multi_cell(content_w, 6, text)
-                    pdf.ln(2)
+                pdf.ln(4)
 
         return bytes(pdf.output())
 
@@ -473,26 +471,31 @@ class ChapterExportService:
 
     @staticmethod
     def export_chapter_docx(content_html: str, title: str = "") -> bytes:
-        """챕터 본문을 DOCX로 내보내기"""
+        """챕터 본문을 DOCX로 내보내기 (한글 폰트 적용)"""
         doc = Document()
+
+        # 기본 폰트를 한글 호환 폰트로 설정
+        style = doc.styles["Normal"]
+        font = style.font
+        font.name = "맑은 고딕"
+        font.size = Pt(11)
 
         if title:
             t = doc.add_heading(title, level=0)
             t.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            for run in t.runs:
+                run.font.name = "맑은 고딕"
 
-        blocks = ChapterExportService._parse_html_blocks(content_html)
+        # html_to_plain으로 전체 텍스트 추출 (TXT와 동일 — 정상 동작 확인됨)
+        plain = ChapterExportService.html_to_plain(content_html)
+        paragraphs = plain.split("\n")
 
-        for block in blocks:
-            if block["type"] == "heading":
-                level = min(block["level"], 4)  # docx heading max 9, 4가 적절
-                doc.add_heading(block["text"], level=level)
-            elif block["type"] == "list_item":
-                doc.add_paragraph(block["text"], style="List Bullet")
-            else:
-                # paragraph — bold / italic 인라인 서식 처리
-                inner = block.get("html", "")
+        for para_text in paragraphs:
+            if para_text.strip():
                 para = doc.add_paragraph()
-                ChapterExportService._add_formatted_runs(para, inner)
+                run = para.add_run(para_text)
+                run.font.name = "맑은 고딕"
+                run.font.size = Pt(11)
 
         buf = io.BytesIO()
         doc.save(buf)
