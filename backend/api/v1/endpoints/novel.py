@@ -201,12 +201,9 @@ def export_chapter(
     """챕터 본문을 TXT/PDF/DOCX 파일로 내보내기"""
     is_admin = _is_admin(current_user)
     chapter = NovelService.get_chapter(db, novel_id, chapter_id, current_user.id, is_admin)
-    novel = NovelService.get_novel(db, novel_id, current_user.id)
 
     content_html = chapter.content or ""
-    chapter_title = getattr(chapter, "title", "") or ""
-    novel_title = getattr(novel, "title", "") or ""
-    display_title = f"{novel_title} - {chapter_title}" if novel_title and chapter_title else chapter_title or novel_title
+    display_title = getattr(chapter, "title", "") or ""
 
     if format == "txt":
         content_bytes = ChapterExportService.export_chapter_txt(content_html, display_title)
@@ -221,7 +218,7 @@ def export_chapter(
         media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         ext = "docx"
 
-    safe_title = "".join(c for c in chapter_title if c.isalnum() or c in " _-").strip()[:30]
+    safe_title = "".join(c for c in display_title if c.isalnum() or c in " _-").strip()[:30]
     display_name = f"{safe_title}.{ext}" if safe_title else f"chapter_{chapter_id}.{ext}"
     ascii_fallback = f"chapter_{chapter_id}.{ext}"
     encoded_name = quote(display_name)
