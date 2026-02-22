@@ -30,8 +30,8 @@ export const askQuestion = async (req: ChatQuestionRequest): Promise<ChatAnswerR
             novel_id: req.novel_id,
             chapter_id: req.chapter_id,
             novel_filter: req.novel_filter,
-            alpha: req.alpha ?? 0.32,
-            similarity_threshold: req.similarity_threshold ?? 0.5,
+            alpha: req.alpha,
+            similarity_threshold: req.similarity_threshold,
         }),
     });
 };
@@ -64,8 +64,8 @@ export const askQuestionStream = async (
             novel_id: request.novel_id,
             chapter_id: request.chapter_id,
             novel_filter: request.novel_filter,
-            alpha: request.alpha ?? 0.32,
-            similarity_threshold: request.similarity_threshold ?? 0.5
+            alpha: request.alpha,
+            similarity_threshold: request.similarity_threshold,
         })
     });
 
