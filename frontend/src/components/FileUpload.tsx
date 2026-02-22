@@ -58,12 +58,11 @@ export function FileUpload({ onFileClick, novelId, mode = 'writer' }: FileUpload
         }
     };
 
-    // 진행 상황 폴링 시작 (지수 백오프: 2초 시작, ×1.5, 최대 15초)
+    // 진행 상황 폴링 시작 (지수 백오프: 2초 시작, ×1.5, 최대 10초)
     const startProgressPolling = (chapterId: number) => {
         // 기존 폴링이 있으면 중지
         if (progressIntervalRef.current[chapterId]) {
             clearTimeout(progressIntervalRef.current[chapterId]);
-            delete progressIntervalRef.current[chapterId];
         }
 
         let interval = 2000;
@@ -71,11 +70,12 @@ export function FileUpload({ onFileClick, novelId, mode = 'writer' }: FileUpload
             await fetchStoryboardStatus(chapterId);
             // COMPLETED/FAILED면 fetchStoryboardStatus 내에서 이미 정리됨
             if (progressIntervalRef.current[chapterId] !== undefined) {
-                interval = Math.min(interval * 1.5, 15000);
+                interval = Math.min(interval * 1.5, 10000);
                 progressIntervalRef.current[chapterId] = setTimeout(poll, interval);
             }
         };
-        poll();
+        // setTimeout(poll, 0)으로 즉시 실행 + ref를 설정하여 폴링 루프 유지
+        progressIntervalRef.current[chapterId] = setTimeout(poll, 0);
     };
 
     // Cleanup polling intervals on unmount
