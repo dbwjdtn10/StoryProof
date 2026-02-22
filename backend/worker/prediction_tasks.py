@@ -51,8 +51,8 @@ def predict_story_task(self, novel_id: int, user_input: str, analysis_id: Option
                     analysis.status = AnalysisStatus.FAILED
                     analysis.error_message = str(exc)
                     db.commit()
-            except Exception:
-                pass
+            except Exception as db_exc:
+                logger.warning(f"예측 실패 DB 상태 업데이트 중 오류: {db_exc}")
         logger.error(f"스토리 예측 실패: {exc}")
         raise self.retry(exc=exc, countdown=30)
     finally:

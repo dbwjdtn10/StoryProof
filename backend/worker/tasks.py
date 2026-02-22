@@ -11,7 +11,7 @@ from dataclasses import asdict
 
 logger = logging.getLogger(__name__)
 
-from backend.db.session import SessionLocal
+from backend.db.session import SessionLocal, get_db_session
 from backend.db.models import Novel, Chapter, User, StoryboardStatus
 from backend.core.config import settings
 from backend.services.analysis import (
@@ -39,28 +39,24 @@ def update_chapter_progress(chapter_id: int, progress: int, status: str = None, 
         message: 진행 메시지
         error: 에러 메시지
     """
-    db = None
     try:
-        db = SessionLocal()
-        chapter = db.query(Chapter).filter(Chapter.id == chapter_id).first()
+        with get_db_session() as db:
+            chapter = db.query(Chapter).filter(Chapter.id == chapter_id).first()
 
-        if chapter:
-            chapter.storyboard_progress = progress
-            if status:
-                chapter.storyboard_status = status
-            if message:
-                chapter.storyboard_message = message
-            if error:
-                chapter.storyboard_error = error
+            if chapter:
+                chapter.storyboard_progress = progress
+                if status:
+                    chapter.storyboard_status = status
+                if message:
+                    chapter.storyboard_message = message
+                if error:
+                    chapter.storyboard_error = error
 
-            db.commit()
-        else:
-            logger.warning(f"[DB Update Fail] Chapter {chapter_id} not found")
+                db.commit()
+            else:
+                logger.warning(f"[DB Update Fail] Chapter {chapter_id} not found")
     except Exception as e:
         logger.warning(f"[DB Update Error] Chapter {chapter_id}: {e}")
-    finally:
-        if db:
-            db.close()
 
 
 @celery_app.task
@@ -500,8 +496,8 @@ def detect_inconsistency_task(self, novel_id: int, text_fragment: str, chapter_i
                 db = SessionLocal()
             novel = db.query(Novel).filter(Novel.id == novel_id).first()
             custom_prompt = novel.custom_prompt if novel else None
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"커스텀 프롬프트 조회 실패 (novel={novel_id}): {e}")
         result = get_consistency_agent().check_consistency(novel_id, text_fragment, custom_prompt=custom_prompt)
 
         # DB 상태 업데이트: COMPLETED + 결과 저장

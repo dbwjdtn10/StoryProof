@@ -42,19 +42,17 @@ export function FileUpload({ onFileClick, novelId, mode = 'writer' }: FileUpload
         if (!novelId) return;
         try {
             const status = await getStoryboardStatus(novelId, chapterId);
-            // console.log(`[Status] Chapter ${chapterId}:`, status); // 디버깅용
             setProgressMap(prev => ({ ...prev, [chapterId]: status }));
 
-            // COMPLETED 또는 FAILED 상태면 폴링 중지
-            const statusUpper = status.status?.toUpperCase();
-            if (statusUpper === 'COMPLETED' || statusUpper === 'FAILED') {
+            // completed 또는 failed 상태면 폴링 중지
+            if (status.status === 'completed' || status.status === 'failed') {
                 if (progressIntervalRef.current[chapterId] !== undefined) {
                     clearTimeout(progressIntervalRef.current[chapterId]);
                     delete progressIntervalRef.current[chapterId];
                 }
             }
-        } catch (error) {
-            // console.error(`[Error] Failed to fetch status for ${chapterId}:`, error);
+        } catch {
+            // Silently ignore status fetch failures
         }
     };
 
@@ -101,9 +99,8 @@ export function FileUpload({ onFileClick, novelId, mode = 'writer' }: FileUpload
 
             // 기존 파일 중 처리 중인 파일이 있으면 폴링 시작
             chapters.forEach(chapter => {
-                // chapter 객체에 storyboard_status가 없는 경우를 대비해 초기화
-                const status = (chapter as any).storyboard_status?.toUpperCase();
-                if (status === 'PROCESSING' || status === 'PENDING') {
+                const status = (chapter as any).storyboard_status?.toLowerCase();
+                if (status === 'processing' || status === 'pending') {
                     startProgressPolling(chapter.id);
                 }
             });
@@ -332,10 +329,9 @@ export function FileUpload({ onFileClick, novelId, mode = 'writer' }: FileUpload
                             <div className="uploaded-files-grid">
                                 {uploadedFiles.map((file) => {
                                     const progress = progressMap[file.id];
-                                    const statusUpper = progress?.status?.toUpperCase();
-                                    const isProcessing = statusUpper === 'PROCESSING';
-                                    const isCompleted = statusUpper === 'COMPLETED';
-                                    const isFailed = statusUpper === 'FAILED';
+                                    const isProcessing = progress?.status === 'processing';
+                                    const isCompleted = progress?.status === 'completed';
+                                    const isFailed = progress?.status === 'failed';
 
                                     const isSelected = selectedSourceIds.includes(file.id);
 

@@ -29,7 +29,7 @@ class CharacterChatService:
         """캐릭터 채팅방 생성"""
         novel = db.query(Novel).filter(Novel.id == novel_id).first()
         if not novel:
-            raise HTTPException(status_code=404, detail="Novel not found")
+            raise HTTPException(status_code=404, detail="소설을 찾을 수 없습니다.")
 
         new_room = CharacterChatRoom(
             user_id=novel.author_id,
@@ -52,7 +52,7 @@ class CharacterChatService:
         """채팅방 페르소나 프롬프트 수정"""
         room = db.query(CharacterChatRoom).filter(CharacterChatRoom.id == room_id).first()
         if not room:
-            raise HTTPException(status_code=404, detail="Chat room not found")
+            raise HTTPException(status_code=404, detail="채팅방을 찾을 수 없습니다.")
 
         if persona_prompt is not None:
             room.persona_prompt = persona_prompt
@@ -66,7 +66,7 @@ class CharacterChatService:
         """채팅방 삭제"""
         room = db.query(CharacterChatRoom).filter(CharacterChatRoom.id == room_id).first()
         if not room:
-            raise HTTPException(status_code=404, detail="Chat room not found")
+            raise HTTPException(status_code=404, detail="채팅방을 찾을 수 없습니다.")
 
         db.delete(room)
         db.commit()
@@ -98,5 +98,5 @@ class CharacterChatService:
         """채팅방 단건 조회 (없으면 404)"""
         room = db.query(CharacterChatRoom).filter(CharacterChatRoom.id == room_id).first()
         if not room:
-            raise HTTPException(status_code=404, detail="Chat room not found")
+            raise HTTPException(status_code=404, detail="채팅방을 찾을 수 없습니다.")
         return room

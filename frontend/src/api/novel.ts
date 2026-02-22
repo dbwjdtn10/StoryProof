@@ -18,6 +18,8 @@ export interface NovelListResponse {
     novels: Novel[];
 }
 
+export type StoryboardStatus = 'pending' | 'processing' | 'completed' | 'failed';
+
 export interface Chapter {
     id: number;
     novel_id: number;
@@ -26,7 +28,7 @@ export interface Chapter {
     content: string;
     word_count: number;
     created_at: string;
-    storyboard_status?: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+    storyboard_status?: StoryboardStatus;
     storyboard_progress?: number;
     storyboard_message?: string;
 }
@@ -38,7 +40,7 @@ export interface ChapterListItem {
     title: string;
     word_count: number;
     created_at: string;
-    storyboard_status?: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+    storyboard_status?: StoryboardStatus;
     storyboard_progress?: number;
     storyboard_message?: string;
     storyboard_completed_at?: string;
@@ -46,7 +48,7 @@ export interface ChapterListItem {
 
 export interface StoryboardProgress {
     chapter_id: number;
-    status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'pending' | 'processing' | 'completed' | 'failed';
+    status: StoryboardStatus;
     progress: number;
     message?: string;
     error?: string;
@@ -102,7 +104,11 @@ export const getChapter = async (novelId: number, chapterId: number): Promise<Ch
         throw new Error(`Missing required parameters: novelId=${novelId}, chapterId=${chapterId}`);
     }
 
-    return request<Chapter>(`/novels/${novelId}/chapters/${chapterId}`, { method: 'GET' });
+    const response = await request<Chapter>(`/novels/${novelId}/chapters/${chapterId}`, { method: 'GET' });
+    if (response.storyboard_status) {
+        response.storyboard_status = response.storyboard_status.toLowerCase() as StoryboardStatus;
+    }
+    return response;
 };
 
 export const updateChapter = async (novelId: number, chapterId: number, data: { title?: string; content?: string }) => {
@@ -117,7 +123,8 @@ export const deleteChapter = async (novelId: number, chapterId: number): Promise
 };
 
 export const getStoryboardStatus = async (novelId: number, chapterId: number): Promise<StoryboardProgress> => {
-    return request<StoryboardProgress>(`/novels/${novelId}/chapters/${chapterId}/storyboard-status`, { method: 'GET' });
+    const response = await request<StoryboardProgress>(`/novels/${novelId}/chapters/${chapterId}/storyboard-status`, { method: 'GET' });
+    return { ...response, status: response.status?.toLowerCase() as StoryboardProgress['status'] };
 };
 export interface Character {
     name: string;

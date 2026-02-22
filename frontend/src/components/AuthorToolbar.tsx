@@ -1,13 +1,11 @@
 import React from 'react';
 import { Editor } from '@tiptap/react';
-import { Settings } from 'lucide-react';
 
 interface AuthorToolbarProps {
     editor: Editor | null;
-    onOpenSettings: () => void;
 }
 
-export const AuthorToolbar = ({ editor, onOpenSettings }: AuthorToolbarProps) => {
+export const AuthorToolbar = ({ editor }: AuthorToolbarProps) => {
     const [, forceUpdate] = React.useReducer((x) => x + 1, 0);
 
     React.useEffect(() => {
@@ -284,26 +282,6 @@ export const AuthorToolbar = ({ editor, onOpenSettings }: AuthorToolbarProps) =>
                         disabled={!editor}
                     />
                 </div>
-            </div>
-
-            <div className="separator" />
-
-            {/* 10. Settings */}
-            <div className="group">
-                <button
-                    onClick={onOpenSettings}
-                    className="settings-btn"
-                    title="환경설정"
-                    style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: 'var(--foreground)',
-                        padding: '6px'
-                    }}
-                >
-                    <Settings size={20} />
-                </button>
             </div>
         </div>
     );

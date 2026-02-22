@@ -114,10 +114,10 @@ def decode_token(token: str) -> Dict[str, Any]:
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         return payload
-    except Exception:
+    except (JWTError, ValueError):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
+            detail="인증 정보를 확인할 수 없습니다.",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
@@ -163,7 +163,7 @@ async def get_current_user_id(
         if user_id is None:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Could not validate credentials",
+                detail="인증 정보를 확인할 수 없습니다.",
                 headers={"WWW-Authenticate": "Bearer"},
             )
         return str(user_id)
@@ -172,7 +172,7 @@ async def get_current_user_id(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication failed",
+            detail="인증에 실패했습니다.",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
@@ -199,7 +199,7 @@ async def get_current_user(
         if user is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="User not found",
+                detail="사용자를 찾을 수 없습니다.",
             )
         return user
     except HTTPException:
@@ -207,7 +207,7 @@ async def get_current_user(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="User lookup failed",
+            detail="사용자 조회에 실패했습니다.",
         )
 
 
@@ -227,7 +227,7 @@ async def get_optional_user(
             return db.query(User).filter(User.id == int(user_id)).first()
         finally:
             db.close()
-    except Exception:
+    except (JWTError, ValueError, HTTPException):
         return None
 
 
@@ -238,7 +238,7 @@ def require_admin(current_user = Depends(get_current_user)):
     if not getattr(current_user, "is_admin", False):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin access required",
+            detail="관리자 권한이 필요합니다.",
         )
     return current_user
 
@@ -248,6 +248,6 @@ def require_verified_email(current_user = Depends(get_current_user)):
     if not getattr(current_user, "is_email_verified", False):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Email verification required",
+            detail="이메일 인증이 필요합니다.",
         )
     return current_user

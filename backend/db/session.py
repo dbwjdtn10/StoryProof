@@ -4,6 +4,8 @@
 - 의존성 주입을 위한 get_db 함수
 """
 
+from contextlib import contextmanager
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from typing import Generator
@@ -97,6 +99,24 @@ def get_db() -> Generator[Session, None, None]:
         def get_users(db: Session = Depends(get_db)):
             users = db.query(User).all()
             return users
+    """
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+# ===== 세션 컨텍스트 매니저 =====
+
+@contextmanager
+def get_db_session():
+    """
+    DB 세션 컨텍스트 매니저 (Celery 등 비-DI 환경용)
+
+    Example:
+        with get_db_session() as db:
+            user = db.query(User).filter(User.id == 1).first()
     """
     db = SessionLocal()
     try:

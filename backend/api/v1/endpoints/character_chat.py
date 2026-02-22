@@ -155,7 +155,7 @@ def _fetch_analysis_for_character(
             logger.warning(f"[Persona] Strict mode: No analysis found for chapter {chapter_id}. Aborting.")
             raise HTTPException(
                 status_code=404,
-                detail=f"No analysis or character data found for '{character_name}' in this chapter."
+                detail=f"이 챕터에서 '{character_name}'의 분석 또는 캐릭터 데이터를 찾을 수 없습니다."
             )
         # Legacy fallback (Global)
         analysis = db.query(Analysis).filter(
@@ -172,7 +172,7 @@ def _fetch_analysis_for_character(
     if not analysis or not analysis.result:
         raise HTTPException(
             status_code=404,
-            detail="Analysis data not found for this novel. Please run analysis first."
+            detail="이 소설의 분석 데이터를 찾을 수 없습니다. 먼저 분석을 실행해주세요."
         )
 
     return analysis
@@ -219,11 +219,11 @@ def _find_character_in_analysis(analysis, character_name: str) -> dict:
         for char in characters_list[:10]
         if isinstance(char, dict) and (char.get("name") or char.get("character_name"))
     ]
-    error_detail = f"Character '{character_name}' not found in analysis."
+    error_detail = f"분석에서 '{character_name}' 캐릭터를 찾을 수 없습니다."
     if available_names:
-        error_detail += f" Available characters: {', '.join(available_names)}"
+        error_detail += f" 사용 가능한 캐릭터: {', '.join(available_names)}"
     else:
-        error_detail += " No characters found in analysis data."
+        error_detail += " 분석 데이터에서 캐릭터를 찾을 수 없습니다."
     raise HTTPException(status_code=404, detail=error_detail)
 
 
@@ -528,7 +528,7 @@ async def generate_persona(
     if not client:
         raise HTTPException(
             status_code=500,
-            detail="LLM client not initialized. Check GOOGLE_API_KEY."
+            detail="LLM 클라이언트가 초기화되지 않았습니다. GOOGLE_API_KEY를 확인해주세요."
         )
 
     logger.info(f"===== GENERATE PERSONA REQUEST =====")
@@ -547,7 +547,7 @@ async def generate_persona(
         )
         persona_prompt = response.text.strip()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to generate persona: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"페르소나 생성에 실패했습니다: {str(e)}")
 
     return PersonaGenerationResponse(
         character_name=request.character_name,
@@ -609,7 +609,7 @@ async def send_message(
     room = CharacterChatService.get_room(db, room_id)
 
     if not client:
-        raise HTTPException(status_code=500, detail="LLM client not initialized")
+        raise HTTPException(status_code=500, detail="LLM 클라이언트가 초기화되지 않았습니다.")
 
     user_msg, contents, system_instruction = await _prepare_message_context(db, room, message.content)
 
@@ -666,7 +666,7 @@ async def send_message_stream(
     room = CharacterChatService.get_room(db, room_id)
 
     if not client:
-        raise HTTPException(status_code=500, detail="LLM client not initialized")
+        raise HTTPException(status_code=500, detail="LLM 클라이언트가 초기화되지 않았습니다.")
 
     user_msg, contents, system_instruction = await _prepare_message_context(db, room, message.content)
 

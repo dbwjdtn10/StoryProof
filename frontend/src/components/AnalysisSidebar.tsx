@@ -1,6 +1,97 @@
 import { useState } from 'react';
 import { X, AlertTriangle, CheckCircle, Loader2, Navigation, RefreshCw, ChevronDown, Copy, BarChart3, Pen, BookOpen } from 'lucide-react';
 
+/** A generic issue with description and optional suggestion */
+interface AnalysisIssue {
+    description: string;
+    suggestion?: string;
+}
+
+interface AnalysisEvaluation {
+    score?: number;
+    strengths?: string[];
+    weaknesses?: string[];
+}
+
+interface StructureSection {
+    name: string;
+    description: string;
+}
+
+interface AnalysisStructure {
+    type: string;
+    sections?: StructureSection[];
+}
+
+interface AnalysisConflict {
+    type: string;
+    intensity: number;
+    description: string;
+}
+
+interface AnalysisPacing {
+    overall: string;
+    issues?: AnalysisIssue[];
+}
+
+interface AnalysisForeshadowing {
+    type: string;
+    description: string;
+}
+
+interface AnalysisTone {
+    primary: string;
+    consistency: string;
+    issues?: AnalysisIssue[];
+}
+
+interface AnalysisSentenceStructure {
+    dialogue_ratio: string;
+    avg_length: string;
+    issues?: AnalysisIssue[];
+}
+
+interface VocabularyRepetition {
+    word: string;
+    count: number;
+    alternatives?: string[];
+}
+
+interface VocabularyCliche {
+    expression: string;
+    suggestion?: string;
+}
+
+interface AnalysisVocabulary {
+    diversity: string;
+    repetitions?: VocabularyRepetition[];
+    cliches?: VocabularyCliche[];
+}
+
+interface AnalysisPointOfView {
+    type: string;
+    consistency: string;
+    issues?: AnalysisIssue[];
+}
+
+export interface PlotAnalysisData {
+    structure?: AnalysisStructure;
+    conflicts?: AnalysisConflict[];
+    pacing?: AnalysisPacing;
+    foreshadowing?: AnalysisForeshadowing[];
+    evaluation?: AnalysisEvaluation;
+    error?: string;
+}
+
+export interface StyleAnalysisData {
+    tone?: AnalysisTone;
+    sentence_structure?: AnalysisSentenceStructure;
+    vocabulary?: AnalysisVocabulary;
+    point_of_view?: AnalysisPointOfView;
+    evaluation?: AnalysisEvaluation;
+    error?: string;
+}
+
 export interface AnalysisResult {
     status: string;
     message?: string;
@@ -13,20 +104,20 @@ export interface AnalysisResult {
         suggestion: string;
     }>;
     // Plot analysis fields
-    structure?: any;
-    conflicts?: any[];
-    pacing?: any;
-    foreshadowing?: any[];
+    structure?: AnalysisStructure;
+    conflicts?: AnalysisConflict[];
+    pacing?: AnalysisPacing;
+    foreshadowing?: AnalysisForeshadowing[];
     // Style analysis fields
-    tone?: any;
-    sentence_structure?: any;
-    vocabulary?: any;
-    point_of_view?: any;
+    tone?: AnalysisTone;
+    sentence_structure?: AnalysisSentenceStructure;
+    vocabulary?: AnalysisVocabulary;
+    point_of_view?: AnalysisPointOfView;
     // Common
-    evaluation?: any;
+    evaluation?: AnalysisEvaluation;
     // Overall (combined)
-    plot?: any;
-    style?: any;
+    plot?: PlotAnalysisData;
+    style?: StyleAnalysisData;
     // Error
     error?: string;
 }
@@ -176,7 +267,7 @@ function ConsistencyRenderer({ result, onNavigateToQuote, onApplySuggestion, fil
     );
 }
 
-function PlotRenderer({ data }: { data: any }) {
+function PlotRenderer({ data }: { data: PlotAnalysisData | undefined }) {
     if (!data || data.error) return <p style={{ color: 'var(--muted-foreground)' }}>플롯 분석 데이터가 없습니다.</p>;
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -186,7 +277,7 @@ function PlotRenderer({ data }: { data: any }) {
             {data.structure && (
                 <div>
                     <h4 style={{ margin: '0 0 8px', fontSize: '0.9rem', fontWeight: '600', color: 'var(--modal-text)' }}>구조: {data.structure.type}</h4>
-                    {(data.structure.sections || []).map((s: any, i: number) => (
+                    {(data.structure.sections || []).map((s: StructureSection, i: number) => (
                         <div key={i} style={{ padding: '8px', marginBottom: '6px', backgroundColor: 'var(--secondary)', borderRadius: '6px', fontSize: '0.85rem' }}>
                             <strong>{s.name}</strong>: {s.description}
                         </div>
@@ -198,7 +289,7 @@ function PlotRenderer({ data }: { data: any }) {
             {data.conflicts && data.conflicts.length > 0 && (
                 <div>
                     <h4 style={{ margin: '0 0 8px', fontSize: '0.9rem', fontWeight: '600', color: 'var(--modal-text)' }}>갈등 요소</h4>
-                    {data.conflicts.map((c: any, i: number) => (
+                    {data.conflicts.map((c: AnalysisConflict, i: number) => (
                         <div key={i} style={{ padding: '8px', marginBottom: '6px', border: '1px solid var(--border)', borderRadius: '6px', fontSize: '0.85rem' }}>
                             <span style={{ padding: '2px 6px', borderRadius: '4px', backgroundColor: 'rgba(220, 38, 38, 0.1)', color: '#DC2626', fontSize: '0.75rem', fontWeight: '600' }}>{c.type}</span>
                             <span style={{ marginLeft: '6px', fontSize: '0.75rem', color: 'var(--muted-foreground)' }}>강도: {c.intensity}/10</span>
@@ -212,7 +303,7 @@ function PlotRenderer({ data }: { data: any }) {
             {data.pacing && (
                 <div>
                     <h4 style={{ margin: '0 0 8px', fontSize: '0.9rem', fontWeight: '600', color: 'var(--modal-text)' }}>전개 속도: {data.pacing.overall}</h4>
-                    {(data.pacing.issues || []).map((p: any, i: number) => (
+                    {(data.pacing.issues || []).map((p: AnalysisIssue, i: number) => (
                         <div key={i} style={{ padding: '8px', marginBottom: '6px', border: '1px solid var(--border)', borderRadius: '6px', fontSize: '0.85rem' }}>
                             <p style={{ margin: '0 0 4px', fontWeight: '500' }}>{p.description}</p>
                             {p.suggestion && <p style={{ margin: 0, color: '#059669', fontSize: '0.8rem' }}>{'->'} {p.suggestion}</p>}
@@ -225,7 +316,7 @@ function PlotRenderer({ data }: { data: any }) {
             {data.foreshadowing && data.foreshadowing.length > 0 && (
                 <div>
                     <h4 style={{ margin: '0 0 8px', fontSize: '0.9rem', fontWeight: '600', color: 'var(--modal-text)' }}>복선/떡밥</h4>
-                    {data.foreshadowing.map((f: any, i: number) => (
+                    {data.foreshadowing.map((f: AnalysisForeshadowing, i: number) => (
                         <div key={i} style={{ padding: '8px', marginBottom: '6px', backgroundColor: 'var(--secondary)', borderRadius: '6px', fontSize: '0.85rem' }}>
                             <span style={{ padding: '2px 6px', borderRadius: '4px', backgroundColor: f.type === '회수됨' ? 'rgba(22, 163, 74, 0.1)' : f.type === '신규' ? 'rgba(37, 99, 235, 0.1)' : 'rgba(217, 119, 6, 0.1)', color: f.type === '회수됨' ? '#16A34A' : f.type === '신규' ? '#2563EB' : '#D97706', fontSize: '0.75rem', fontWeight: '600' }}>{f.type}</span>
                             <p style={{ margin: '6px 0 0', color: 'var(--muted-foreground)' }}>{f.description}</p>
@@ -237,16 +328,16 @@ function PlotRenderer({ data }: { data: any }) {
             {/* Evaluation */}
             {data.evaluation && (
                 <div>
-                    {data.evaluation.strengths?.length > 0 && (
+                    {(data.evaluation.strengths?.length ?? 0) > 0 && (
                         <div style={{ marginBottom: '8px' }}>
                             <p style={{ margin: '0 0 4px', fontSize: '0.8rem', fontWeight: '600', color: '#16A34A' }}>강점</p>
-                            {data.evaluation.strengths.map((s: string, i: number) => <p key={i} style={{ margin: '2px 0', fontSize: '0.85rem', color: 'var(--muted-foreground)' }}>+ {s}</p>)}
+                            {data.evaluation.strengths?.map((s: string, i: number) => <p key={i} style={{ margin: '2px 0', fontSize: '0.85rem', color: 'var(--muted-foreground)' }}>+ {s}</p>)}
                         </div>
                     )}
-                    {data.evaluation.weaknesses?.length > 0 && (
+                    {(data.evaluation.weaknesses?.length ?? 0) > 0 && (
                         <div style={{ marginBottom: '8px' }}>
                             <p style={{ margin: '0 0 4px', fontSize: '0.8rem', fontWeight: '600', color: '#DC2626' }}>약점</p>
-                            {data.evaluation.weaknesses.map((w: string, i: number) => <p key={i} style={{ margin: '2px 0', fontSize: '0.85rem', color: 'var(--muted-foreground)' }}>- {w}</p>)}
+                            {data.evaluation.weaknesses?.map((w: string, i: number) => <p key={i} style={{ margin: '2px 0', fontSize: '0.85rem', color: 'var(--muted-foreground)' }}>- {w}</p>)}
                         </div>
                     )}
                 </div>
@@ -255,7 +346,7 @@ function PlotRenderer({ data }: { data: any }) {
     );
 }
 
-function StyleRenderer({ data }: { data: any }) {
+function StyleRenderer({ data }: { data: StyleAnalysisData | undefined }) {
     if (!data || data.error) return <p style={{ color: 'var(--muted-foreground)' }}>문체 분석 데이터가 없습니다.</p>;
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -265,7 +356,7 @@ function StyleRenderer({ data }: { data: any }) {
             {data.tone && (
                 <div>
                     <h4 style={{ margin: '0 0 8px', fontSize: '0.9rem', fontWeight: '600', color: 'var(--modal-text)' }}>어조: {data.tone.primary} ({data.tone.consistency})</h4>
-                    {(data.tone.issues || []).map((t: any, i: number) => (
+                    {(data.tone.issues || []).map((t: AnalysisIssue, i: number) => (
                         <div key={i} style={{ padding: '8px', marginBottom: '6px', border: '1px solid var(--border)', borderRadius: '6px', fontSize: '0.85rem' }}>
                             <p style={{ margin: '0 0 4px' }}>{t.description}</p>
                             {t.suggestion && <p style={{ margin: 0, color: '#059669', fontSize: '0.8rem' }}>{'->'} {t.suggestion}</p>}
@@ -280,7 +371,7 @@ function StyleRenderer({ data }: { data: any }) {
                     <h4 style={{ margin: '0 0 8px', fontSize: '0.9rem', fontWeight: '600', color: 'var(--modal-text)' }}>문장 구조</h4>
                     <p style={{ margin: '0 0 4px', fontSize: '0.85rem', color: 'var(--muted-foreground)' }}>대화문 비율: {data.sentence_structure.dialogue_ratio}</p>
                     <p style={{ margin: '0 0 8px', fontSize: '0.85rem', color: 'var(--muted-foreground)' }}>평균 문장 길이: {data.sentence_structure.avg_length}</p>
-                    {(data.sentence_structure.issues || []).map((s: any, i: number) => (
+                    {(data.sentence_structure.issues || []).map((s: AnalysisIssue, i: number) => (
                         <div key={i} style={{ padding: '8px', marginBottom: '6px', border: '1px solid var(--border)', borderRadius: '6px', fontSize: '0.85rem' }}>
                             <p style={{ margin: '0 0 4px' }}>{s.description}</p>
                             {s.suggestion && <p style={{ margin: 0, color: '#059669', fontSize: '0.8rem' }}>{'->'} {s.suggestion}</p>}
@@ -293,12 +384,12 @@ function StyleRenderer({ data }: { data: any }) {
             {data.vocabulary && (
                 <div>
                     <h4 style={{ margin: '0 0 8px', fontSize: '0.9rem', fontWeight: '600', color: 'var(--modal-text)' }}>어휘 다양성: {data.vocabulary.diversity}</h4>
-                    {(data.vocabulary.repetitions || []).map((r: any, i: number) => (
+                    {(data.vocabulary.repetitions || []).map((r: VocabularyRepetition, i: number) => (
                         <div key={i} style={{ padding: '8px', marginBottom: '6px', backgroundColor: 'var(--secondary)', borderRadius: '6px', fontSize: '0.85rem' }}>
                             <strong>"{r.word}"</strong> ({r.count}회) {'->'} 대안: {(r.alternatives || []).join(', ')}
                         </div>
                     ))}
-                    {(data.vocabulary.cliches || []).map((c: any, i: number) => (
+                    {(data.vocabulary.cliches || []).map((c: VocabularyCliche, i: number) => (
                         <div key={i} style={{ padding: '8px', marginBottom: '6px', border: '1px solid var(--border)', borderRadius: '6px', fontSize: '0.85rem' }}>
                             <span style={{ color: '#D97706' }}>클리셰:</span> "{c.expression}"
                             {c.suggestion && <p style={{ margin: '4px 0 0', color: '#059669', fontSize: '0.8rem' }}>{'->'} {c.suggestion}</p>}
@@ -311,7 +402,7 @@ function StyleRenderer({ data }: { data: any }) {
             {data.point_of_view && (
                 <div>
                     <h4 style={{ margin: '0 0 8px', fontSize: '0.9rem', fontWeight: '600', color: 'var(--modal-text)' }}>서술 시점: {data.point_of_view.type} ({data.point_of_view.consistency})</h4>
-                    {(data.point_of_view.issues || []).map((p: any, i: number) => (
+                    {(data.point_of_view.issues || []).map((p: AnalysisIssue, i: number) => (
                         <div key={i} style={{ padding: '8px', marginBottom: '6px', border: '1px solid var(--border)', borderRadius: '6px', fontSize: '0.85rem' }}>
                             <p style={{ margin: '0 0 4px' }}>{p.description}</p>
                             {p.suggestion && <p style={{ margin: 0, color: '#059669', fontSize: '0.8rem' }}>{'->'} {p.suggestion}</p>}
@@ -323,16 +414,16 @@ function StyleRenderer({ data }: { data: any }) {
             {/* Evaluation */}
             {data.evaluation && (
                 <div>
-                    {data.evaluation.strengths?.length > 0 && (
+                    {(data.evaluation.strengths?.length ?? 0) > 0 && (
                         <div style={{ marginBottom: '8px' }}>
                             <p style={{ margin: '0 0 4px', fontSize: '0.8rem', fontWeight: '600', color: '#16A34A' }}>강점</p>
-                            {data.evaluation.strengths.map((s: string, i: number) => <p key={i} style={{ margin: '2px 0', fontSize: '0.85rem', color: 'var(--muted-foreground)' }}>+ {s}</p>)}
+                            {data.evaluation.strengths?.map((s: string, i: number) => <p key={i} style={{ margin: '2px 0', fontSize: '0.85rem', color: 'var(--muted-foreground)' }}>+ {s}</p>)}
                         </div>
                     )}
-                    {data.evaluation.weaknesses?.length > 0 && (
+                    {(data.evaluation.weaknesses?.length ?? 0) > 0 && (
                         <div style={{ marginBottom: '8px' }}>
                             <p style={{ margin: '0 0 4px', fontSize: '0.8rem', fontWeight: '600', color: '#DC2626' }}>약점</p>
-                            {data.evaluation.weaknesses.map((w: string, i: number) => <p key={i} style={{ margin: '2px 0', fontSize: '0.85rem', color: 'var(--muted-foreground)' }}>- {w}</p>)}
+                            {data.evaluation.weaknesses?.map((w: string, i: number) => <p key={i} style={{ margin: '2px 0', fontSize: '0.85rem', color: 'var(--muted-foreground)' }}>- {w}</p>)}
                         </div>
                     )}
                 </div>
@@ -341,7 +432,7 @@ function StyleRenderer({ data }: { data: any }) {
     );
 }
 
-const ANALYSIS_TYPE_LABELS: Record<string, { label: string; icon: any }> = {
+const ANALYSIS_TYPE_LABELS: Record<string, { label: string; icon: typeof AlertTriangle }> = {
     consistency: { label: '설정 파괴 분석', icon: AlertTriangle },
     plot: { label: '플롯 분석', icon: BarChart3 },
     style: { label: '문체 분석', icon: Pen },
@@ -396,16 +487,16 @@ export function AnalysisSidebar({ isOpen, onClose, result, isLoading, onNavigate
                 return (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                         {result.evaluation?.score != null && <ScoreGauge score={result.evaluation.score} />}
-                        {result.evaluation?.strengths?.length > 0 && (
+                        {(result.evaluation?.strengths?.length ?? 0) > 0 && (
                             <div>
                                 <p style={{ margin: '0 0 4px', fontSize: '0.8rem', fontWeight: '600', color: '#16A34A' }}>강점</p>
-                                {result.evaluation.strengths.map((s: string, i: number) => <p key={i} style={{ margin: '2px 0', fontSize: '0.85rem', color: 'var(--muted-foreground)' }}>+ {s}</p>)}
+                                {result.evaluation?.strengths?.map((s: string, i: number) => <p key={i} style={{ margin: '2px 0', fontSize: '0.85rem', color: 'var(--muted-foreground)' }}>+ {s}</p>)}
                             </div>
                         )}
-                        {result.evaluation?.weaknesses?.length > 0 && (
+                        {(result.evaluation?.weaknesses?.length ?? 0) > 0 && (
                             <div>
                                 <p style={{ margin: '0 0 4px', fontSize: '0.8rem', fontWeight: '600', color: '#DC2626' }}>약점</p>
-                                {result.evaluation.weaknesses.map((w: string, i: number) => <p key={i} style={{ margin: '2px 0', fontSize: '0.85rem', color: 'var(--muted-foreground)' }}>- {w}</p>)}
+                                {result.evaluation?.weaknesses?.map((w: string, i: number) => <p key={i} style={{ margin: '2px 0', fontSize: '0.85rem', color: 'var(--muted-foreground)' }}>- {w}</p>)}
                             </div>
                         )}
                         <h3 style={{ margin: '8px 0 0', fontSize: '1rem', fontWeight: '600', borderTop: '1px solid var(--border)', paddingTop: '12px' }}>플롯 분석</h3>

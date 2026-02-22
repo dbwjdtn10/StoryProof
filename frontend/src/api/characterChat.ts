@@ -1,4 +1,5 @@
 import { request, getToken } from './client';
+import { parseSSEBuffer } from './sseUtils';
 
 export interface CharacterChatRoom {
     id: number;
@@ -115,23 +116,14 @@ export const sendMessageStream = async (
         const { done, value } = await reader.read();
         if (done) break;
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n\n');
-        buffer = lines.pop() ?? '';
-
-        for (const line of lines) {
-            if (!line.startsWith('data: ')) continue;
-            const data = line.slice(6).trim();
-            try {
-                const parsed = JSON.parse(data);
-                if (parsed.type === 'user_saved') {
-                    onUserSaved({ id: parsed.id, room_id: roomId, role: 'user', content: parsed.content, created_at: parsed.created_at });
-                } else if (parsed.type === 'token' && parsed.text) {
-                    onToken(parsed.text);
-                } else if (parsed.type === 'done') {
-                    onDone({ id: parsed.ai_id, room_id: roomId, role: 'assistant', content: parsed.ai_content, created_at: parsed.created_at });
-                }
-            } catch (e) { console.warn('[SSE] parse error:', data, e); }
-        }
+        buffer = parseSSEBuffer(buffer, decoder.decode(value, { stream: true }), (parsed) => {
+            if (parsed.type === 'user_saved') {
+                onUserSaved({ id: parsed.id, room_id: roomId, role: 'user', content: parsed.content, created_at: parsed.created_at });
+            } else if (parsed.type === 'token' && parsed.text) {
+                onToken(parsed.text);
+            } else if (parsed.type === 'done') {
+                onDone({ id: parsed.ai_id, room_id: roomId, role: 'assistant', content: parsed.ai_content, created_at: parsed.created_at });
+            }
+        });
     }
 };

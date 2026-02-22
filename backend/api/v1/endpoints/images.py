@@ -3,6 +3,7 @@ import logging
 import os
 import time
 from functools import partial
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -17,6 +18,7 @@ from backend.core.security import get_current_user
 from backend.services.image_service import ImageService
 from backend.services.novel_service import NovelService
 from backend.schemas.image_schema import ImageGenerationRequest, ImageGenerationResponse
+from backend.core.utils import sanitize_filename
 
 router = APIRouter()
 
@@ -63,7 +65,7 @@ async def generate_entity_image(
     
     if not analysis:
         logger.warning(f"Analysis record not found for query: novel_id={request.novel_id}, chapter_id={request.chapter_id}")
-        raise HTTPException(status_code=404, detail="Analysis record not found. Please analyze the chapter first.")
+        raise HTTPException(status_code=404, detail="분석 데이터를 찾을 수 없습니다. 먼저 챕터를 분석해주세요.")
 
     logger.info(f"Analysis record found: id={analysis.id}")
 
@@ -71,7 +73,7 @@ async def generate_entity_image(
     try:
         image_service = ImageService()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Image service not available: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"이미지 서비스를 사용할 수 없습니다: {str(e)}")
         
     # 4. Refine Prompt
     # If description is provided, use it. Otherwise try to find it in the analysis result.
@@ -96,6 +98,10 @@ async def generate_entity_image(
                 if existing_image and not request.force_regenerate:
                     base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
                     image_file_path = os.path.join(base_dir, existing_image.lstrip('/'))
+                    # Path traversal 방어
+                    safe_path = Path(image_file_path).resolve()
+                    if not str(safe_path).startswith(str(Path(base_dir).resolve())):
+                        raise HTTPException(status_code=400, detail="잘못된 파일 경로입니다.")
                     if os.path.exists(image_file_path):
                         logger.info(f"Image cache hit: {existing_image} for {request.entity_name}")
                         return ImageGenerationResponse(image_url=existing_image, refined_prompt="(cached)")
@@ -112,7 +118,7 @@ async def generate_entity_image(
                 break
                 
     if not prompt_text:
-        raise HTTPException(status_code=400, detail=f"Description for '{request.entity_name}' not found. Please provide a description.")
+        raise HTTPException(status_code=400, detail=f"'{request.entity_name}'의 설명을 찾을 수 없습니다. 설명을 입력해주세요.")
         
     loop = asyncio.get_running_loop()
     refined_prompt = await loop.run_in_executor(
@@ -121,8 +127,8 @@ async def generate_entity_image(
 
     # 5. Generate Image
     # Filename: novel_{id}_{type}_{name}_{timestamp}.png
-    safe_name = "".join(c for c in request.entity_name if c.isalnum() or c in (' ', '_', '-')).strip().replace(' ', '_')
-    if not safe_name:
+    safe_name = sanitize_filename(request.entity_name).replace(' ', '_')
+    if not safe_name or safe_name == "untitled":
         raise HTTPException(status_code=400, detail="entity_name에 유효한 문자가 없습니다.")
     timestamp = int(time.time())
     filename = f"novel_{request.novel_id}_{request.entity_type}_{safe_name}_{timestamp}.png"
@@ -132,7 +138,7 @@ async def generate_entity_image(
     )
     
     if not image_path:
-        raise HTTPException(status_code=500, detail="Failed to generate image.")
+        raise HTTPException(status_code=500, detail="이미지 생성에 실패했습니다.")
         
     # 6. Update Analysis Record (Save image path to JSON)
     # We need to update the specific item in the list.

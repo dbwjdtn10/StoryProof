@@ -43,6 +43,12 @@ def _check_rate_limit(request: Request):
         )
     _rate_store[ip].append(now)
 
+    # 메모리 누수 방지: 오래된 항목 정리
+    if len(_rate_store) > 10000:
+        expired_ips = [k for k, v in _rate_store.items() if not v or now - v[-1] >= _RATE_WINDOW]
+        for k in expired_ips:
+            del _rate_store[k]
+
 
 # ===== 회원가입 =====
 

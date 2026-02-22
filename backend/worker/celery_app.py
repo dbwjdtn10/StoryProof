@@ -1,5 +1,9 @@
+import logging
+
 from celery import Celery
 from backend.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 # Celery 인스턴스 생성
 celery_app = Celery(
@@ -34,9 +38,9 @@ def preload_models(sender, **kwargs):
         from backend.services.analysis import EmbeddingSearchEngine
         engine = EmbeddingSearchEngine()
         engine.warmup()
-        print("[OK] Celery Worker: All models preloaded successfully.")
+        logger.info("Celery Worker: All models preloaded successfully.")
     except Exception as e:
-        print(f"[Warning] Celery Worker: Model preloading failed: {e}")
+        logger.warning(f"Celery Worker: Model preloading failed: {e}")
 
 
 if __name__ == "__main__":

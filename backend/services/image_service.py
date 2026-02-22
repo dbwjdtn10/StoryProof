@@ -11,7 +11,7 @@ try:
     from google.genai import types
 except ImportError:
     genai = None
-    print("Warning: google-genai library not found. Image generation will not work.")
+    logging.getLogger(__name__).warning("google-genai library not found. Image generation will not work.")
 
 logger = logging.getLogger(__name__)
 

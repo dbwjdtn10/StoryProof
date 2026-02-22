@@ -3,7 +3,7 @@
 - 모든 로직은 Service Layer로 이관됨
 """
 
-from fastapi import APIRouter, Depends, status, Query, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File, Form
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -14,6 +14,7 @@ from backend.core.security import get_current_user
 from backend.services.novel_service import NovelService
 from backend.services.analysis_service import AnalysisService
 from backend.services.export_service import BibleExportService, ChapterExportService
+from backend.core.utils import sanitize_filename
 from backend.schemas.novel_schema import (
     NovelCreate, NovelUpdate, NovelResponse, NovelListResponse,
     ChapterResponse, ChapterListItem, ChapterUpdate, ChapterMergeRequest
@@ -122,6 +123,12 @@ async def upload_chapter_file(
     db: Session = Depends(get_db)
 ):
     """파일 업로드로 회차 생성 (백그라운드 분석 트리거 포함)"""
+    # 입력 유효성 검사
+    if chapter_number <= 0:
+        raise HTTPException(status_code=400, detail="회차 번호는 1 이상이어야 합니다.")
+    if len(title) > 255:
+        raise HTTPException(status_code=400, detail="제목은 255자 이하여야 합니다.")
+
     is_admin = _is_admin(current_user)
     return await NovelService.create_chapter_from_file(
         db, novel_id, current_user.id, file, chapter_number, title, is_admin
@@ -218,8 +225,8 @@ def export_chapter(
         media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         ext = "docx"
 
-    safe_title = "".join(c for c in display_title if c.isalnum() or c in " _-").strip()[:30]
-    display_name = f"{safe_title}.{ext}" if safe_title else f"chapter_{chapter_id}.{ext}"
+    safe_title = sanitize_filename(display_title)
+    display_name = f"{safe_title}.{ext}" if safe_title != "untitled" else f"chapter_{chapter_id}.{ext}"
     ascii_fallback = f"chapter_{chapter_id}.{ext}"
     encoded_name = quote(display_name)
 
@@ -267,8 +274,8 @@ def export_bible(
         ext = "docx"
 
     # 파일명: filename*에 한글 포함, filename에는 ASCII 폴백
-    safe_title = "".join(c for c in title if c.isalnum() or c in " _-").strip()[:30]
-    display_name = f"{safe_title}_바이블.{ext}" if safe_title else f"bible_{novel_id}_{chapter_id}.{ext}"
+    safe_title = sanitize_filename(title)
+    display_name = f"{safe_title}_바이블.{ext}" if safe_title != "untitled" else f"bible_{novel_id}_{chapter_id}.{ext}"
     ascii_fallback = f"bible_{novel_id}_{chapter_id}.{ext}"
     encoded_name = quote(display_name)
 

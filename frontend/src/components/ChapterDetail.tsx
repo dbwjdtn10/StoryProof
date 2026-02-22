@@ -49,7 +49,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
     const [isBibleLoading, setIsBibleLoading] = useState(false);
     const [sceneTexts, setSceneTexts] = useState<string[]>([]);
 
-    const [chapterStatus, setChapterStatus] = useState<'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | undefined>(undefined);
+    const [chapterStatus, setChapterStatus] = useState<'pending' | 'processing' | 'completed' | 'failed' | undefined>(undefined);
 
     // Bible search & export
     const [bibleSearchInput, setBibleSearchInput] = useState('');
@@ -177,18 +177,18 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
         let timerId: ReturnType<typeof setTimeout>;
         let cancelled = false;
 
-        if (chapterStatus === 'PROCESSING' || chapterStatus === 'PENDING') {
+        if (chapterStatus === 'processing' || chapterStatus === 'pending') {
             let interval = 3000;
             const poll = async () => {
                 if (cancelled || !novelId || !chapterId) return;
                 try {
                     const statusData = await getStoryboardStatus(novelId, chapterId);
-                    const currentStatus = (statusData.status || '').toUpperCase();
+                    const currentStatus = statusData.status;
 
-                    if (currentStatus === 'COMPLETED' || currentStatus === 'FAILED') {
-                        setChapterStatus(currentStatus as any);
+                    if (currentStatus === 'completed' || currentStatus === 'failed') {
+                        setChapterStatus(currentStatus);
                         setIsAnalyzing(false);
-                        if (currentStatus === 'COMPLETED') {
+                        if (currentStatus === 'completed') {
                             toast.success("분석이 완료되었습니다! 데이터를 새로고침합니다.");
                             loadChapterContent();
                             loadBibleData();
@@ -734,7 +734,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
     const handleReanalyze = () => {
         if (!novelId || !chapterId) return;
 
-        if (chapterStatus === 'PROCESSING') {
+        if (chapterStatus === 'processing') {
             toast.warning("현재 분석이 진행 중입니다. 잠시만 기다려주세요.");
             return;
         }
@@ -745,13 +745,13 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                 label: "재분석",
                 onClick: async () => {
                     setIsAnalyzing(true);
-                    setChapterStatus('PROCESSING');
+                    setChapterStatus('processing');
                     try {
                         await reanalyzeChapter(novelId, chapterId);
                         toast.success("재분석 요청이 완료되었습니다. 백그라운드에서 분석이 진행됩니다.");
                     } catch {
                         toast.error("재분석 요청 실패");
-                        setChapterStatus('FAILED');
+                        setChapterStatus('failed');
                         setIsAnalyzing(false);
                     }
                 }
@@ -1099,24 +1099,24 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                         <button
                             className="reanalyze-button"
                             onClick={handleReanalyze}
-                            disabled={chapterStatus === 'PROCESSING' || chapterStatus === 'PENDING' || isAnalyzing}
-                            title={(chapterStatus === 'PROCESSING' || chapterStatus === 'PENDING') ? "분석 진행 중..." : "AI 재분석"}
+                            disabled={chapterStatus === 'processing' || chapterStatus === 'pending' || isAnalyzing}
+                            title={(chapterStatus === 'processing' || chapterStatus === 'pending') ? "분석 진행 중..." : "AI 재분석"}
                             style={{
                                 display: 'flex',
                                 alignItems: 'center',
                                 gap: '8px',
                                 padding: '8px 16px',
-                                backgroundColor: (chapterStatus === 'PROCESSING' || chapterStatus === 'PENDING' || isAnalyzing) ? 'var(--muted)' : 'transparent',
-                                color: (chapterStatus === 'PROCESSING' || chapterStatus === 'PENDING' || isAnalyzing) ? 'var(--muted-foreground)' : 'var(--primary)',
-                                border: (chapterStatus === 'PROCESSING' || chapterStatus === 'PENDING' || isAnalyzing) ? '1px solid var(--border)' : '1px solid var(--primary)',
+                                backgroundColor: (chapterStatus === 'processing' || chapterStatus === 'pending' || isAnalyzing) ? 'var(--muted)' : 'transparent',
+                                color: (chapterStatus === 'processing' || chapterStatus === 'pending' || isAnalyzing) ? 'var(--muted-foreground)' : 'var(--primary)',
+                                border: (chapterStatus === 'processing' || chapterStatus === 'pending' || isAnalyzing) ? '1px solid var(--border)' : '1px solid var(--primary)',
                                 borderRadius: '6px',
-                                cursor: (chapterStatus === 'PROCESSING' || chapterStatus === 'PENDING' || isAnalyzing) ? 'not-allowed' : 'pointer',
+                                cursor: (chapterStatus === 'processing' || chapterStatus === 'pending' || isAnalyzing) ? 'not-allowed' : 'pointer',
                                 fontSize: '0.9rem',
                                 fontWeight: 500
                             }}
                         >
-                            <Clock size={16} className={(chapterStatus === 'PROCESSING' || chapterStatus === 'PENDING' || isAnalyzing) ? "spin-animation" : ""} />
-                            {(chapterStatus === 'PROCESSING' || chapterStatus === 'PENDING' || isAnalyzing) ? '분석 중...' : '재분석'}
+                            <Clock size={16} className={(chapterStatus === 'processing' || chapterStatus === 'pending' || isAnalyzing) ? "spin-animation" : ""} />
+                            {(chapterStatus === 'processing' || chapterStatus === 'pending' || isAnalyzing) ? '분석 중...' : '재분석'}
                         </button>
                         <button
                             className="save-button"
@@ -1177,9 +1177,6 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                 ) : (
                     <AuthorToolbar
                         editor={activeEditor}
-                        onOpenSettings={() => {
-                            handleOpenSettings();
-                        }}
                     />
                 )
             }

@@ -19,6 +19,8 @@ logging.basicConfig(
     format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
 )
 
+logger = logging.getLogger(__name__)
+
 # ... (Previous imports)
 from backend.api.v1.endpoints import auth, novel, chat, analysis, prediction, character_chat, images
 from backend.core.config import settings
@@ -34,17 +36,17 @@ async def lifespan(app: FastAPI):
     애플리케이션 시작/종료 시 실행되는 이벤트 핸들러
     """
     # 시작 시 실행할 코드
-    print("StoryProof API Server Started")
+    logger.info("StoryProof API Server Started")
     
     # Static directory creation
     os.makedirs("backend/static/images", exist_ok=True)
     
     try:
         init_db()  # DB 초기화 (테이블 생성)
-        print("[OK] Database initialized successfully")
+        logger.info("Database initialized successfully")
     except Exception as e:
-        print(f"[WARNING] Database initialization failed: {e}")
-        print("[INFO] Server starting without database connection")
+        logger.warning(f"Database initialization failed: {e}")
+        logger.info("Server starting without database connection")
     
     # 모델 로딩 (백그라운드 스레드에서 실행하여 서버가 먼저 뜨도록 함)
     def _load_models():
@@ -56,9 +58,9 @@ async def lifespan(app: FastAPI):
             from backend.services.chatbot_service import get_chatbot_service
             get_chatbot_service().warmup()
             _model_ready = True
-            print("[OK] All models loaded - server is ready")
+            logger.info("All models loaded - server is ready")
         except Exception as e:
-            print(f"[Error] Model loading failed: {e}")
+            logger.error(f"Model loading failed: {e}")
             _model_ready = True  # 실패해도 서버는 사용 가능하게
     
     model_thread = threading.Thread(target=_load_models, daemon=True)
@@ -67,7 +69,7 @@ async def lifespan(app: FastAPI):
     yield
     
     # 종료 시 실행할 코드
-    print("StoryProof API Server Stopped")
+    logger.info("StoryProof API Server Stopped")
 
 
 # FastAPI 앱 인스턴스 생성
@@ -99,7 +101,7 @@ def configure_cors() -> None:
         allow_headers=["*"],
         max_age=3600,
     )
-    print(f"[OK] CORS configured for origins: {settings.CORS_ORIGINS}")
+    logger.info(f"CORS configured for origins: {settings.CORS_ORIGINS}")
 
 
 def register_routers() -> None:
@@ -114,7 +116,7 @@ def register_routers() -> None:
     app.include_router(prediction.router, prefix="/api/v1/prediction", tags=["Prediction"])
     app.include_router(character_chat.router, prefix="/api/v1/character-chat", tags=["CharacterChat"])
     app.include_router(images.router, prefix="/api/v1/images", tags=["Images"])
-    print("[OK] Routers registered")
+    logger.info("Routers registered")
 
 
 # 설정 적용 (순서 중요: CORS를 마지막에 - 역순으로 실행되므로 먼저 처리됨)
@@ -152,14 +154,13 @@ async def global_exception_handler(request: Request, exc: Exception):
     글로벌 예외 핸들러
     모든 처리되지 않은 예외를 캐치
     """
-    import logging
-    logging.getLogger("storyproof").error(
+    logger.error(
         f"Unhandled exception [{type(exc).__name__}] on {request.method} {request.url.path}: {exc}",
         exc_info=True
     )
     return JSONResponse(
         status_code=500,
-        content={"detail": "Internal server error"}
+        content={"detail": "서버 내부 오류가 발생했습니다."}
     )
 
 
@@ -172,8 +173,6 @@ async def health_check():
     Returns:
         dict: 헬스 체크 결과
     """
-    import logging
-    _logger = logging.getLogger(__name__)
     from sqlalchemy import text
 
     db_status = "disconnected"
@@ -184,7 +183,7 @@ async def health_check():
         db.execute(text("SELECT 1"))
         db_status = "connected"
     except Exception as e:
-        _logger.warning(f"Health check DB 연결 실패: {e}")
+        logger.warning(f"Health check DB 연결 실패: {e}")
     finally:
         if db:
             db.close()
@@ -196,7 +195,7 @@ async def health_check():
         if engine.index is not None:
             pinecone_status = "connected"
     except Exception as e:
-        _logger.warning(f"Health check Pinecone 확인 실패: {e}")
+        logger.warning(f"Health check Pinecone 확인 실패: {e}")
 
     overall = "healthy" if db_status == "connected" else "degraded"
     return {

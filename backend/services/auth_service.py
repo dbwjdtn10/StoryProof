@@ -20,14 +20,14 @@ class AuthService:
         if db.query(User).filter(User.email == user_data.email).first():
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Email already registered"
+                detail="이미 등록된 이메일입니다."
             )
         
         # 사용자명 중복 확인
         if db.query(User).filter(User.username == user_data.username).first():
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Username already taken"
+                detail="이미 사용 중인 사용자명입니다."
             )
         
         # 비밀번호 해싱
@@ -57,7 +57,7 @@ class AuthService:
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Incorrect email or password",
+                detail="이메일 또는 비밀번호가 올바르지 않습니다.",
                 headers={"WWW-Authenticate": "Bearer"},
             )
             
@@ -65,7 +65,7 @@ class AuthService:
         if not verify_password(user_data.password, user.hashed_password):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Incorrect email or password",
+                detail="이메일 또는 비밀번호가 올바르지 않습니다.",
                 headers={"WWW-Authenticate": "Bearer"},
             )
             
@@ -97,6 +97,6 @@ class AuthService:
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="User not found"
+                detail="사용자를 찾을 수 없습니다."
             )
         return user
