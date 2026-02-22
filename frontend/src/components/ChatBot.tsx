@@ -227,9 +227,10 @@ export function ChatInterface({ onNavigateToScene, novelId, chapterId }: ChatInt
     return (
         <div className="chatbot-container" style={{ display: 'flex', flexDirection: 'column', height: '100%', backgroundColor: 'var(--modal-bg)' }}>
             <div className="chatbot-messages" style={{ flex: 1, overflowY: 'auto', padding: '1rem' }}>
-                {messages.map((msg, idx) => (
-                    <ChatMessageItem key={idx} msg={msg} onNavigateToScene={onNavigateToScene} chapterId={chapterId} />
-                ))}
+                {messages.map((msg, idx) => {
+                    if (msg.role === 'assistant' && !msg.content && isLoading) return null;
+                    return <ChatMessageItem key={idx} msg={msg} onNavigateToScene={onNavigateToScene} chapterId={chapterId} />;
+                })}
                 {isLoading && messages[messages.length - 1]?.content === '' && (
                     <div className="chatbot-message assistant" style={{ alignSelf: 'flex-start' }}>
                         <div className="chatbot-message-bubble assistant-bubble" style={{
