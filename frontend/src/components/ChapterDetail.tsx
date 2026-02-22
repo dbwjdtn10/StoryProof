@@ -8,14 +8,15 @@ import { FloatingMenu } from './FloatingMenu';
 import { ThemeToggle } from './ThemeToggle';
 import { Settings } from './Settings';
 import { getChapter, getChapters, getStoryboardStatus, updateChapter, getChapterBible, reanalyzeChapter, exportBible, exportChapter, BibleData, ChapterListItem, Character, Item, Location } from '../api/novel';
-import { AnalysisSidebar, AnalysisResult } from './AnalysisSidebar';
+import { AnalysisSidebar } from './AnalysisSidebar';
 import { RelationshipGraphModal } from './RelationshipGraph';
-import { PredictionSidebar, Message } from './predictions/PredictionSidebar';
-import { requestPrediction, getPredictionTaskStatus, getPredictionHistory, clearPredictionHistory } from '../api/prediction';
-import { getCachedConsistency, requestConsistencyCheck, getTaskResult, requestChapterAnalysis, getCachedChapterAnalysis } from '../api/analysis';
+import { PredictionSidebar } from './predictions/PredictionSidebar';
+import { clearPredictionHistory } from '../api/prediction';
 import { toast } from 'sonner';
 import { generateImage } from '../api/images';
-import { useTheme } from '../contexts/ThemeContext';
+import { useReaderSettings } from '../hooks/useReaderSettings';
+import { usePrediction } from '../hooks/usePrediction';
+import { useAnalysis } from '../hooks/useAnalysis';
 import '../novel-toolbar.css';
 
 interface ChapterDetailProps {
@@ -64,17 +65,8 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
     const [isChapterExporting, setIsChapterExporting] = useState(false);
     const chapterExportRef = useRef<HTMLDivElement>(null);
 
-    // Polling cleanup refs
-    const analysisPollingRef = useRef<ReturnType<typeof setTimeout>>();
-    const predictionPollingRef = useRef<ReturnType<typeof setTimeout>>();
-
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [isImageGenerating, setIsImageGenerating] = useState(false);
-
-    // Story Prediction State
-    const [isPredictionSidebarOpen, setIsPredictionSidebarOpen] = useState(false);
-    const [chatMessages, setChatMessages] = useState<Message[]>([]);
-    const [isPredictionLoading, setIsPredictionLoading] = useState(false);
 
     // Highlight State
     const [highlightData, setHighlightData] = useState<{
@@ -98,49 +90,47 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
     const hasUnsavedChangesRef = useRef(false);
     const handleSaveRef = useRef<() => Promise<void>>(() => Promise.resolve());
 
-    // Global Theme Sync
-    const { theme: globalTheme, setTheme: setGlobalTheme } = useTheme();
+    // Reader settings (theme sync, localStorage persistence)
+    const { readerSettings, handleReaderSettingsChange } = useReaderSettings(mode);
 
-    // Reader Mode Settings
-    const [readerSettings, setReaderSettings] = useState(() => {
-        const saved = localStorage.getItem('reader-settings');
-        return saved ? JSON.parse(saved) : {
-            fontSize: 18,
-            lineHeight: 2.0,
-            paragraphSpacing: 40,
-            contentWidth: 80,
-            fontFamily: 'Noto Serif KR',
-            theme: 'light'
-        };
-    });
+    // Prediction hook (sidebar state, chat messages, polling)
+    const prediction = usePrediction(novelId);
 
-    // 1. Sync globalTheme -> readerSettings.theme (when global toggle is clicked)
-    useEffect(() => {
-        if (mode === 'reader' && readerSettings.theme !== globalTheme) {
-            setReaderSettings((prev: any) => ({ ...prev, theme: globalTheme }));
-        }
-    }, [globalTheme, mode]);
+    // Analysis hook (sidebar state, loading, results, polling)
+    const analysis = useAnalysis(
+        novelId,
+        chapterId,
+        () => sceneTexts.length > 0 ? sceneTexts.join('\n\n') : content
+    );
 
-    const handleReaderSettingsChange = (newSettings: any) => {
-        setReaderSettings(newSettings);
-        // 2. Sync readerSettings.theme -> globalTheme (when reader toolbar setting is changed)
-        if (newSettings.theme && newSettings.theme !== globalTheme) {
-            setGlobalTheme(newSettings.theme);
-        }
+    // Destructure for easy access throughout the component
+    const {
+        isPredictionSidebarOpen, setIsPredictionSidebarOpen,
+        chatMessages, setChatMessages,
+        isPredictionLoading,
+        handleSendMessage,
+    } = prediction;
+
+    const {
+        isAnalysisSidebarOpen, setIsAnalysisSidebarOpen,
+        isAnalysisLoading,
+        analysisResult,
+        currentAnalysisType,
+        reanalyze: reanalyzeAnalysis,
+    } = analysis;
+
+    // Cross-sidebar coordination wrappers
+    const handlePredictionOpen = async () => {
+        setIsAnalysisSidebarOpen(false);
+        onCloseCharacterChat?.();
+        await prediction.handlePredictionSidebarOpen();
     };
 
-    useEffect(() => {
-        localStorage.setItem('reader-settings', JSON.stringify(readerSettings));
-
-        // Apply theme to document for reader mode
-        if (mode === 'reader') {
-            document.documentElement.setAttribute('data-reader-theme', readerSettings.theme);
-            document.documentElement.setAttribute('data-theme', readerSettings.theme);
-        } else {
-            document.documentElement.removeAttribute('data-reader-theme');
-            // Restore global theme if needed, but ThemeContext handles that
-        }
-    }, [readerSettings, mode]);
+    const handleAnalyzeWrapped = async (type?: string) => {
+        setIsPredictionSidebarOpen(false);
+        onCloseCharacterChat?.();
+        await analysis.handleAnalyze(type);
+    };
 
     // Clear highlight after 15 seconds
     useEffect(() => {
@@ -214,14 +204,6 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
         };
     }, [chapterStatus, novelId, chapterId]);
 
-    // Cleanup all polling timers on unmount
-    useEffect(() => {
-        return () => {
-            if (analysisPollingRef.current) clearTimeout(analysisPollingRef.current);
-            if (predictionPollingRef.current) clearTimeout(predictionPollingRef.current);
-        };
-    }, []);
-
     const loadChapterContent = async () => {
         if (!novelId || !chapterId) {
             return;
@@ -282,11 +264,6 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
     const [selectedKeyEvent, setSelectedKeyEvent] = useState<any | null>(null);
     const [selectedExtraItem, setSelectedExtraItem] = useState<{ title: string, item: any } | null>(null);
 
-    // 설정 파괴 분석 상태
-    const [isAnalysisSidebarOpen, setIsAnalysisSidebarOpen] = useState(false);
-    const [isAnalysisLoading, setIsAnalysisLoading] = useState(false);
-    const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
-    const [currentAnalysisType, setCurrentAnalysisType] = useState<string>('consistency');
 
 
     const [selectedLocation, setSelectedLocation] = useState<any | null>(null);
@@ -422,102 +399,6 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
         }, 100);
     };
 
-    // 통합 회차 분석 실행 (consistency/plot/style/overall)
-    const runChapterAnalysis = async (analysisType: string) => {
-        setIsAnalysisLoading(true);
-        setAnalysisResult(null);
-        setCurrentAnalysisType(analysisType);
-
-        try {
-            let task_id: string;
-
-            if (analysisType === 'consistency') {
-                const allText = sceneTexts.length > 0
-                    ? sceneTexts.join('\n\n')
-                    : content;
-                const res = await requestConsistencyCheck({
-                    novel_id: novelId!,
-                    chapter_id: chapterId,
-                    text: allText
-                });
-                task_id = res.task_id;
-            } else {
-                const res = await requestChapterAnalysis({
-                    novel_id: novelId!,
-                    chapter_id: chapterId!,
-                    analysis_type: analysisType as any
-                });
-                task_id = res.task_id;
-            }
-
-            // 지수 백오프 폴링 (2초 시작, x1.5, 최대 15초, 최대 60회)
-            let pollInterval = 2000;
-            let pollCount = 0;
-            const pollTask = async () => {
-                pollCount++;
-                if (pollCount > 60) {
-                    setIsAnalysisLoading(false);
-                    setAnalysisResult({ status: "타임아웃", message: "분석 시간이 너무 오래 걸립니다. 나중에 다시 시도하세요." });
-                    return;
-                }
-                try {
-                    const data = await getTaskResult(task_id);
-
-                    if (data.status === "COMPLETED") {
-                        setAnalysisResult(data.result as any);
-                        setIsAnalysisLoading(false);
-                        toast.success("분석이 완료되었습니다.");
-                        return;
-                    } else if (data.status === "FAILED") {
-                        setIsAnalysisLoading(false);
-                        setAnalysisResult({ status: "실패", message: data.error || "분석 작업이 실패했습니다." });
-                        toast.error("분석 중 오류가 발생했습니다.");
-                        return;
-                    }
-                } catch (err) {
-                    console.error("Polling error:", err);
-                    setIsAnalysisLoading(false);
-                    setAnalysisResult({ status: "오류", message: "상태 확인 중 서버 통신 오류가 발생했습니다." });
-                    return;
-                }
-                pollInterval = Math.min(pollInterval * 1.5, 15000);
-                analysisPollingRef.current = setTimeout(pollTask, pollInterval);
-            };
-            analysisPollingRef.current = setTimeout(pollTask, pollInterval);
-        } catch (error) {
-            console.error("Analysis error:", error);
-            setAnalysisResult({ status: "오류 발생", message: "서버와 통신 중 오류가 발생했습니다." });
-            setIsAnalysisLoading(false);
-        }
-    };
-
-    const handleAnalyze = async (analysisType: string = 'consistency') => {
-        setIsAnalysisSidebarOpen(true);
-        setIsPredictionSidebarOpen(false);
-        setCurrentAnalysisType(analysisType);
-        onCloseCharacterChat?.();
-
-        // 캐시 확인
-        if (novelId && chapterId) {
-            try {
-                setIsAnalysisLoading(true);
-                const cacheEndpoint = analysisType === 'consistency'
-                    ? getCachedConsistency(novelId, chapterId)
-                    : getCachedChapterAnalysis(novelId, chapterId, analysisType);
-                const cache = await cacheEndpoint;
-                if (cache.cached && cache.result) {
-                    setAnalysisResult(cache.result);
-                    setIsAnalysisLoading(false);
-                    return;
-                }
-            } catch {
-                // 캐시 조회 실패 시 무시하고 새 분석 진행
-            }
-        }
-
-        await runChapterAnalysis(analysisType);
-    };
-
     const handleApplySuggestion = (original: string, suggestion: string) => {
         if (sceneTexts.length > 0) {
             const newSceneTexts = sceneTexts.map(scene => scene.replace(original, suggestion));
@@ -534,97 +415,6 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                 toast.error("해당 문장을 본문에서 찾을 수 없습니다.");
             }
         }
-    };
-
-    const handlePredictionSidebarOpen = async () => {
-        setIsPredictionSidebarOpen(true);
-        setIsAnalysisSidebarOpen(false);
-        onCloseCharacterChat?.();
-
-        // DB에서 이전 대화 히스토리 로드 (현재 메시지가 비어 있을 때만)
-        if (novelId && chatMessages.length === 0) {
-            try {
-                const { history } = await getPredictionHistory(novelId);
-                if (history.length > 0) {
-                    const restored: Message[] = [];
-                    for (const item of history) {
-                        restored.push({ id: `h-u-${item.id}`, role: 'user', content: item.user_input });
-                        restored.push({ id: `h-a-${item.id}`, role: 'assistant', content: item.prediction });
-                    }
-                    setChatMessages(restored);
-                }
-            } catch {
-                // 히스토리 로드 실패 시 무시
-            }
-        }
-    };
-
-    const handleSendMessage = async (inputMessage: string) => {
-        if (!novelId || !inputMessage.trim()) return;
-
-        const newUserMsg: Message = {
-            id: Date.now().toString(),
-            role: 'user',
-            content: inputMessage
-        };
-
-        setChatMessages(prev => [...prev, newUserMsg]);
-        setIsPredictionLoading(true);
-
-        try {
-            const { task_id } = await requestPrediction(novelId, inputMessage);
-
-            // Poll for result (지수 백오프: 2초 시작, ×1.5, 최대 15초)
-            let predPollInterval = 2000;
-            const pollPrediction = async () => {
-                try {
-                    const data = await getPredictionTaskStatus(task_id);
-
-                    if (data.status === "COMPLETED") {
-                        // @ts-ignore
-                        const resultText = data.result.prediction || data.result.text || (typeof data.result === 'string' ? data.result : JSON.stringify(data.result));
-
-                        const newBotMsg: Message = {
-                            id: (Date.now() + 1).toString(),
-                            role: 'assistant',
-                            content: resultText
-                        };
-
-                        setChatMessages(prev => [...prev, newBotMsg]);
-                        setIsPredictionLoading(false);
-
-                        if (document.hidden && 'Notification' in window) {
-                            if (Notification.permission === "granted") {
-                                new Notification("StoryProof 답변 도착", {
-                                    body: "챗봇이 응답했습니다.",
-                                    icon: "/favicon.ico"
-                                });
-                            } else if (Notification.permission === "default") {
-                                Notification.requestPermission();
-                            }
-                        }
-                        return;
-                    } else if (data.status === "FAILED") {
-                        setIsPredictionLoading(false);
-                        toast.error("답변 생성 중 오류가 발생했습니다.");
-                        return;
-                    }
-                } catch (e) {
-                    // Continue polling
-                }
-                predPollInterval = Math.min(predPollInterval * 1.5, 15000);
-                predictionPollingRef.current = setTimeout(pollPrediction, predPollInterval);
-            };
-            predictionPollingRef.current = setTimeout(pollPrediction, predPollInterval);
-
-        } catch (error) {
-            setIsPredictionLoading(false);
-            toast.error("서버 요청에 실패했습니다.");
-        }
-    };
-
-    const handlePredictStoryTrigger = () => {
-        handlePredictionSidebarOpen();
     };
 
     const handleNavigateToQuote = (quote: string) => {
@@ -2366,7 +2156,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                 result={analysisResult}
                 isLoading={isAnalysisLoading}
                 onNavigateToQuote={handleNavigateToQuote}
-                onReanalyze={() => runChapterAnalysis(currentAnalysisType)}
+                onReanalyze={reanalyzeAnalysis}
                 onApplySuggestion={handleApplySuggestion}
                 analysisType={currentAnalysisType}
             />
@@ -2387,8 +2177,8 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
             {/* Floating Menu - Settings, Analysis, Prediction, Chatbot */}
             <FloatingMenu
                 onNavigateToScene={scrollToScene}
-                onAnalyze={handleAnalyze}
-                onPredictStory={handlePredictStoryTrigger}
+                onAnalyze={handleAnalyzeWrapped}
+                onPredictStory={handlePredictionOpen}
                 onOpenCharacterChat={onOpenCharacterChat}
                 onOpenSettings={handleOpenSettings}
                 onOpenRelGraph={() => setIsRelGraphOpen(true)}
