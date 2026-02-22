@@ -29,40 +29,35 @@ export const AuthorToolbar = ({ editor, onOpenSettings }: AuthorToolbarProps) =>
     const handleSearch = () => {
         if (!searchValue || !editor) return;
 
-        const doc = editor.state.doc;
+        const { doc } = editor.state;
         const query = searchValue.toLowerCase();
-        let found = false;
-
-        // 현재 위치 이후부터 검색
         const startFrom = searchIndexRef.current;
+        let matchFrom = -1;
+        let matchTo = -1;
 
+        // 전체 텍스트에서 위치 찾기
         doc.descendants((node, pos) => {
-            if (found || !node.isText) return;
-            const text = node.text?.toLowerCase() || '';
-            // startFrom 이후 위치에서만 찾기
-            const nodeEnd = pos + node.nodeSize;
-            if (nodeEnd <= startFrom) return;
+            if (matchFrom >= 0) return false;
+            if (!node.isText || !node.text) return;
 
-            const searchStart = Math.max(0, startFrom - pos);
-            const idx = text.indexOf(query, searchStart);
+            const text = node.text.toLowerCase();
+            if (pos + node.nodeSize <= startFrom) return;
+
+            const offset = Math.max(0, startFrom - pos);
+            const idx = text.indexOf(query, offset);
             if (idx !== -1) {
-                const from = pos + idx;
-                const to = from + searchValue.length;
-                editor.chain().setTextSelection({ from, to }).focus().run();
-                // 해당 위치로 스크롤
-                const domAtPos = editor.view.domAtPos(from);
-                const element = domAtPos.node instanceof HTMLElement
-                    ? domAtPos.node
-                    : domAtPos.node.parentElement;
-                element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                // 다음 검색 위치 저장
-                searchIndexRef.current = to;
-                found = true;
+                matchFrom = pos + idx;
+                matchTo = matchFrom + searchValue.length;
+                return false;
             }
         });
 
-        // 끝까지 찾지 못하면 처음부터 다시
-        if (!found && startFrom > 0) {
+        if (matchFrom >= 0) {
+            // 선택 + Tiptap 내장 스크롤
+            editor.chain().setTextSelection({ from: matchFrom, to: matchTo }).scrollIntoView().run();
+            searchIndexRef.current = matchTo;
+        } else if (startFrom > 0) {
+            // 끝까지 못 찾으면 처음부터 다시
             searchIndexRef.current = 0;
             handleSearch();
         }
