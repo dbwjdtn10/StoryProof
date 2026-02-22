@@ -28,10 +28,8 @@ export const AuthorToolbar = ({ editor, onOpenSettings }: AuthorToolbarProps) =>
     const handleSearch = () => {
         if (!searchValue) return;
 
-        // 에디터에 포커스를 주어 검색 시작점을 에디터 내부로 설정
-        editor?.commands.focus();
-
         // 브라우저 네이티브 검색 (자동으로 다음 매치 + 래핑)
+        // focus()를 호출하지 않아야 이전 검색 위치에서 이어서 검색됨
         const found = (window as any).find(searchValue, false, false, true);
 
         if (found) {
