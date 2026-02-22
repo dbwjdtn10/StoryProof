@@ -1,9 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Editor } from '@tiptap/react';
 import {
-    Bookmark,
-    Highlighter,
-    MessageSquare,
     Type,
     Palette,
     AlignJustify,
@@ -24,18 +21,12 @@ interface ReaderToolbarProps {
         theme?: string;
     };
     onSettingsChange: (settings: any) => void;
-    onBookmark: () => void;
-    onHighlight: () => void;
-    onAddMemo: () => void;
 }
 
 export const ReaderToolbar = ({
     editor,
     readerSettings,
     onSettingsChange,
-    onBookmark,
-    onHighlight,
-    onAddMemo
 }: ReaderToolbarProps) => {
     const [activePopover, setActivePopover] = useState<string | null>(null);
     const toolbarRef = useRef<HTMLDivElement>(null);
@@ -254,18 +245,7 @@ export const ReaderToolbar = ({
                     )}
                 </div>
 
-                <div className="separator" style={{ margin: '0 8px' }} />
-
-                {/* Action Buttons */}
-                <button onClick={onBookmark} title="책갈피 추가" className="toolbar-btn">
-                    <Bookmark size={20} />
-                </button>
-                <button onClick={onHighlight} disabled={!editor} title="하이라이트" className="toolbar-btn">
-                    <Highlighter size={20} />
-                </button>
-                <button onClick={onAddMemo} disabled={!editor} title="메모 추가" className="toolbar-btn">
-                    <MessageSquare size={20} />
-                </button>
+                {/* 책갈피/하이라이트/메모 아이콘은 기능 구현 후 추가 예정 */}
             </div>
         </div>
     );

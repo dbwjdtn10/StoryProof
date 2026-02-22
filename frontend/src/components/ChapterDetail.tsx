@@ -1173,9 +1173,6 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                         editor={activeEditor}
                         readerSettings={readerSettings}
                         onSettingsChange={handleReaderSettingsChange}
-                        onBookmark={handleBookmark}
-                        onHighlight={handleHighlight}
-                        onAddMemo={handleAddMemo}
                     />
                 ) : (
                     <AuthorToolbar
