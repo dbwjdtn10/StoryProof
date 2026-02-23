@@ -1547,17 +1547,11 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                                     <div style={{ fontSize: '0.875rem', color: 'var(--muted-foreground, #666)', marginBottom: '4px' }}>특징</div>
                                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                                         {selectedCharacter.traits.map((trait: string, i: number) => (
-                                            <span key={i} style={{
+                                            <span key={i} className="trait-tag" style={{
                                                 fontSize: '0.8rem',
                                                 padding: '4px 10px',
-                                                backgroundColor: (() => {
-                                                    const t = document.documentElement.getAttribute('data-theme') || 'light';
-                                                    return t === 'dark' ? '#f1efef' : 'var(--muted, rgba(79, 70, 229, 0.1))';
-                                                })(),
-                                                color: 'var(--primary, #4F46E5)',
                                                 borderRadius: '6px',
                                                 fontWeight: '500',
-                                                border: '1px solid var(--border)'
                                             }}>
                                                 {trait}
                                             </span>
