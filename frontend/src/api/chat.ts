@@ -14,6 +14,7 @@ export interface ChatAnswerResponse {
     answer: string;
     source: {
         filename: string;
+        chapter_title?: string | null;
         scene_index?: number;
         chapter_id?: number;
         total_scenes: number;

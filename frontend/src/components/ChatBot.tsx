@@ -8,6 +8,7 @@ interface Message {
     content: string;
     source?: {
         filename: string;
+        chapter_title?: string | null;
         scene_index?: number;
         chapter_id?: number;
         summary?: string;
@@ -97,7 +98,8 @@ function ChatMessageItem({ msg, onNavigateToScene, chapterId }: { msg: Message, 
                                 animation: 'fadeIn 0.2s ease-in-out'
                             }}>
                                 <div>
-                                    <strong>출처:</strong> {msg.source.filename}
+                                    <strong>출처:</strong>{' '}
+                                    {msg.source.chapter_title || msg.source.filename}
                                     {msg.source.scene_index !== undefined && ` (Scene ${msg.source.scene_index + 1})`}
                                 </div>
                                 {msg.source.summary && (

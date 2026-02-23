@@ -22,7 +22,7 @@ from backend.core.config import settings
 
 logger = logging.getLogger(__name__)
 from backend.db.session import SessionLocal
-from backend.db.models import Novel
+from backend.db.models import Novel, Chapter
 from backend.services.analysis import EmbeddingSearchEngine, get_embedding_search_engine
 
 
@@ -102,6 +102,22 @@ class ChatbotService:
             del self._novel_title_cache[oldest_key]
         self._novel_title_cache[novel_id] = title
         return title
+
+    def _get_chapter_title(self, chapter_id: int, db=None) -> Optional[str]:
+        """챕터 제목 조회 (DB 직접 조회)."""
+        if not chapter_id:
+            return None
+        try:
+            session = db if db else SessionLocal()
+            try:
+                chapter = session.query(Chapter).filter(Chapter.id == chapter_id).first()
+                return chapter.title if chapter else None
+            finally:
+                if not db:
+                    session.close()
+        except Exception as e:
+            logger.warning(f"챕터 제목 조회 실패 (chapter_id={chapter_id}): {e}")
+            return None
 
     def _trim_cache(self, cache: Dict[str, tuple]) -> None:
         """LRU 캐시 관리: 만료 항목 제거 → 초과 시 최근 미사용 25% 제거."""
@@ -336,6 +352,8 @@ class ChatbotService:
 
         best_chunk = top_chunks[0]
         novel_title = self._get_novel_title(best_chunk['novel_id']) if best_chunk.get('novel_id') else "Unknown Novel"
+        retrieved_chapter_id = best_chunk.get('chapter_id')
+        chapter_title = self._get_chapter_title(retrieved_chapter_id, db=db) if retrieved_chapter_id else None
 
         bible_summary = ""
         if db and novel_id:
@@ -350,7 +368,8 @@ class ChatbotService:
             "context": context,
             "source": {
                 "filename": novel_title,
-                "chapter_id": best_chunk.get('chapter_id'),
+                "chapter_title": chapter_title,
+                "chapter_id": retrieved_chapter_id,
                 "scene_index": best_chunk.get('scene_index'),
                 "summary": best_chunk.get('summary'),
                 "total_scenes": len(top_chunks)
@@ -676,20 +695,23 @@ class ChatbotService:
         
         # 가장 높은 유사도 정보
         best_chunk = top_chunks[0]
-        
+
         # novel title 가져오기 (캐시 사용)
         novel_title = self._get_novel_title(best_chunk['novel_id']) if best_chunk.get('novel_id') else "Unknown Novel"
+        retrieved_chapter_id = best_chunk.get('chapter_id')
+        chapter_title = self._get_chapter_title(retrieved_chapter_id, db=db) if retrieved_chapter_id else None
 
         return {
             "answer": answer,
             "source": {
                 "filename": novel_title,
-                "chapter_id": best_chunk.get('chapter_id'),
+                "chapter_title": chapter_title,
+                "chapter_id": retrieved_chapter_id,
                 "scene_index": best_chunk.get('scene_index'),
                 "summary": best_chunk.get('summary'),
                 "total_scenes": len(top_chunks)
             },
-            "similarity": best_chunk.get('similarity', 0.0), # similarity might be missing in some cases if not careful
+            "similarity": best_chunk.get('similarity', 0.0),
             "found_context": True
         }
 

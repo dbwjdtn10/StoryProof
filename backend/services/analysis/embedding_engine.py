@@ -432,7 +432,7 @@ class EmbeddingSearchEngine:
             self._init_pinecone()
             if self.index is None:
                 logger.warning("Pinecone 사용 불가. BM25-only 폴백 검색 수행")
-                return self._bm25_only_search(query, novel_id, top_k, keywords)
+                return self._bm25_only_search(query, novel_id, top_k, keywords, chapter_id=chapter_id)
 
         # --- 1. Dense Search (Pinecone) ---
         query_embedding = self.embed_text(query)
@@ -483,21 +483,39 @@ class EmbeddingSearchEngine:
                     
                     for idx, norm_score in enumerate(normalized_scores):
                         parent_id = corpus_indices[idx]
+                        # chapter_id 필터: 요청된 챕터가 아닌 다른 챕터의 BM25 결과 제외
+                        if chapter_id:
+                            try:
+                                parts = parent_id.split('_')
+                                p_chap_id = int(parts[parts.index('chap') + 1])
+                                if p_chap_id != int(chapter_id):
+                                    continue
+                            except (ValueError, IndexError):
+                                pass
                         sparse_scores_dict[parent_id] = float(norm_score)
                         if norm_score > 0:
                             sparse_top_parents.append((parent_id, norm_score))
-                    
+
                     sparse_top_parents.sort(key=lambda x: x[1], reverse=True)
                     sparse_top_parents = sparse_top_parents[:top_k * 10]
-        
+
         # --- 3. Union & Hybrid Scoring ---
         candidate_child_ids = set(dense_matches.keys())
         sparse_parent_ids_to_fetch = set()
         for p_id, _ in sparse_top_parents:
+            # 이중 안전장치: chapter_id가 있으면 해당 챕터의 parent_id만 허용
+            if chapter_id:
+                try:
+                    parts = p_id.split('_')
+                    p_chap_id = int(parts[parts.index('chap') + 1])
+                    if p_chap_id != int(chapter_id):
+                        continue
+                except (ValueError, IndexError):
+                    pass
             found = any(c_id.startswith(p_id) for c_id in candidate_child_ids)
             if not found:
                 sparse_parent_ids_to_fetch.add(p_id)
-        
+
         if sparse_parent_ids_to_fetch:
             logger.debug(f"Fetching {len(sparse_parent_ids_to_fetch)} sparse candidates from Pinecone...")
             for p_id in sparse_parent_ids_to_fetch:
@@ -505,7 +523,11 @@ class EmbeddingSearchEngine:
                     parts = p_id.split('_')
                     s_idx = int(parts[parts.index('scene')+1])
                     c_id_filter = int(parts[parts.index('chap')+1])
-                    
+
+                    # chapter_id 불일치 시 스킵 (BM25가 다른 챕터를 제안한 경우 방어)
+                    if chapter_id and c_id_filter != int(chapter_id):
+                        continue
+
                     temp_res = self.index.query(
                         vector=query_embedding,
                         top_k=3,
@@ -563,12 +585,15 @@ class EmbeddingSearchEngine:
         unique_matches = []  # (match, parent_vector_id)
         for match in final_results:
             scene_index = int(match.metadata.get('scene_index'))
-            match_chapter_id = match.metadata.get('chapter_id') or chapter_id
+            # Pinecone may return numeric metadata as float (e.g. 3.0); cast to int for consistent string keys
+            raw_chapter_id = match.metadata.get('chapter_id') or chapter_id
+            match_chapter_id = int(raw_chapter_id) if raw_chapter_id is not None else None
+            match_novel_id = int(match.metadata.get('novel_id', novel_id))
             key = (match_chapter_id, scene_index)
             if key in seen_keys:
                 continue
             seen_keys.add(key)
-            parent_vector_id = f"novel_{match.metadata.get('novel_id')}_chap_{match_chapter_id}_scene_{scene_index}"
+            parent_vector_id = f"novel_{match_novel_id}_chap_{match_chapter_id}_scene_{scene_index}"
             unique_matches.append((match, parent_vector_id))
             if len(unique_matches) >= top_k:
                 break
@@ -608,11 +633,13 @@ class EmbeddingSearchEngine:
         query: str,
         novel_id: Optional[int],
         top_k: int = 5,
-        keywords: Optional[List[str]] = None
+        keywords: Optional[List[str]] = None,
+        chapter_id: Optional[int] = None
     ) -> List[Dict]:
         """
         Pinecone 사용 불가 시 BM25(키워드)만으로 검색하는 폴백.
         DB의 VectorDocument에서 Parent Scene을 직접 조회합니다.
+        chapter_id가 있으면 해당 챕터만 검색합니다.
         """
         if not novel_id:
             return []
@@ -631,7 +658,7 @@ class EmbeddingSearchEngine:
             tokenized_query = self._tokenize_for_bm25(query)
 
         scores = bm25.get_scores(tokenized_query)
-        top_indices = np.argsort(scores)[::-1][:top_k]
+        top_indices = np.argsort(scores)[::-1][:top_k * 3]  # 필터 여유분 확보
 
         hits = []
         db = SessionLocal()
@@ -640,6 +667,15 @@ class EmbeddingSearchEngine:
                 if scores[idx] <= 0:
                     continue
                 parent_vector_id = corpus_indices[idx]
+                # chapter_id 필터: vector_id에서 챕터 ID 파싱하여 검증
+                if chapter_id:
+                    try:
+                        parts = parent_vector_id.split('_')
+                        p_chap_id = int(parts[parts.index('chap') + 1])
+                        if p_chap_id != int(chapter_id):
+                            continue
+                    except (ValueError, IndexError):
+                        pass
                 doc = db.query(VectorDocument).filter(
                     VectorDocument.vector_id == parent_vector_id
                 ).first()
