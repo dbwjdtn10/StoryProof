@@ -243,7 +243,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
         }
     };
 
-    const handleSave = async () => {
+    const handleSave = async (silent = false) => {
         if (!novelId || !chapterId) return;
         setIsSaving(true);
         try {
@@ -252,9 +252,9 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                 : content;
             await updateChapter(novelId, chapterId, { content: finalContent });
             setHasUnsavedChanges(false);
-            toast.success("저장되었습니다.");
+            if (!silent) toast.success("저장되었습니다.");
         } catch (error) {
-            toast.error("저장에 실패했습니다.");
+            if (!silent) toast.error("저장에 실패했습니다.");
         } finally {
             setIsSaving(false);
         }
@@ -295,12 +295,12 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
         }).catch(() => {});
     }, [novelId]);
 
-    // Auto-save every 30 seconds
+    // Auto-save every 30 seconds (silent — no toast)
     useEffect(() => {
         if (mode === 'reader' || !novelId || !chapterId) return;
         const interval = setInterval(() => {
             if (hasUnsavedChangesRef.current) {
-                handleSaveRef.current();
+                handleSaveRef.current(true);
             }
         }, 30000);
         return () => clearInterval(interval);
@@ -358,7 +358,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
 
     const navigateToChapter = async (target: ChapterListItem) => {
         if (hasUnsavedChanges && novelId && chapterId) {
-            await handleSave();
+            await handleSave(true);
         }
         onNavigateChapter?.(target.id, target.title);
     };

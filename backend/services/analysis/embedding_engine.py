@@ -434,9 +434,9 @@ class EmbeddingSearchEngine:
 
         filter_dict = {}
         if novel_id:
-            filter_dict['novel_id'] = novel_id
+            filter_dict['novel_id'] = {'$eq': int(novel_id)}
         if chapter_id:
-            filter_dict['chapter_id'] = chapter_id
+            filter_dict['chapter_id'] = {'$eq': int(chapter_id)}
         elif exclude_chapter_id:
             filter_dict['chapter_id'] = {"$ne": exclude_chapter_id}
 
@@ -446,8 +446,15 @@ class EmbeddingSearchEngine:
             include_metadata=True,
             filter=filter_dict if filter_dict else None
         )
-        
-        dense_matches = {m.id: m for m in dense_results.matches}
+
+        # 포스트 필터: Pinecone 필터가 실패해도 다른 소설 청크 차단
+        if novel_id:
+            dense_matches = {
+                m.id: m for m in dense_results.matches
+                if int(m.metadata.get('novel_id', -1)) == int(novel_id)
+            }
+        else:
+            dense_matches = {m.id: m for m in dense_results.matches}
 
         # --- 2. Sparse Search (BM25) ---
         sparse_scores_dict = {}
@@ -501,8 +508,8 @@ class EmbeddingSearchEngine:
                     
                     temp_res = self.index.query(
                         vector=query_embedding,
-                        top_k=3, 
-                        filter={"scene_index": s_idx, "novel_id": novel_id, "chapter_id": c_id_filter},
+                        top_k=3,
+                        filter={"scene_index": {"$eq": s_idx}, "novel_id": {"$eq": int(novel_id)}, "chapter_id": {"$eq": c_id_filter}},
                         include_metadata=True
                     )
                     for t_match in temp_res.matches:
@@ -569,11 +576,14 @@ class EmbeddingSearchEngine:
         hits = []
         db = SessionLocal()
         try:
-            # 배치 DB 조회 (N+1 → 1 쿼리)
+            # 배치 DB 조회 (N+1 → 1 쿼리) + novel_id 안전 필터
             parent_ids = [pid for _, pid in unique_matches]
-            docs = db.query(VectorDocument).filter(
+            query = db.query(VectorDocument).filter(
                 VectorDocument.vector_id.in_(parent_ids)
-            ).all()
+            )
+            if novel_id:
+                query = query.filter(VectorDocument.novel_id == int(novel_id))
+            docs = query.all()
             doc_map = {d.vector_id: d for d in docs}
 
             for match, parent_vector_id in unique_matches:

@@ -289,17 +289,20 @@ export function RelationshipGraphModal({ isOpen, onClose, relationships, charact
             ctx.setLineDash([]);
             ctx.stroke();
 
-            // 화살표 (엣지 중앙)
-            const arrowX = curveOffset !== 0 ? (src.x + 2 * cpx + tgt.x) / 4 : mx;
-            const arrowY = curveOffset !== 0 ? (src.y + 2 * cpy + tgt.y) / 4 : my;
+            // 화살표 (타겟 노드 가장자리)
+            // 곡선 엣지의 경우 타겟 근처 접선 방향 계산
             const arrowAngle = curveOffset !== 0
-                ? Math.atan2(tgt.y - src.y + perpY, tgt.x - src.x + perpX)
+                ? Math.atan2(tgt.y - cpy, tgt.x - cpx)
                 : angle;
-            const arrowLen = 8;
+            // 타겟 노드 원 가장자리에서 화살표 끝점 계산
+            const arrowTipX = tgt.x - tgt.radius * Math.cos(arrowAngle);
+            const arrowTipY = tgt.y - tgt.radius * Math.sin(arrowAngle);
+            const arrowLen = 12;
+            const arrowWidth = 0.45;
             ctx.beginPath();
-            ctx.moveTo(arrowX + arrowLen * Math.cos(arrowAngle), arrowY + arrowLen * Math.sin(arrowAngle));
-            ctx.lineTo(arrowX - arrowLen * Math.cos(arrowAngle - 0.4), arrowY - arrowLen * Math.sin(arrowAngle - 0.4));
-            ctx.lineTo(arrowX - arrowLen * Math.cos(arrowAngle + 0.4), arrowY - arrowLen * Math.sin(arrowAngle + 0.4));
+            ctx.moveTo(arrowTipX, arrowTipY);
+            ctx.lineTo(arrowTipX - arrowLen * Math.cos(arrowAngle - arrowWidth), arrowTipY - arrowLen * Math.sin(arrowAngle - arrowWidth));
+            ctx.lineTo(arrowTipX - arrowLen * Math.cos(arrowAngle + arrowWidth), arrowTipY - arrowLen * Math.sin(arrowAngle + arrowWidth));
             ctx.closePath();
             ctx.fillStyle = isHL ? src.color : theme.mutedForeground;
             ctx.fill();
