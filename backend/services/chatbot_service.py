@@ -344,6 +344,12 @@ class ChatbotService:
         if not top_chunks:
             return {"found_context": False, "context": "", "source": None, "similarity": 0.0, "bible": ""}
 
+        # 최종 유사도 하한선: 이 미만이면 소설에 관련 내용 없음으로 처리 (학습 데이터 사용 방지)
+        final_best = top_chunks[0].get('similarity', 0.0)
+        if final_best < settings.CHATBOT_MIN_ANSWER_SIMILARITY:
+            logger.info(f"[Context] best_similarity={final_best:.4f} < {settings.CHATBOT_MIN_ANSWER_SIMILARITY} → 소설에서 관련 내용 없음 처리")
+            return {"found_context": False, "context": "", "source": None, "similarity": final_best, "bible": ""}
+
         context_texts = []
         for i, chunk in enumerate(top_chunks):
             header = f"[Context {i+1}]"
@@ -651,14 +657,25 @@ class ChatbotService:
                 error_msg += " (검색 엔진이 초기화되지 않았습니다)"
             elif self.engine and self.engine.index is None:
                 error_msg += " (Pinecone 연결 실패 - BM25 폴백도 결과 없음)"
-            
+
             return {
                 "answer": error_msg,
                 "source": None,
                 "similarity": 0.0,
                 "found_context": False
             }
-        
+
+        # 최종 유사도 하한선: 이 미만이면 소설에 관련 내용 없음으로 처리 (학습 데이터 사용 방지)
+        final_best = top_chunks[0].get('similarity', 0.0)
+        if final_best < settings.CHATBOT_MIN_ANSWER_SIMILARITY:
+            logger.info(f"[Context] best_similarity={final_best:.4f} < {settings.CHATBOT_MIN_ANSWER_SIMILARITY} → 소설에서 관련 내용 없음 처리")
+            return {
+                "answer": "죄송합니다. 소설에서 해당 내용을 찾을 수 없습니다.",
+                "source": None,
+                "similarity": final_best,
+                "found_context": False
+            }
+
         # 5. 컨텍스트 생성 (상위 청크 텍스트 결합)
         context_texts = []
         for i, chunk in enumerate(top_chunks):

@@ -90,6 +90,7 @@ class Settings(BaseSettings):
     GEMINI_RESPONSE_TOP_P: float = 0.8
     GEMINI_RESPONSE_TOP_K: int = 20
     ITERATIVE_RETRIEVAL_THRESHOLD: float = 0.79  # best_similarity < 이 값이면 쿼리 재구성 후 재검색 (E5 모델 유사도 분포: 0.7~0.9)
+    CHATBOT_MIN_ANSWER_SIMILARITY: float = 0.55  # 모든 재시도 후에도 이 미만이면 "소설에서 찾을 수 없음" 처리 (학습 데이터 사용 방지)
     
     # ===== Chunking Strategy =====
     CHILD_CHUNK_SIZE: int = 500  # 200 -> 500 (문맥 확보)
