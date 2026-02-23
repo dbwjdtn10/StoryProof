@@ -12,9 +12,47 @@ from fpdf import FPDF
 from docx import Document
 from docx.shared import Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.oxml.ns import qn
+from docx.oxml import OxmlElement
 
 
 FONTS_DIR = os.path.join(os.path.dirname(__file__), "..", "static", "fonts")
+KOREAN_FONT = "맑은 고딕"
+
+
+def _set_run_korean_font(run, font_name: str = KOREAN_FONT, pt: int = 11):
+    """run에 한글 폰트 완전 적용 (w:ascii + w:eastAsia + w:cs 모두 설정)
+    python-docx의 run.font.name은 w:ascii만 설정하므로
+    한국어 문자(w:eastAsia)가 깨지는 문제를 방지한다.
+    """
+    run.font.name = font_name
+    run.font.size = Pt(pt)
+    rPr = run._r.get_or_add_rPr()
+    rFonts = rPr.find(qn("w:rFonts"))
+    if rFonts is None:
+        rFonts = OxmlElement("w:rFonts")
+        rPr.insert(0, rFonts)
+    rFonts.set(qn("w:ascii"), font_name)
+    rFonts.set(qn("w:hAnsi"), font_name)
+    rFonts.set(qn("w:eastAsia"), font_name)
+    rFonts.set(qn("w:cs"), font_name)
+
+
+def _set_doc_default_korean_font(doc, font_name: str = KOREAN_FONT):
+    """문서 기본 Normal 스타일에 한글 폰트 설정 (eastAsia 포함)"""
+    style = doc.styles["Normal"]
+    style.font.name = font_name
+    style.font.size = Pt(11)
+    # style.font.name은 w:ascii만 설정 → XML로 eastAsia/cs 직접 추가
+    rPr = style.element.get_or_add_rPr()
+    rFonts = rPr.find(qn("w:rFonts"))
+    if rFonts is None:
+        rFonts = OxmlElement("w:rFonts")
+        rPr.insert(0, rFonts)
+    rFonts.set(qn("w:ascii"), font_name)
+    rFonts.set(qn("w:hAnsi"), font_name)
+    rFonts.set(qn("w:eastAsia"), font_name)
+    rFonts.set(qn("w:cs"), font_name)
 
 
 class BibleExportService:
@@ -254,76 +292,81 @@ class BibleExportService:
     def export_docx(bible_data: Dict[str, Any], title: str = "") -> bytes:
         """DOCX 형식으로 바이블 데이터 내보내기 (한글 폰트 적용)"""
         doc = Document()
+        _set_doc_default_korean_font(doc)
 
-        # 기본 폰트를 한글 호환 폰트로 설정
-        style = doc.styles["Normal"]
-        font = style.font
-        font.name = "맑은 고딕"
-        font.size = Pt(11)
+        def _add_para(text: str, style_name: str = None) -> None:
+            if style_name:
+                para = doc.add_paragraph(style=style_name)
+            else:
+                para = doc.add_paragraph()
+            run = para.add_run(text)
+            _set_run_korean_font(run)
+
+        def _add_heading(text: str, level: int) -> None:
+            para = doc.add_heading(text, level=level)
+            for run in para.runs:
+                _set_run_korean_font(run)
 
         # Title
         header = f"스토리보드 바이블 - {title}" if title else "스토리보드 바이블"
         title_para = doc.add_heading(header, level=0)
         title_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
         for run in title_para.runs:
-            run.font.name = "맑은 고딕"
+            _set_run_korean_font(run)
 
         # Characters
         chars = bible_data.get("characters", [])
         if chars:
-            doc.add_heading("인물", level=1)
+            _add_heading("인물", 1)
             for c in chars:
-                doc.add_heading(c.get("name", "이름 없음"), level=2)
+                _add_heading(c.get("name", "이름 없음"), 2)
                 if c.get("description"):
-                    doc.add_paragraph(f"설명: {c['description']}")
+                    _add_para(f"설명: {c['description']}")
                 if c.get("traits"):
-                    doc.add_paragraph(f"특징: {', '.join(c['traits'])}")
+                    _add_para(f"특징: {', '.join(c['traits'])}")
                 if c.get("appearance_count"):
-                    doc.add_paragraph(f"등장: {c['appearance_count']}회")
+                    _add_para(f"등장: {c['appearance_count']}회")
 
         # Locations
         locations = bible_data.get("locations", [])
         if locations:
-            doc.add_heading("장소", level=1)
+            _add_heading("장소", 1)
             for loc in locations:
-                doc.add_heading(loc.get("name", "이름 없음"), level=2)
+                _add_heading(loc.get("name", "이름 없음"), 2)
                 if loc.get("description"):
-                    doc.add_paragraph(f"설명: {loc['description']}")
+                    _add_para(f"설명: {loc['description']}")
 
         # Items
         items = bible_data.get("items", [])
         if items:
-            doc.add_heading("아이템", level=1)
+            _add_heading("아이템", 1)
             for item in items:
-                doc.add_heading(item.get("name", "이름 없음"), level=2)
+                _add_heading(item.get("name", "이름 없음"), 2)
                 if item.get("description"):
-                    doc.add_paragraph(f"설명: {item['description']}")
+                    _add_para(f"설명: {item['description']}")
 
         # Key Events
         events = bible_data.get("key_events", [])
         if events:
-            doc.add_heading("주요 사건", level=1)
+            _add_heading("주요 사건", 1)
             for e in events:
                 scene_info = f" (Scene {e['scene_index'] + 1})" if e.get("scene_index") is not None else ""
                 importance = f" [중요도: {e['importance']}]" if e.get("importance") else ""
-                doc.add_paragraph(
-                    f"{e.get('summary', '')}{scene_info}{importance}",
-                    style="List Bullet"
-                )
+                _add_para(f"{e.get('summary', '')}{scene_info}{importance}", "List Bullet")
 
         # Scenes
         scenes = bible_data.get("scenes", [])
         if scenes:
-            doc.add_heading("씬 원문", level=1)
+            _add_heading("씬 원문", 1)
             for s in scenes:
                 idx = s.get("scene_index", 0)
-                doc.add_heading(f"Scene {idx + 1}", level=2)
+                _add_heading(f"Scene {idx + 1}", 2)
                 if s.get("summary"):
                     summary_para = doc.add_paragraph()
                     run = summary_para.add_run(f"요약: {s['summary']}")
                     run.italic = True
-                    run.font.size = Pt(9)
-                doc.add_paragraph(s.get("original_text", ""))
+                    _set_run_korean_font(run, pt=9)
+                _add_para(s.get("original_text", ""))
 
         buf = io.BytesIO()
         doc.save(buf)
@@ -473,20 +516,14 @@ class ChapterExportService:
     def export_chapter_docx(content_html: str, title: str = "") -> bytes:
         """챕터 본문을 DOCX로 내보내기 (한글 폰트 적용)"""
         doc = Document()
-
-        # 기본 폰트를 한글 호환 폰트로 설정
-        style = doc.styles["Normal"]
-        font = style.font
-        font.name = "맑은 고딕"
-        font.size = Pt(11)
+        _set_doc_default_korean_font(doc)
 
         if title:
             t = doc.add_heading(title, level=0)
             t.alignment = WD_ALIGN_PARAGRAPH.CENTER
             for run in t.runs:
-                run.font.name = "맑은 고딕"
+                _set_run_korean_font(run)
 
-        # html_to_plain으로 전체 텍스트 추출 (TXT와 동일 — 정상 동작 확인됨)
         plain = ChapterExportService.html_to_plain(content_html)
         paragraphs = plain.split("\n")
 
@@ -494,8 +531,7 @@ class ChapterExportService:
             if para_text.strip():
                 para = doc.add_paragraph()
                 run = para.add_run(para_text)
-                run.font.name = "맑은 고딕"
-                run.font.size = Pt(11)
+                _set_run_korean_font(run)
 
         buf = io.BytesIO()
         doc.save(buf)
@@ -551,4 +587,4 @@ class ChapterExportService:
             run.bold = bold
             run.italic = italic
             run.underline = underline
-            run.font.size = Pt(11)
+            _set_run_korean_font(run)
