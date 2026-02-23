@@ -15,7 +15,7 @@
 .settings-container {
     width: 500px;
     max-width: 90vw;
-    background: rgba(255, 255, 255, 0.95);
+    background: var(--card);
     border-radius: 20px;
     box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.05);
     overflow: hidden;
@@ -23,7 +23,7 @@
     flex-direction: column;
     max-height: 100vh;
     animation: slideUpPanel 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-    border: 1px solid rgba(0, 0, 0, 0.05);
+    border: 1px solid var(--border);
     pointer-events: auto;
 }
 
@@ -94,13 +94,13 @@
 .section-title {
     font-size: 1.1rem;
     font-weight: 700;
-    color: #111827;
+    color: var(--foreground);
     margin: 0 0 6px 0;
 }
 
 .section-description {
     font-size: 0.9rem;
-    color: #6b7280;
+    color: var(--muted-foreground);
     margin: 0;
     line-height: 1.5;
 }
@@ -121,7 +121,7 @@
 .form-label {
     font-size: 0.9rem;
     font-weight: 600;
-    color: #374151;
+    color: var(--foreground);
     margin-left: 4px;
 }
 
@@ -129,10 +129,10 @@
     width: 100%;
     padding: 1rem 1rem 1rem 1.5rem;
     border-radius: 14px;
-    border: 1px solid #e5e7eb;
-    background-color: #fff;
+    border: 1px solid var(--border);
+    background-color: var(--card);
     font-size: 0.95rem;
-    color: #111827;
+    color: var(--foreground);
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
     text-align: left;
@@ -148,16 +148,16 @@
 }
 
 .form-input.disabled {
-    background-color: #f9fafb;
-    color: #6b7280;
+    background-color: var(--secondary);
+    color: var(--muted-foreground);
     cursor: default;
-    border-color: #e5e7eb;
+    border-color: var(--border);
     box-shadow: none;
 }
 
 .input-note {
     font-size: 0.8rem;
-    color: #6b7280;
+    color: var(--muted-foreground);
     margin: 4px 0 0 4px;
 }
 
@@ -171,10 +171,10 @@
     width: 100%;
     padding: 14px 18px;
     border-radius: 14px;
-    border: 1px solid #e5e7eb;
-    background-color: #fff;
+    border: 1px solid var(--border);
+    background-color: var(--card);
     font-size: 0.95rem;
-    color: #111827;
+    color: var(--foreground);
     cursor: pointer;
     text-align: left;
     display: flex;
@@ -206,8 +206,8 @@
     top: calc(100% + 8px);
     left: 0;
     right: 0;
-    background-color: #fff;
-    border: 1px solid #f3f4f6;
+    background-color: var(--card);
+    border: 1px solid var(--border);
     border-radius: 16px;
     box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
     padding: 8px;
@@ -228,12 +228,12 @@
     cursor: pointer;
     border-radius: 10px;
     font-size: 0.9rem;
-    color: #4b5563;
+    color: var(--foreground);
     transition: all 0.15s;
     font-weight: 500;
 }
 
-.select-option:hover { background-color: #f3f4f6; color: #111827; }
+.select-option:hover { background-color: var(--secondary); color: var(--foreground); }
 
 .select-option.selected {
     background-color: #eff6ff;
@@ -243,7 +243,7 @@
 
 .model-note {
     font-size: 0.8rem;
-    color: #6b7280;
+    color: var(--muted-foreground);
     margin: 8px 0 0 4px;
 }
 
@@ -276,11 +276,11 @@
 /* Buttons */
 .settings-footer {
     padding: 24px 32px 32px;
-    background-color: #f9fafb;
+    background-color: var(--secondary);
     display: flex;
     justify-content: flex-end;
     gap: 12px;
-    border-top: 1px solid rgba(0, 0, 0, 0.05);
+    border-top: 1px solid var(--border);
 }
 
 .btn {
@@ -298,7 +298,7 @@
 }
 
 .btn-destructive {
-    background-color: #fff;
+    background-color: var(--card);
     border: 1px solid #ef4444;
     color: #ef4444;
     width: fit-content;
@@ -311,13 +311,13 @@
 .btn-destructive:hover { background-color: #ef4444; color: white; }
 
 .btn-outline {
-    background-color: #fff;
-    border: 2px solid #b3bac9;
-    color: #374151;
+    background-color: var(--card);
+    border: 2px solid var(--border);
+    color: var(--foreground);
     width: 100%;
 }
 
-.btn-outline:hover { background-color: #f9fafb; border-color: #d1d5db; color: #111827; }
+.btn-outline:hover { background-color: var(--secondary); border-color: var(--muted-foreground); color: var(--foreground); }
 
 /* Scrollbar */
 .settings-content::-webkit-scrollbar { width: 6px; }
