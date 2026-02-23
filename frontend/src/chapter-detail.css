@@ -652,9 +652,9 @@
 }
 
 [data-theme="dark"] .trait-tag {
-    background-color: #333333;
-    color: #d1cdc9;
-    border-color: #555555;
+    background-color: #f1efef;
+    color: #4b4035;
+    border-color: #998879;
 }
 
 /* Dark Mode for Text Content */
