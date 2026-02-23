@@ -250,7 +250,7 @@ export function PredictionSidebar({ isOpen, onClose, messages, onSendMessage, is
                     display: 'flex',
                     gap: '10px',
                     alignItems: 'flex-end',
-                    backgroundColor: theme === 'dark' ? '#333333' : '#e1e1de',
+                    backgroundColor: 'var(--secondary)',
                     padding: '8px',
                     borderRadius: '12px',
                     border: '1px solid var(--input-border)'
@@ -263,7 +263,7 @@ export function PredictionSidebar({ isOpen, onClose, messages, onSendMessage, is
                         style={{
                             flex: 1,
                             border: 'none',
-                            background: theme === 'dark' ? '#262626' : 'transparent',
+                            background: 'transparent',
                             resize: 'none',
                             height: 'auto',
                             minHeight: '24px',
@@ -285,7 +285,7 @@ export function PredictionSidebar({ isOpen, onClose, messages, onSendMessage, is
                         onClick={handleSubmit}
                         disabled={!inputValue.trim() || isLoading}
                         style={{
-                            backgroundColor: inputValue.trim() && !isLoading ? 'var(--primary)' : theme === 'dark' ? '#515350' : 'var(--muted)',
+                            backgroundColor: inputValue.trim() && !isLoading ? 'var(--primary)' : 'var(--muted)',
                             color: inputValue.trim() && !isLoading ? 'var(--primary-foreground)' : 'var(--muted-foreground)',
                             border: 'none',
                             borderRadius: '8px',

@@ -89,10 +89,7 @@ function CreateRoomModal({ novelId, chapterId, onClose, onCreated, onUpdated, in
             left: 0,
             right: 0,
             bottom: 0,
-            backgroundColor: (() => {
-                const t = document.documentElement.getAttribute('data-theme') || 'light';
-                return t === 'light' ? '#f9f7f2' : 'var(--modal-bg)';
-            })(),
+            backgroundColor: 'var(--modal-bg)',
             color: 'var(--modal-text)',
             zIndex: 10,
             display: 'flex',
@@ -218,10 +215,7 @@ function CreateRoomModal({ novelId, chapterId, onClose, onCreated, onUpdated, in
                                 fontSize: '0.9rem',
                                 resize: 'none',
                                 fontFamily: 'monospace',
-                                backgroundColor: (() => {
-                                    const t = document.documentElement.getAttribute('data-theme') || 'light';
-                                    return t === 'dark' ? '#333333' : t === 'sepia' ? '#ffffff' : 'var(--input-bg)';
-                                })(),
+                                backgroundColor: 'var(--input-bg)',
                                 color: 'var(--input-text)'
                             }}
                         />
@@ -546,7 +540,7 @@ function ChatRoom({ room }: ChatRoomProps) {
             </div>
 
             {/* Input Area */}
-            <div style={{ backgroundColor: (() => { const t = document.documentElement.getAttribute('data-theme') || 'light'; return t === 'dark' ? '#1a1a1a' : t === 'sepia' ? '#fdf6e3' : 'var(--background)'; })(), padding: '10px', display: 'flex', gap: '8px', borderTop: '1px solid var(--border)' }}>
+            <div style={{ backgroundColor: 'var(--background)', padding: '10px', display: 'flex', gap: '8px', borderTop: '1px solid var(--border)' }}>
                 <textarea
                     value={inputText}
                     onChange={(e) => setInputText(e.target.value)}
@@ -561,7 +555,7 @@ function ChatRoom({ room }: ChatRoomProps) {
                         resize: 'none',
                         height: '44px',
                         fontFamily: 'inherit',
-                        backgroundColor: (() => { const t = document.documentElement.getAttribute('data-theme') || 'light'; return t === 'light' ? '#f9f7f2' : 'var(--modal-bg)'; })(),
+                        backgroundColor: 'var(--input-bg)',
                         color: 'var(--input-text)'
                     }}
                 />

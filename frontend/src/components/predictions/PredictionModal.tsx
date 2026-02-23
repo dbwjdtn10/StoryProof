@@ -105,14 +105,14 @@ export function PredictionModal({ isOpen, onClose, onSubmit }: PredictionModalPr
                 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <div style={{
-                            backgroundColor: 'rgba(124, 58, 237, 0.1)',
+                            backgroundColor: 'rgba(255, 255, 255, 0.15)',
                             padding: '8px',
                             borderRadius: '50%',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center'
                         }}>
-                            <Sparkles size={20} color="#7C3AED" />
+                            <Sparkles size={20} color="var(--modal-header-text)" />
                         </div>
                         <div>
                             <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 'bold', color: 'var(--modal-header-text)' }}>스토리 예측 챗봇</h2>

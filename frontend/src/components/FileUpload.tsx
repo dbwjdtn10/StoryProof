@@ -278,11 +278,11 @@ export function FileUpload({ onFileClick, novelId, mode = 'writer' }: FileUpload
                                                     gap: '8px',
                                                     padding: '8px 16px',
                                                     borderRadius: '8px',
-                                                    border: '1px solid #e5e7eb',
-                                                    backgroundColor: 'white',
+                                                    border: '1px solid var(--border)',
+                                                    backgroundColor: 'var(--card)',
                                                     cursor: 'pointer',
                                                     fontWeight: 500,
-                                                    color: '#374151',
+                                                    color: 'var(--foreground)',
                                                     fontSize: '14px'
                                                 }}
                                             >
@@ -296,10 +296,10 @@ export function FileUpload({ onFileClick, novelId, mode = 'writer' }: FileUpload
                                                     style={{
                                                         padding: '8px 16px',
                                                         borderRadius: '8px',
-                                                        border: '1px solid #e5e7eb',
-                                                        backgroundColor: 'white',
+                                                        border: '1px solid var(--border)',
+                                                        backgroundColor: 'var(--card)',
                                                         cursor: 'pointer',
-                                                        color: '#6b7280',
+                                                        color: 'var(--muted-foreground)',
                                                         fontSize: '14px'
                                                     }}
                                                 >
@@ -312,9 +312,9 @@ export function FileUpload({ onFileClick, novelId, mode = 'writer' }: FileUpload
                                                         padding: '8px 16px',
                                                         borderRadius: '8px',
                                                         border: 'none',
-                                                        backgroundColor: selectedSourceIds.length < 2 ? '#e5e7eb' : '#4F46E5',
+                                                        backgroundColor: selectedSourceIds.length < 2 ? 'var(--secondary)' : 'var(--primary)',
                                                         cursor: selectedSourceIds.length < 2 ? 'not-allowed' : 'pointer',
-                                                        color: selectedSourceIds.length < 2 ? '#9ca3af' : 'white',
+                                                        color: selectedSourceIds.length < 2 ? 'var(--muted-foreground)' : 'var(--primary-foreground)',
                                                         fontSize: '14px',
                                                         fontWeight: 600
                                                     }}
