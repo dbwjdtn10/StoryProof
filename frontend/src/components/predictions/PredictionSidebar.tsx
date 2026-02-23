@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, Loader, Sparkles, Send, Bot, User, Trash2 } from 'lucide-react';
+import { useTheme } from '../../contexts/ThemeContext';
 
 export interface Message {
     id: string;
@@ -18,6 +19,7 @@ interface PredictionSidebarProps {
 
 export function PredictionSidebar({ isOpen, onClose, messages, onSendMessage, isLoading, onClearChat }: PredictionSidebarProps) {
     const [inputValue, setInputValue] = useState("");
+    const { theme } = useTheme();
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     const scrollToBottom = () => {
@@ -248,7 +250,7 @@ export function PredictionSidebar({ isOpen, onClose, messages, onSendMessage, is
                     display: 'flex',
                     gap: '10px',
                     alignItems: 'flex-end',
-                    backgroundColor: 'var(--chat-input-bg)',
+                    backgroundColor: theme === 'dark' ? '#333333' : '#e1e1de',
                     padding: '8px',
                     borderRadius: '12px',
                     border: '1px solid var(--input-border)'
@@ -261,7 +263,7 @@ export function PredictionSidebar({ isOpen, onClose, messages, onSendMessage, is
                         style={{
                             flex: 1,
                             border: 'none',
-                            background: 'transparent',
+                            background: theme === 'dark' ? '#262626' : 'transparent',
                             resize: 'none',
                             height: 'auto',
                             minHeight: '24px',
@@ -283,7 +285,7 @@ export function PredictionSidebar({ isOpen, onClose, messages, onSendMessage, is
                         onClick={handleSubmit}
                         disabled={!inputValue.trim() || isLoading}
                         style={{
-                            backgroundColor: inputValue.trim() && !isLoading ? 'var(--primary)' : 'var(--muted)',
+                            backgroundColor: inputValue.trim() && !isLoading ? 'var(--primary)' : theme === 'dark' ? '#515350' : 'var(--muted)',
                             color: inputValue.trim() && !isLoading ? 'var(--primary-foreground)' : 'var(--muted-foreground)',
                             border: 'none',
                             borderRadius: '8px',

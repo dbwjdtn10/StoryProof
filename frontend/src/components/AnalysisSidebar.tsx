@@ -532,7 +532,7 @@ export function AnalysisSidebar({ isOpen, onClose, result, isLoading, isCachedRe
                 height: window.innerWidth <= 640 ? '100%' : '750px',
                 maxHeight: '100dvh',
                 borderRadius: window.innerWidth <= 640 ? '0' : '16px',
-                backgroundColor: 'var(--modal-bg)', color: 'var(--modal-text)',
+                backgroundColor: (() => { const t = document.documentElement.getAttribute('data-theme') || 'light'; return t === 'dark' ? '#333333' : t === 'sepia' ? '#e2d1c3' : '#f5f5f4'; })(), color: 'var(--modal-text)',
                 boxShadow: '0 8px 32px rgba(0,0,0,0.15)', zIndex: 1000,
                 display: 'flex', flexDirection: 'column',
                 border: window.innerWidth <= 640 ? 'none' : '1px solid var(--modal-border)', animation: 'slideUp 0.3s ease'
@@ -619,7 +619,7 @@ export function AnalysisSidebar({ isOpen, onClose, result, isLoading, isCachedRe
             )}
 
             {/* Content */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '20px', backgroundColor: (() => { const t = document.documentElement.getAttribute('data-theme') || 'light'; return t === 'dark' ? '#333333' : 'var(--secondary)'; })(), borderRadius: '0 0 16px 16px' }}>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '20px', backgroundColor: (() => { const t = document.documentElement.getAttribute('data-theme') || 'light'; return t === 'dark' ? '#1a1a1a' : t === 'sepia' ? '#fdf6e3' : '#ffffff'; })(), borderRadius: '0 0 16px 16px' }}>
                 {renderContent()}
             </div>
 
