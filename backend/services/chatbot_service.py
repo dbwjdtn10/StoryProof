@@ -269,7 +269,7 @@ class ChatbotService:
         'temperature': settings.GEMINI_RESPONSE_TEMPERATURE,
         'top_p': settings.GEMINI_RESPONSE_TOP_P,
         'top_k': settings.GEMINI_RESPONSE_TOP_K,
-        'max_output_tokens': 1024,
+        'max_output_tokens': 2048,
     }
 
     def generate_answer(self, question: str, context: str, bible: str = "") -> str:
