@@ -269,3 +269,30 @@
 [data-theme="sepia"] .chatbot-close:hover {
     color: #311900;
 }
+
+/* Dark Mode: colored buttons need inversion so they don't disappear */
+[data-theme="dark"] .btn-blue {
+    background: #2563eb !important;
+    color: #ffffff !important;
+    border: none !important;
+}
+
+[data-theme="dark"] .btn-blue:hover {
+    background: #1d4ed8 !important;
+}
+
+[data-theme="dark"] .btn-purple {
+    background: #7c3aed !important;
+    color: #ffffff !important;
+    border: none !important;
+}
+
+[data-theme="dark"] .btn-purple:hover {
+    background: #6d28d9 !important;
+}
+
+[data-theme="dark"] .btn-brown-rich {
+    background: #78350f !important;
+    color: #fef3c7 !important;
+    border: none !important;
+}

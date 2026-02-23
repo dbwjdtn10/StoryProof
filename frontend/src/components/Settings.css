@@ -342,6 +342,7 @@
 [data-theme="dark"] .select-dropdown { background-color: #262626; border-color: #404040; }
 [data-theme="dark"] .select-option { color: #d1d5db; }
 [data-theme="dark"] .select-option:hover { background-color: #333; color: #ffffff; }
+[data-theme="dark"] .select-option.selected { background-color: #1e3a5f; color: #60a5fa; font-weight: 600; }
 [data-theme="dark"] .settings-footer { background-color: #1a1a1a; border-top-color: #333; }
 [data-theme="dark"] .btn-outline { background-color: transparent; border-color: #404040; color: #e0e0e0; }
 [data-theme="dark"] .btn-outline:hover { background-color: #262626; border-color: #525252; }

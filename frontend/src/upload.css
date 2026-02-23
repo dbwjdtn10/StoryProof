@@ -317,6 +317,23 @@
     filter: brightness(0.85) contrast(1.1);
 }
 
+/* Floating Upload Button Dark Mode */
+[data-theme="dark"] .floating-upload-btn {
+    background: #262626;
+    border: 2px solid #fafaf9;
+    color: #fafaf9;
+}
+
+[data-theme="dark"] .floating-upload-btn:hover {
+    background: #fafaf9;
+    color: #1a1a1a;
+}
+
+[data-theme="dark"] .floating-upload-btn svg,
+[data-theme="dark"] .floating-upload-btn:hover svg {
+    color: inherit;
+}
+
 /* File Merge Theme (Dark Mode) Overrides */
 [data-theme="dark"] .upload-header,
 [data-theme="dark"] .upload-area,
