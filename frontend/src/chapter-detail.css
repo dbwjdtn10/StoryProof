@@ -673,9 +673,13 @@
 }
 
 [data-theme="dark"] textarea {
-    background-color: #1a1a1a !important;
+    background-color: #262626 !important;
     color: #e0e0e0 !important;
     border-color: #333 !important;
+}
+
+[data-theme="dark"] .character-chat-window textarea {
+    background-color: #333333 !important;
 }
 
 [data-theme="dark"] .scene-block textarea {
@@ -829,7 +833,7 @@
 }
 
 [data-theme="sepia"] textarea {
-    background-color: #fdf6e3 !important;
+    background-color: #f9f7f2 !important;
     color: #311900 !important;
     border-color: rgba(107, 79, 58, 0.15) !important;
 }

@@ -600,7 +600,7 @@ export function AnalysisSidebar({ isOpen, onClose, result, isLoading, isCachedRe
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                     backgroundColor: (() => {
                         const t = document.documentElement.getAttribute('data-theme') || 'light';
-                        return t === 'dark' ? '#1a1a1a' : 'rgba(59, 130, 246, 0.08)';
+                        return t === 'dark' ? '#3b82f614' : 'rgba(59, 130, 246, 0.08)';
                     })()
                 }}>
                     <span style={{ fontSize: '0.8rem', color: 'var(--muted-foreground)' }}>
@@ -626,7 +626,7 @@ export function AnalysisSidebar({ isOpen, onClose, result, isLoading, isCachedRe
             )}
 
             {/* Content */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '20px', backgroundColor: 'var(--modal-bg)', borderRadius: '0 0 16px 16px' }}>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '20px', backgroundColor: (() => { const t = document.documentElement.getAttribute('data-theme') || 'light'; return t === 'dark' ? '#333333' : 'var(--secondary)'; })(), borderRadius: '0 0 16px 16px' }}>
                 {renderContent()}
             </div>
 

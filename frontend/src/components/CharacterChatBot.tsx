@@ -89,7 +89,7 @@ function CreateRoomModal({ novelId, chapterId, onClose, onCreated, onUpdated, in
             left: 0,
             right: 0,
             bottom: 0,
-            backgroundColor: 'var(--input-bg)',
+            backgroundColor: 'var(--modal-bg)',
             color: 'var(--modal-text)',
             zIndex: 10,
             display: 'flex',
@@ -303,7 +303,7 @@ function RoomList({ novelId, chapterId, onSelectRoom }: RoomListProps) {
     };
 
     return (
-        <div style={{ padding: '16px', height: '100%', overflowY: 'auto', backgroundColor: 'var(--input-bg)' }}>
+        <div style={{ padding: '16px', height: '100%', overflowY: 'auto', backgroundColor: 'var(--modal-bg)' }}>
             {loading ? (
                 <div style={{ textAlign: 'center', padding: '20px', color: 'var(--muted-foreground)' }}>로딩 중...</div>
             ) : rooms.length === 0 ? (
@@ -543,7 +543,7 @@ function ChatRoom({ room }: ChatRoomProps) {
             </div>
 
             {/* Input Area */}
-            <div style={{ backgroundColor: 'var(--chat-input-bg, var(--modal-bg))', padding: '10px', display: 'flex', gap: '8px', borderTop: '1px solid var(--border)' }}>
+            <div style={{ backgroundColor: 'var(--background)', padding: '10px', display: 'flex', gap: '8px', borderTop: '1px solid var(--border)' }}>
                 <textarea
                     value={inputText}
                     onChange={(e) => setInputText(e.target.value)}
@@ -558,7 +558,7 @@ function ChatRoom({ room }: ChatRoomProps) {
                         resize: 'none',
                         height: '44px',
                         fontFamily: 'inherit',
-                        backgroundColor: 'var(--chat-input-bg, var(--input-bg))',
+                        backgroundColor: 'var(--modal-bg)',
                         color: 'var(--input-text)'
                     }}
                 />
