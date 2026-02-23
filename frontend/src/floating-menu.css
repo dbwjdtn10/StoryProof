@@ -296,3 +296,9 @@
     color: #fef3c7 !important;
     border: none !important;
 }
+
+[data-theme="dark"] .btn-brown-med {
+    background: #92400e !important;
+    color: #fef3c7 !important;
+    border: none !important;
+}

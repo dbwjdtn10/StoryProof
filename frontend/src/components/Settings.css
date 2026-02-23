@@ -361,11 +361,13 @@
 [data-theme="sepia"] .section-title { color: #5b4636; }
 [data-theme="sepia"] .section-description { color: #8c7b70; }
 [data-theme="sepia"] .form-label { color: #5b4636; }
-[data-theme="sepia"] .form-input, [data-theme="sepia"] .select-button { background-color: #ffffff; border-color: #d4c4b7; color: #4a3728; }
+[data-theme="sepia"] .form-input, [data-theme="sepia"] .select-button { background-color: #fdf6e3; border-color: #d4c4b7; color: #4a3728; }
+[data-theme="sepia"] .form-input:hover, [data-theme="sepia"] .select-button:hover { border-color: #c4a882; }
 [data-theme="sepia"] .form-input:focus, [data-theme="sepia"] .select-button.active { border-color: #b58900; box-shadow: 0 0 0 3px rgba(181, 137, 0, 0.2); }
-[data-theme="sepia"] .select-dropdown { background-color: #ffffff; border-color: #d4c4b7; }
+[data-theme="sepia"] .select-dropdown { background-color: #fdf6e3; border-color: #d4c4b7; }
 [data-theme="sepia"] .select-option { color: #5b4636; }
 [data-theme="sepia"] .select-option:hover { background-color: #f0e4d7; color: #4a3728; }
+[data-theme="sepia"] .select-option.selected { background-color: rgba(107, 79, 58, 0.15); color: #4a3728; }
 [data-theme="sepia"] .settings-footer { background-color: #fdf6e3; border-top-color: #d4c4b7; }
 [data-theme="sepia"] .btn-outline { background-color: transparent; border-color: #6b4f3a; color: #6b4f3a; }
 [data-theme="sepia"] .btn-outline:hover { background-color: #f0e4d7; border-color: #5d534b; color: #4a3728; }

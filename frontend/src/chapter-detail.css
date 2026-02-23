@@ -652,9 +652,9 @@
 }
 
 [data-theme="dark"] .trait-tag {
-    background-color: #f1efef;
-    color: #4b4035;
-    border-color: #998879;
+    background-color: #333333;
+    color: #d1cdc9;
+    border-color: #555555;
 }
 
 /* Dark Mode for Text Content */
@@ -845,7 +845,7 @@
 }
 
 [data-theme="sepia"] .trait-tag {
-    background-color: #f1efef;
+    background-color: #e2d1c3;
     color: #4a3728;
     border-color: rgba(107, 79, 58, 0.3);
 }
