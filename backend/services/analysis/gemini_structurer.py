@@ -814,6 +814,93 @@ Output Format (JSON List of Strings):
                 break
         return name
 
+    def _merge_alias_characters(self, all_characters: dict) -> tuple:
+        """
+        부분 이름(별칭)이 전체 이름의 토큰인 경우 병합하여 중복 캐릭터 제거.
+        예: '셜록' ⊂ '셜록 홈즈', '홈즈' ⊂ '셜록 홈즈' → 모두 '셜록 홈즈'로 합침
+        단, 여러 이름의 부분인 경우(모호한 경우)는 병합하지 않음.
+        Returns: (merged_characters, merged_into) where merged_into = {removed_name: canonical_name}
+        """
+        MIN_NAME_LEN = 2
+
+        def is_name_part_of(short: str, long_n: str) -> bool:
+            """short가 long_n의 공백 구분 토큰 중 하나이거나 연속 토큰 부분문자열인지 확인"""
+            if short == long_n or len(short) < MIN_NAME_LEN:
+                return False
+            # 단일 토큰 매칭: "셜록" in ["셜록", "홈즈"] → True
+            if short in long_n.split():
+                return True
+            # 다중 토큰 매칭: "셜록 홈즈" in "위대한 셜록 홈즈" → True
+            if f' {short} ' in f' {long_n} ':
+                return True
+            return False
+
+        names = list(all_characters.keys())
+        merge_candidates: dict = {}
+
+        for short in names:
+            for long_n in names:
+                if short == long_n:
+                    continue
+                if is_name_part_of(short, long_n):
+                    merge_candidates.setdefault(short, []).append(long_n)
+
+        # 모호하지 않은 경우만 병합 (정확히 1개의 후보만 있을 때)
+        merged_into: dict = {}
+        for short, candidates in merge_candidates.items():
+            if len(candidates) == 1:
+                merged_into[short] = candidates[0]
+
+        # 연쇄 병합 해소: A→B, B→C 인 경우 A→C로 정리
+        def resolve_canonical(name: str) -> str:
+            visited: set = set()
+            while name in merged_into and name not in visited:
+                visited.add(name)
+                name = merged_into[name]
+            return name
+
+        for short in list(merged_into.keys()):
+            merged_into[short] = resolve_canonical(merged_into[short])
+
+        # 실제 병합 수행
+        for short_name, canonical_name in merged_into.items():
+            if short_name not in all_characters or canonical_name not in all_characters:
+                continue
+
+            short_char = all_characters[short_name]
+            canonical_char = all_characters[canonical_name]
+
+            # aliases 추가
+            for alias in [short_name] + short_char.get('aliases', []):
+                if alias not in canonical_char['aliases']:
+                    canonical_char['aliases'].append(alias)
+
+            # appearances 합집합
+            for app in short_char['appearances']:
+                if app not in canonical_char['appearances']:
+                    canonical_char['appearances'].append(app)
+
+            # traits 합집합
+            for trait in short_char.get('traits', []):
+                if trait not in canonical_char['traits']:
+                    canonical_char['traits'].append(trait)
+
+            # description: 더 긴 것 사용
+            if len(short_char.get('description', '')) > len(canonical_char.get('description', '')):
+                canonical_char['description'] = short_char['description']
+
+            # visual_description: 더 긴 것 사용
+            if len(short_char.get('visual_description', '')) > len(canonical_char.get('visual_description', '')):
+                canonical_char['visual_description'] = short_char['visual_description']
+
+            del all_characters[short_name]
+
+        if merged_into:
+            for short, canonical in merged_into.items():
+                print(f"[Merge] '{short}' → '{canonical}' (별칭 병합)")
+
+        return all_characters, merged_into
+
     def extract_global_entities(
         self,
         structured_scenes: List[StructuredScene],
@@ -982,8 +1069,37 @@ Output Format (JSON List of Strings):
                     "importance": importance
                 })
 
+        # 별칭/부분명 병합: '셜록' + '홈즈' + '셜록 홈즈' → '셜록 홈즈' (aliases 포함)
+        all_characters, merged_into = self._merge_alias_characters(all_characters)
+
+        # 관계도에서도 병합된 이름 반영
+        if merged_into:
+            new_relationships: dict = {}
+            for key, rel in all_relationships.items():
+                c1 = merged_into.get(rel['character1'], rel['character1'])
+                c2 = merged_into.get(rel['character2'], rel['character2'])
+                if c1 == c2:
+                    continue
+                new_key = tuple(sorted([c1, c2]))
+                if new_key not in new_relationships:
+                    new_relationships[new_key] = {
+                        "character1": new_key[0],
+                        "character2": new_key[1],
+                        "relation": rel['relation'],
+                        "description": rel['description'],
+                        "scenes": list(rel['scenes'])
+                    }
+                else:
+                    existing = new_relationships[new_key]
+                    if len(rel['description']) > len(existing['description']):
+                        existing['description'] = rel['description']
+                    for s in rel['scenes']:
+                        if s not in existing['scenes']:
+                            existing['scenes'].append(s)
+            all_relationships = new_relationships
+
         # 결과 포맷팅 (리스트 변환 & 정렬)
-        
+
         # Characters: 등장 횟수 순 정렬
         final_chars = list(all_characters.values())
         for char in final_chars:
