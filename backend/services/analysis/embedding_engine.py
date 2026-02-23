@@ -422,6 +422,11 @@ class EmbeddingSearchEngine:
             keywords (List[str]): 명시적 키워드 리스트
             original_query (str): 원본 질문 (리랭커에서 노이즈 없는 검색을 위해 사용)
         """
+        # novel_id 없으면 크로스 소설 검색 차단
+        if not novel_id:
+            logger.error("[Search] engine.search() called without novel_id — cross-novel search blocked")
+            return []
+
         # Pinecone 인덱스가 None이면 재연결 시도
         if self.index is None:
             self._init_pinecone()
@@ -432,9 +437,7 @@ class EmbeddingSearchEngine:
         # --- 1. Dense Search (Pinecone) ---
         query_embedding = self.embed_text(query)
 
-        filter_dict = {}
-        if novel_id:
-            filter_dict['novel_id'] = {'$eq': int(novel_id)}
+        filter_dict = {'novel_id': {'$eq': int(novel_id)}}
         if chapter_id:
             filter_dict['chapter_id'] = {'$eq': int(chapter_id)}
         elif exclude_chapter_id:
@@ -444,17 +447,14 @@ class EmbeddingSearchEngine:
             vector=query_embedding,
             top_k=top_k * 10,
             include_metadata=True,
-            filter=filter_dict if filter_dict else None
+            filter=filter_dict
         )
 
         # 포스트 필터: Pinecone 필터가 실패해도 다른 소설 청크 차단
-        if novel_id:
-            dense_matches = {
-                m.id: m for m in dense_results.matches
-                if int(m.metadata.get('novel_id', -1)) == int(novel_id)
-            }
-        else:
-            dense_matches = {m.id: m for m in dense_results.matches}
+        dense_matches = {
+            m.id: m for m in dense_results.matches
+            if int(m.metadata.get('novel_id', -1)) == int(novel_id)
+        }
 
         # --- 2. Sparse Search (BM25) ---
         sparse_scores_dict = {}

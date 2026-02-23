@@ -15,7 +15,7 @@ import asyncio
 import json
 from functools import partial
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -45,6 +45,8 @@ def ask_question(
     3. 검색된 컨텍스트를 바탕으로 Gemini가 답변 생성
     4. (Method C) novel_id가 있으면 바이블 요약을 LLM 프롬프트에 주입
     """
+    if not request.novel_id and not request.novel_filter:
+        raise HTTPException(status_code=400, detail="novel_id 또는 novel_filter가 필요합니다.")
     chatbot = get_chatbot_service()
     result = chatbot.ask(
         question=request.question,
@@ -72,6 +74,8 @@ async def ask_question_stream(
       data: {"type": "token", "text": "..."}
       data: [DONE]
     """
+    if not request.novel_id and not request.novel_filter:
+        raise HTTPException(status_code=400, detail="novel_id 또는 novel_filter가 필요합니다.")
     chatbot = get_chatbot_service()
     loop = asyncio.get_running_loop()
 
