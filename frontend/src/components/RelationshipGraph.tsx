@@ -526,7 +526,7 @@ export function RelationshipGraphModal({ isOpen, onClose, relationships, charact
                         <div style={{
                             width: '220px', borderRight: '1px solid var(--border)',
                             display: 'flex', flexDirection: 'column',
-                            background: 'var(--card)'
+                            background: 'var(--chat-input-bg)'
                         }}>
                             <div style={{
                                 padding: '10px 14px', borderBottom: '1px solid var(--border)',

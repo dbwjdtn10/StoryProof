@@ -250,7 +250,7 @@ export function PredictionSidebar({ isOpen, onClose, messages, onSendMessage, is
                     display: 'flex',
                     gap: '10px',
                     alignItems: 'flex-end',
-                    backgroundColor: 'var(--secondary)',
+                    backgroundColor: 'var(--input-wrapper-bg)',
                     padding: '8px',
                     borderRadius: '12px',
                     border: '1px solid var(--input-border)'
@@ -260,6 +260,7 @@ export function PredictionSidebar({ isOpen, onClose, messages, onSendMessage, is
                         onChange={(e) => setInputValue(e.target.value)}
                         onKeyDown={handleKeyDown}
                         placeholder="메시지를 입력하세요..."
+                        className="prediction-textarea"
                         style={{
                             flex: 1,
                             border: 'none',
@@ -285,7 +286,7 @@ export function PredictionSidebar({ isOpen, onClose, messages, onSendMessage, is
                         onClick={handleSubmit}
                         disabled={!inputValue.trim() || isLoading}
                         style={{
-                            backgroundColor: inputValue.trim() && !isLoading ? 'var(--primary)' : 'var(--muted)',
+                            backgroundColor: inputValue.trim() && !isLoading ? 'var(--primary)' : 'var(--send-btn-inactive)',
                             color: inputValue.trim() && !isLoading ? 'var(--primary-foreground)' : 'var(--muted-foreground)',
                             border: 'none',
                             borderRadius: '8px',
@@ -315,6 +316,9 @@ export function PredictionSidebar({ isOpen, onClose, messages, onSendMessage, is
                 }
                 .animate-spin {
                     animation: spin 1s linear infinite;
+                }
+                [data-theme="sepia"] .prediction-textarea {
+                    background: #f9f7f2 !important;
                 }
             `}</style>
         </div>
