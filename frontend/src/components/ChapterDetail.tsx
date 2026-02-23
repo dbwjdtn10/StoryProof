@@ -392,7 +392,10 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
             if (element) {
                 element.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 element.style.transition = 'background-color 0.5s';
-                element.style.backgroundColor = 'rgba(79, 70, 229, 0.1)';
+                const _t = document.documentElement.getAttribute('data-theme') || 'light';
+                element.style.backgroundColor = _t === 'sepia'
+                    ? 'rgba(107, 79, 58, 0.15)'
+                    : _t === 'dark' ? 'rgba(250, 250, 249, 0.08)' : 'rgba(79, 70, 229, 0.1)';
                 scrollHighlightRef.current = setTimeout(() => {
                     element.style.backgroundColor = 'transparent';
                 }, 1000);
@@ -1080,9 +1083,9 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                         {isCharactersOpen && (
                             <div className="section-content">
                                 {isBibleLoading ? (
-                                    <div style={{ padding: '10px', fontSize: '12px', color: '#999' }}>로딩 중...</div>
+                                    <div style={{ padding: '10px', fontSize: '12px', color: 'var(--muted-foreground)' }}>로딩 중...</div>
                                 ) : filteredCharacters.length === 0 && bibleQuery ? (
-                                    <div style={{ padding: '10px', fontSize: '12px', color: '#999' }}>매칭 결과 없음</div>
+                                    <div style={{ padding: '10px', fontSize: '12px', color: 'var(--muted-foreground)' }}>매칭 결과 없음</div>
                                 ) : (
                                     filteredCharacters.map((character, index) => (
                                         <div
@@ -1130,7 +1133,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                         {isItemsOpen && (
                             <div className="section-content">
                                 {filteredItems.length === 0 && bibleQuery ? (
-                                    <div style={{ padding: '10px', fontSize: '12px', color: '#999' }}>매칭 결과 없음</div>
+                                    <div style={{ padding: '10px', fontSize: '12px', color: 'var(--muted-foreground)' }}>매칭 결과 없음</div>
                                 ) : filteredItems.map((item, index) => (
                                     <div
                                         key={index}
@@ -1179,7 +1182,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                         {isLocationsOpen && (
                             <div className="section-content">
                                 {filteredLocations.length === 0 && bibleQuery ? (
-                                    <div style={{ padding: '10px', fontSize: '12px', color: '#999' }}>매칭 결과 없음</div>
+                                    <div style={{ padding: '10px', fontSize: '12px', color: 'var(--muted-foreground)' }}>매칭 결과 없음</div>
                                 ) : filteredLocations.map((location, index) => (
                                     <div
                                         key={index}
@@ -1214,7 +1217,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                         {isRelationshipsOpen && (
                             <div className="section-content">
                                 {filteredRelationships.length === 0 && bibleQuery ? (
-                                    <div style={{ padding: '10px', fontSize: '12px', color: '#999' }}>매칭 결과 없음</div>
+                                    <div style={{ padding: '10px', fontSize: '12px', color: 'var(--muted-foreground)' }}>매칭 결과 없음</div>
                                 ) : filteredRelationships.map((rel: any, index: number) => (
                                     <div key={index} className="section-item">
                                         <div className="item-name" style={{ fontSize: '0.9rem' }}>
@@ -1248,7 +1251,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                         {isKeyEventsOpen && (
                             <div className="section-content">
                                 {filteredKeyEvents.length === 0 && bibleQuery ? (
-                                    <div style={{ padding: '10px', fontSize: '12px', color: '#999' }}>매칭 결과 없음</div>
+                                    <div style={{ padding: '10px', fontSize: '12px', color: 'var(--muted-foreground)' }}>매칭 결과 없음</div>
                                 ) : filteredKeyEvents.map((event, index) => (
                                     <div
                                         key={index}

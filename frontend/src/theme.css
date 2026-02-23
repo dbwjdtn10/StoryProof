@@ -392,7 +392,20 @@
 
 /* Sepia Mode Specific Overrides */
 [data-theme="sepia"] .theme-toggle-btn {
+    background: #ede0d4;
     border: 2px solid #6b4f3a;
+    color: #6b4f3a;
+}
+[data-theme="sepia"] .theme-toggle-btn:hover {
+    background: #e2d1c3;
+    color: #4a3728;
+}
+[data-theme="sepia"] .chatbot-toggle-btn {
+    background: #6b4f3a;
+    color: #ede0d4;
+}
+[data-theme="sepia"] .chatbot-toggle-btn:hover {
+    background: #4a3728;
 }
 
 /* Sidebar Dark Mode Fixes */
