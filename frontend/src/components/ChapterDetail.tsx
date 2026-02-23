@@ -911,7 +911,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                         </button>
                         <button
                             className="save-button"
-                            onClick={handleSave}
+                            onClick={() => handleSave()}
                             disabled={isSaving}
                             style={{
                                 display: 'flex',
