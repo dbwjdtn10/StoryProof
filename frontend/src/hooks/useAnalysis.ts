@@ -37,6 +37,16 @@ export function useAnalysis(
         };
     }, []);
 
+    // novelId 또는 chapterId 변경 시 분석 결과 초기화
+    useEffect(() => {
+        if (analysisPollingRef.current) clearTimeout(analysisPollingRef.current);
+        setAnalysisResult(null);
+        setIsCachedResult(false);
+        setIsAnalysisLoading(false);
+        setIsAnalysisSidebarOpen(false);
+        setCurrentAnalysisType('consistency');
+    }, [novelId, chapterId]);
+
     // 통합 회차 분석 실행 (consistency/plot/style/overall)
     const runChapterAnalysis = async (analysisType: string) => {
         setIsAnalysisLoading(true);

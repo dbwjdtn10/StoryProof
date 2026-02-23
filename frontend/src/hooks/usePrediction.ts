@@ -32,6 +32,14 @@ export function usePrediction(
         };
     }, []);
 
+    // novelId 변경 시 대화 히스토리·사이드바 상태 초기화
+    useEffect(() => {
+        if (predictionPollingRef.current) clearTimeout(predictionPollingRef.current);
+        setChatMessages([]);
+        setIsPredictionSidebarOpen(false);
+        setIsPredictionLoading(false);
+    }, [novelId]);
+
     const handlePredictionSidebarOpen = async () => {
         setIsPredictionSidebarOpen(true);
         callbacks?.onOpen?.();

@@ -277,6 +277,7 @@ export default function App() {
           </div>
         }>
           <ChapterDetail
+            key={`chapter-${currentNovel?.id}-${selectedChapterId}`}
             fileName={selectedFile}
             onBack={() => setCurrentScreen('upload')}
             novelId={currentNovel?.id}
@@ -292,6 +293,7 @@ export default function App() {
           />
           {currentNovel && showChatBot && (
             <CharacterChatBot
+              key={`chatbot-${currentNovel.id}-${selectedChapterId}`}
               novelId={currentNovel.id}
               chapterId={selectedChapterId}
               onClose={() => setShowChatBot(false)}
