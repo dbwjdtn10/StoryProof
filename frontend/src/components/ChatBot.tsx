@@ -249,7 +249,7 @@ export function ChatInterface({ onNavigateToScene, novelId, chapterId }: ChatInt
             </div>
             <div className="chatbot-input-area" style={{
                 padding: '1rem', display: 'flex', gap: '0.5rem',
-                backgroundColor: 'var(--modal-bg)', borderTop: '1px solid var(--border)'
+                backgroundColor: 'var(--input-bg)', borderTop: '1px solid var(--border)'
             }}>
                 <input
                     type="text" className="chatbot-input"

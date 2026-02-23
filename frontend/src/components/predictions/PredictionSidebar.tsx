@@ -240,7 +240,7 @@ export function PredictionSidebar({ isOpen, onClose, messages, onSendMessage, is
             {/* Input Area */}
             <div style={{
                 padding: '16px',
-                backgroundColor: 'var(--modal-bg)',
+                backgroundColor: 'var(--input-bg)',
                 borderTop: '1px solid var(--modal-border)',
                 borderRadius: '0 0 16px 16px'
             }}>

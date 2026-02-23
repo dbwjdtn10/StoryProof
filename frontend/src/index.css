@@ -839,8 +839,9 @@
   --floating-btn-hover-bg: #f9fafb;
 
   /* Chatbot bubbles & inputs */
-  --chat-assistant-bg: #ffffff;
+  --chat-assistant-bg: #f9f7f2;
   --chat-assistant-text: #1c1917;
+  --chat-input-bg: #f9f7f2;
 }
 
 [data-theme='sepia'] {
@@ -885,8 +886,9 @@
   --floating-btn-hover-bg: #f7ebc6;
 
   /* Chatbot bubbles & inputs */
-  --chat-assistant-bg: #e2d1c3;
+  --chat-assistant-bg: #f9f7f2;
   --chat-assistant-text: #4a3728;
+  --chat-input-bg: #f9f7f2;
 }
 
 [data-theme='dark'] {
@@ -935,8 +937,9 @@
   --floating-btn-hover-bg: #333333;
 
   /* Chatbot bubbles & inputs */
-  --chat-assistant-bg: #1a1a1a;
+  --chat-assistant-bg: #333333;
   --chat-assistant-text: #e0e0e0;
+  --chat-input-bg: #333333;
 }
 }
 
@@ -958,8 +961,9 @@
   --input-bg: #ffffff;
   --input-text: #1c1917;
   --input-border: #e5e7eb;
-  --chat-assistant-bg: #ffffff;
+  --chat-assistant-bg: #f9f7f2;
   --chat-assistant-text: #1c1917;
+  --chat-input-bg: #f9f7f2;
 }
 
 [data-reader-theme='sepia'] {
@@ -981,8 +985,9 @@
   --input-bg: #d4c4b7;
   --input-text: #4a3728;
   --input-border: #d4c4b7;
-  --chat-assistant-bg: #e2d1c3;
+  --chat-assistant-bg: #f9f7f2;
   --chat-assistant-text: #4a3728;
+  --chat-input-bg: #f9f7f2;
 }
 
 [data-reader-theme='dark'] {

@@ -387,7 +387,7 @@
     }
 
     .chatbot-input-area {
-        background: var(--card);
+        background: #262626;
         border-top-color: var(--border);
     }
 
@@ -451,9 +451,13 @@
 }
 
 [data-theme="sepia"] .chatbot-panel,
-[data-theme="sepia"] .chatbot-messages,
-[data-theme="sepia"] .chatbot-input-area {
+[data-theme="sepia"] .chatbot-messages {
     background-color: #fdf6e3;
+    border-color: #d4c4b7;
+}
+
+[data-theme="sepia"] .chatbot-input-area {
+    background-color: #d4c4b7;
     border-color: #d4c4b7;
 }
 

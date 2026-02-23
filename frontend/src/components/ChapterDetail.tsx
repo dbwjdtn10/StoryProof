@@ -1140,7 +1140,11 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                                     >
                                         <span style={{
                                             minWidth: '22px', height: '22px', borderRadius: '50%',
-                                            backgroundColor: 'var(--primary, #4F46E5)', color: '#fff',
+                                            backgroundColor: (() => {
+                                                const t = document.documentElement.getAttribute('data-theme') || 'light';
+                                                return t === 'dark' ? '#555555' : 'var(--primary, #4F46E5)';
+                                            })(),
+                                            color: '#ffffff',
                                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                                             fontSize: '0.7rem', fontWeight: 'bold', flexShrink: 0, marginTop: '2px'
                                         }}>{index + 1}</span>
@@ -1543,7 +1547,10 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                                             <span key={i} style={{
                                                 fontSize: '0.8rem',
                                                 padding: '4px 10px',
-                                                backgroundColor: 'var(--muted, rgba(79, 70, 229, 0.1))',
+                                                backgroundColor: (() => {
+                                                    const t = document.documentElement.getAttribute('data-theme') || 'light';
+                                                    return t === 'dark' ? '#f1efef' : 'var(--muted, rgba(79, 70, 229, 0.1))';
+                                                })(),
                                                 color: 'var(--primary, #4F46E5)',
                                                 borderRadius: '6px',
                                                 fontWeight: '500',

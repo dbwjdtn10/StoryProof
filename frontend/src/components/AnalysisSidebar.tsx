@@ -204,7 +204,7 @@ function ConsistencyRenderer({ result, onNavigateToQuote, onApplySuggestion, fil
             {items.length > 0 ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                     {items.map((item, index) => (
-                        <div key={index} style={{ padding: '14px', border: '1px solid var(--modal-border)', borderRadius: '8px', backgroundColor: 'var(--card)', color: 'var(--card-foreground)' }}>
+                        <div key={index} style={{ padding: '14px', border: '1px solid var(--modal-border)', borderRadius: '8px', backgroundColor: 'var(--secondary)', color: 'var(--card-foreground)' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                                 <div style={{ display: 'flex', alignItems: 'center' }}>
                                     <span style={{

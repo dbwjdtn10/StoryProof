@@ -528,7 +528,7 @@ export function RelationshipGraphModal({ isOpen, onClose, relationships, charact
                             display: 'flex', flexDirection: 'column',
                             background: (() => {
                                 const t = document.documentElement.getAttribute('data-theme') || 'light';
-                                return t === 'dark' ? '#0a0a0a' : t === 'sepia' ? '#fdf6e3' : '#fafafa';
+                                return t === 'dark' ? '#0a0a0a' : t === 'sepia' ? '#fdf6e3' : '#fdf6e3';
                             })()
                         }}>
                             <div style={{
@@ -538,20 +538,16 @@ export function RelationshipGraphModal({ isOpen, onClose, relationships, charact
                                 <button onClick={selectAll} style={{
                                     flex: 1, padding: '5px', fontSize: '0.75rem', fontWeight: 600,
                                     border: '1px solid var(--border)', borderRadius: '6px',
-                                    cursor: 'pointer', color: 'var(--foreground)',
-                                    background: (() => {
-                                        const t = document.documentElement.getAttribute('data-theme') || 'light';
-                                        return t === 'dark' ? '#333333' : t === 'sepia' ? '#e6d3c1' : 'transparent';
-                                    })()
+                                    cursor: 'pointer',
+                                    color: (() => { const t = document.documentElement.getAttribute('data-theme') || 'light'; return t === 'dark' ? '#ffffff' : 'var(--foreground)'; })(),
+                                    background: (() => { const t = document.documentElement.getAttribute('data-theme') || 'light'; return t === 'dark' ? '#333333' : '#e6d3c1'; })()
                                 }}>전체 선택</button>
                                 <button onClick={selectNone} style={{
                                     flex: 1, padding: '5px', fontSize: '0.75rem', fontWeight: 600,
                                     border: '1px solid var(--border)', borderRadius: '6px',
-                                    cursor: 'pointer', color: 'var(--foreground)',
-                                    background: (() => {
-                                        const t = document.documentElement.getAttribute('data-theme') || 'light';
-                                        return t === 'dark' ? '#333333' : t === 'sepia' ? '#e6d3c1' : 'transparent';
-                                    })()
+                                    cursor: 'pointer',
+                                    color: (() => { const t = document.documentElement.getAttribute('data-theme') || 'light'; return t === 'dark' ? '#ffffff' : 'var(--foreground)'; })(),
+                                    background: (() => { const t = document.documentElement.getAttribute('data-theme') || 'light'; return t === 'dark' ? '#333333' : '#e6d3c1'; })()
                                 }}>선택 해제</button>
                             </div>
                             <div style={{ flex: 1, overflowY: 'auto', padding: '6px' }}>

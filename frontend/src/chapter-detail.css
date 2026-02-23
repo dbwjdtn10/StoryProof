@@ -432,7 +432,7 @@
 }
 
 [data-theme="dark"] .bible-search-input {
-    background: #262626;
+    background: #333333;
     border-color: #444444;
     color: #e0e0e0;
 }
@@ -454,7 +454,7 @@
 }
 
 [data-theme="dark"] .export-dropdown {
-    background: #262626;
+    background: #333333;
     border-color: #444444;
 }
 
@@ -923,7 +923,7 @@
 }
 
 [data-theme="dark"] .chapter-export-dropdown {
-    background: #262626;
+    background: #333333;
     border-color: #444444;
 }
 

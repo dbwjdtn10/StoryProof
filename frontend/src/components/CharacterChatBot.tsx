@@ -89,7 +89,7 @@ function CreateRoomModal({ novelId, chapterId, onClose, onCreated, onUpdated, in
             left: 0,
             right: 0,
             bottom: 0,
-            backgroundColor: 'var(--modal-bg)',
+            backgroundColor: 'var(--input-bg)',
             color: 'var(--modal-text)',
             zIndex: 10,
             display: 'flex',
@@ -215,7 +215,10 @@ function CreateRoomModal({ novelId, chapterId, onClose, onCreated, onUpdated, in
                                 fontSize: '0.9rem',
                                 resize: 'none',
                                 fontFamily: 'monospace',
-                                backgroundColor: 'var(--input-bg)',
+                                backgroundColor: (() => {
+                                    const t = document.documentElement.getAttribute('data-theme') || 'light';
+                                    return t === 'dark' ? '#333333' : t === 'sepia' ? '#ffffff' : 'var(--input-bg)';
+                                })(),
                                 color: 'var(--input-text)'
                             }}
                         />
@@ -300,7 +303,7 @@ function RoomList({ novelId, chapterId, onSelectRoom }: RoomListProps) {
     };
 
     return (
-        <div style={{ padding: '16px', height: '100%', overflowY: 'auto', backgroundColor: 'var(--modal-bg)' }}>
+        <div style={{ padding: '16px', height: '100%', overflowY: 'auto', backgroundColor: 'var(--input-bg)' }}>
             {loading ? (
                 <div style={{ textAlign: 'center', padding: '20px', color: 'var(--muted-foreground)' }}>로딩 중...</div>
             ) : rooms.length === 0 ? (
@@ -540,7 +543,7 @@ function ChatRoom({ room }: ChatRoomProps) {
             </div>
 
             {/* Input Area */}
-            <div style={{ backgroundColor: 'var(--modal-bg)', padding: '10px', display: 'flex', gap: '8px', borderTop: '1px solid var(--border)' }}>
+            <div style={{ backgroundColor: 'var(--chat-input-bg, var(--modal-bg))', padding: '10px', display: 'flex', gap: '8px', borderTop: '1px solid var(--border)' }}>
                 <textarea
                     value={inputText}
                     onChange={(e) => setInputText(e.target.value)}
@@ -555,7 +558,7 @@ function ChatRoom({ room }: ChatRoomProps) {
                         resize: 'none',
                         height: '44px',
                         fontFamily: 'inherit',
-                        backgroundColor: 'var(--input-bg)',
+                        backgroundColor: 'var(--chat-input-bg, var(--input-bg))',
                         color: 'var(--input-text)'
                     }}
                 />
