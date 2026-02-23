@@ -359,6 +359,62 @@
     opacity: 0.85;
 }
 
+[data-theme="sepia"] .upload-header,
+[data-theme="sepia"] .upload-area,
+[data-theme="sepia"] .uploaded-files-section,
+[data-theme="sepia"] .uploaded-file-card {
+    background: #fdf6e3;
+    border: 1px solid rgba(107, 79, 58, 0.2);
+    box-shadow: 0 10px 40px rgba(107, 79, 58, 0.1);
+}
+
+[data-theme="sepia"] .upload-title,
+[data-theme="sepia"] .uploaded-files-title,
+[data-theme="sepia"] .upload-text-main,
+[data-theme="sepia"] .file-name {
+    color: #311900;
+}
+
+[data-theme="sepia"] .upload-subtitle,
+[data-theme="sepia"] .upload-text-sub {
+    color: #7c6a58;
+}
+
+[data-theme="sepia"] .upload-label {
+    border-color: rgba(107, 79, 58, 0.25);
+}
+
+[data-theme="sepia"] .upload-label:hover {
+    border-color: #6b4f3a;
+    background: rgba(107, 79, 58, 0.05);
+}
+
+[data-theme="sepia"] .upload-icon,
+[data-theme="sepia"] .file-icon {
+    color: #6b4f3a;
+}
+
+[data-theme="sepia"] .upload-area.drag-active {
+    border-color: #6b4f3a;
+    background: rgba(107, 79, 58, 0.05);
+}
+
+[data-theme="sepia"] .floating-upload-btn {
+    background: #fdf6e3;
+    border: 2px solid #6b4f3a;
+    color: #6b4f3a;
+}
+
+[data-theme="sepia"] .floating-upload-btn:hover {
+    background: #6b4f3a;
+    color: #fdf6e3;
+}
+
+[data-theme="sepia"] .floating-upload-btn:hover svg,
+[data-theme="sepia"] .floating-upload-btn svg {
+    color: inherit;
+}
+
 /* File Merge Button Dark Mode */
 [data-theme="dark"] .merge-toggle-btn {
     background-color: #292524 !important;

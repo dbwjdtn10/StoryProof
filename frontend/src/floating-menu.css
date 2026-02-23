@@ -114,6 +114,16 @@
     border: none !important;
 }
 
+[data-theme="sepia"] .btn-blue {
+    background: #6b4f3a !important;
+    color: #fdf6e3 !important;
+}
+
+[data-theme="sepia"] .btn-purple {
+    background: #7c5c3a !important;
+    color: #fdf6e3 !important;
+}
+
 .menu-option svg {
     flex-shrink: 0;
 }
