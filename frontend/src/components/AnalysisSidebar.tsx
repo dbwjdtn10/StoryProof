@@ -605,11 +605,8 @@ export function AnalysisSidebar({ isOpen, onClose, result, isLoading, isCachedRe
                             style={{
                                 fontSize: '0.8rem', padding: '4px 12px', borderRadius: '6px',
                                 border: '1px solid var(--primary)',
-                                backgroundColor: (() => {
-                                    const t = document.documentElement.getAttribute('data-theme') || 'light';
-                                    return t === 'dark' ? '#000000' : 'var(--primary)';
-                                })(),
-                                color: 'white', cursor: 'pointer', fontWeight: '500'
+                                backgroundColor: 'var(--primary)',
+                                color: 'var(--primary-foreground)', cursor: 'pointer', fontWeight: '500'
                             }}
                         >
                             새로 분석하기
