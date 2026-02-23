@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, AlertTriangle, CheckCircle, Loader2, Navigation, RefreshCw, ChevronDown, Copy, BarChart3, Pen, BookOpen, ClipboardCopy } from 'lucide-react';
+import { X, AlertTriangle, CheckCircle, Loader2, Navigation, RefreshCw, ChevronDown, Copy, BarChart3, Pen, BookOpen } from 'lucide-react';
 import { toast } from 'sonner';
 
 /** A generic issue with description and optional suggestion */
@@ -550,14 +550,7 @@ export function AnalysisSidebar({ isOpen, onClose, result, isLoading, isCachedRe
                     <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: '600', color: 'inherit' }}>{typeConfig.label}</h2>
                 </div>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    {result && !isLoading && (
-                        <button onClick={() => {
-                            const text = JSON.stringify(result, null, 2);
-                            navigator.clipboard.writeText(text).then(() => toast.success('분석 결과가 복사되었습니다.'));
-                        }} title="결과 복사" aria-label="결과 복사" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: 'inherit', display: 'flex', alignItems: 'center' }}>
-                            <ClipboardCopy size={18} strokeWidth={2.5} />
-                        </button>
-                    )}
+
                     {onReanalyze && result && !isLoading && (
                         <button onClick={onReanalyze} title="재분석" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: 'inherit', display: 'flex', alignItems: 'center' }}>
                             <RefreshCw size={18} strokeWidth={2.5} />
