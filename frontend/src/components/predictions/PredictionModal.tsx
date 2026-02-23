@@ -84,7 +84,7 @@ export function PredictionModal({ isOpen, onClose, onSubmit }: PredictionModalPr
             justifyContent: 'center'
         }}>
             <div style={{
-                backgroundColor: 'white',
+                backgroundColor: 'var(--modal-bg)',
                 width: '600px',
                 maxWidth: '90%',
                 height: '80vh',
@@ -97,11 +97,11 @@ export function PredictionModal({ isOpen, onClose, onSubmit }: PredictionModalPr
                 {/* Header */}
                 <div style={{
                     padding: '16px 20px',
-                    borderBottom: '1px solid #eee',
+                    borderBottom: '1px solid var(--modal-border)',
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
-                    backgroundColor: '#fff'
+                    backgroundColor: 'var(--modal-header-bg)'
                 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <div style={{
@@ -115,13 +115,13 @@ export function PredictionModal({ isOpen, onClose, onSubmit }: PredictionModalPr
                             <Sparkles size={20} color="#7C3AED" />
                         </div>
                         <div>
-                            <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 'bold' }}>스토리 예측 챗봇</h2>
-                            <p style={{ margin: 0, fontSize: '0.8rem', color: '#6b7280' }}>가설을 세우고 이야기를 나누어보세요</p>
+                            <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 'bold', color: 'var(--modal-header-text)' }}>스토리 예측 챗봇</h2>
+                            <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--muted-foreground)' }}>가설을 세우고 이야기를 나누어보세요</p>
                         </div>
                     </div>
                     <button
                         onClick={onClose}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', padding: '4px' }}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted-foreground)', padding: '4px' }}
                     >
                         <X size={24} />
                     </button>
@@ -132,7 +132,7 @@ export function PredictionModal({ isOpen, onClose, onSubmit }: PredictionModalPr
                     flex: 1,
                     overflowY: 'auto',
                     padding: '20px',
-                    backgroundColor: '#f9fafb',
+                    backgroundColor: 'var(--modal-bg)',
                     display: 'flex',
                     flexDirection: 'column',
                     gap: '20px'
@@ -140,7 +140,7 @@ export function PredictionModal({ isOpen, onClose, onSubmit }: PredictionModalPr
                     {messages.length === 0 && (
                         <div style={{
                             textAlign: 'center',
-                            color: '#9ca3af',
+                            color: 'var(--muted-foreground)',
                             marginTop: '40px',
                             display: 'flex',
                             flexDirection: 'column',
@@ -162,11 +162,11 @@ export function PredictionModal({ isOpen, onClose, onSubmit }: PredictionModalPr
                                 <div style={{
                                     width: '32px', height: '32px',
                                     borderRadius: '50%',
-                                    backgroundColor: '#EDE9FE',
+                                    backgroundColor: 'var(--secondary)',
                                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                                     flexShrink: 0
                                 }}>
-                                    <Bot size={18} color="#7C3AED" />
+                                    <Bot size={18} style={{ color: 'var(--primary)' }} />
                                 </div>
                             )}
 
@@ -176,10 +176,10 @@ export function PredictionModal({ isOpen, onClose, onSubmit }: PredictionModalPr
                                 borderRadius: '12px',
                                 borderTopLeftRadius: msg.role === 'assistant' ? '0' : '12px',
                                 borderTopRightRadius: msg.role === 'user' ? '0' : '12px',
-                                backgroundColor: msg.role === 'user' ? '#7C3AED' : 'white',
-                                color: msg.role === 'user' ? 'white' : '#1f2937',
+                                backgroundColor: msg.role === 'user' ? 'var(--primary)' : 'var(--chat-assistant-bg)',
+                                color: msg.role === 'user' ? 'var(--primary-foreground)' : 'var(--chat-assistant-text)',
                                 boxShadow: msg.role === 'assistant' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
-                                border: msg.role === 'assistant' ? '1px solid #e5e7eb' : 'none',
+                                border: msg.role === 'assistant' ? '1px solid var(--input-border)' : 'none',
                                 lineHeight: '1.6',
                                 whiteSpace: 'pre-wrap'
                             }}>
@@ -190,11 +190,11 @@ export function PredictionModal({ isOpen, onClose, onSubmit }: PredictionModalPr
                                 <div style={{
                                     width: '32px', height: '32px',
                                     borderRadius: '50%',
-                                    backgroundColor: '#e5e7eb',
+                                    backgroundColor: 'var(--secondary)',
                                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                                     flexShrink: 0
                                 }}>
-                                    <User size={18} color="#6b7280" />
+                                    <User size={18} style={{ color: 'var(--muted-foreground)' }} />
                                 </div>
                             )}
                         </div>
@@ -205,19 +205,19 @@ export function PredictionModal({ isOpen, onClose, onSubmit }: PredictionModalPr
                             <div style={{
                                 width: '32px', height: '32px',
                                 borderRadius: '50%',
-                                backgroundColor: '#EDE9FE',
+                                backgroundColor: 'var(--secondary)',
                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                                 flexShrink: 0
                             }}>
-                                <Loader className="animate-spin" size={18} color="#7C3AED" />
+                                <Loader className="animate-spin" size={18} style={{ color: 'var(--primary)' }} />
                             </div>
                             <div style={{
                                 padding: '12px 16px',
                                 borderRadius: '12px',
                                 borderTopLeftRadius: '0',
-                                backgroundColor: 'white',
-                                border: '1px solid #e5e7eb',
-                                color: '#6b7280'
+                                backgroundColor: 'var(--chat-assistant-bg)',
+                                border: '1px solid var(--input-border)',
+                                color: 'var(--muted-foreground)'
                             }}>
                                 이야기를 생성하고 있습니다...
                             </div>
@@ -229,17 +229,17 @@ export function PredictionModal({ isOpen, onClose, onSubmit }: PredictionModalPr
                 {/* Input Area */}
                 <div style={{
                     padding: '16px',
-                    backgroundColor: 'white',
-                    borderTop: '1px solid #eee'
+                    backgroundColor: 'var(--modal-bg)',
+                    borderTop: '1px solid var(--modal-border)'
                 }}>
                     <div style={{
                         display: 'flex',
                         gap: '10px',
                         alignItems: 'flex-end',
-                        backgroundColor: '#f3f4f6',
+                        backgroundColor: 'var(--chat-input-bg)',
                         padding: '8px',
                         borderRadius: '12px',
-                        border: '1px solid #e5e7eb'
+                        border: '1px solid var(--input-border)'
                     }}>
                         <textarea
                             value={inputValue}
@@ -257,7 +257,8 @@ export function PredictionModal({ isOpen, onClose, onSubmit }: PredictionModalPr
                                 fontSize: '0.95rem',
                                 outline: 'none',
                                 fontFamily: 'inherit',
-                                overflowY: 'hidden' // Simple auto-grow handling typically needs logic, kept simple for now
+                                color: 'var(--input-text)',
+                                overflowY: 'hidden'
                             }}
                             rows={1}
                         />
@@ -265,8 +266,8 @@ export function PredictionModal({ isOpen, onClose, onSubmit }: PredictionModalPr
                             onClick={handleSubmit}
                             disabled={!inputValue.trim() || isLoading}
                             style={{
-                                backgroundColor: inputValue.trim() && !isLoading ? '#7C3AED' : '#d1d5db',
-                                color: 'white',
+                                backgroundColor: inputValue.trim() && !isLoading ? 'var(--primary)' : 'var(--muted)',
+                                color: inputValue.trim() && !isLoading ? 'var(--primary-foreground)' : 'var(--muted-foreground)',
                                 border: 'none',
                                 borderRadius: '8px',
                                 padding: '8px',

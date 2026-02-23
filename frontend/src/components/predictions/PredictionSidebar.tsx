@@ -1,8 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, Loader, Sparkles, Send, Bot, User, Trash2 } from 'lucide-react';
 
-function getTheme() { return document.documentElement.getAttribute('data-theme') || 'light'; }
-
 export interface Message {
     id: string;
     role: 'user' | 'assistant';
@@ -186,7 +184,7 @@ export function PredictionSidebar({ isOpen, onClose, messages, onSendMessage, is
                             borderRadius: '12px',
                             borderTopLeftRadius: msg.role === 'assistant' ? '2px' : '12px',
                             borderTopRightRadius: msg.role === 'user' ? '2px' : '12px',
-                            backgroundColor: msg.role === 'user' ? 'var(--primary)' : (() => { const t = getTheme(); if (t === 'sepia') return '#f0e4d7'; if (t === 'light') return '#f5f5f4'; return 'var(--input-bg)'; })(),
+                            backgroundColor: msg.role === 'user' ? 'var(--primary)' : 'var(--chat-assistant-bg)',
                             color: msg.role === 'user' ? 'var(--primary-foreground)' : 'var(--input-text)',
                             boxShadow: msg.role === 'assistant' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
                             border: msg.role === 'assistant' ? '1px solid var(--input-border)' : 'none',
@@ -227,7 +225,7 @@ export function PredictionSidebar({ isOpen, onClose, messages, onSendMessage, is
                             padding: '12px 16px',
                             borderRadius: '12px',
                             borderTopLeftRadius: '2px',
-                            backgroundColor: (() => { const t = getTheme(); if (t === 'sepia') return '#f0e4d7'; if (t === 'light') return '#f5f5f4'; return 'var(--input-bg)'; })(),
+                            backgroundColor: 'var(--chat-assistant-bg)',
                             border: '1px solid var(--input-border)',
                             color: 'var(--muted-foreground)',
                             boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
@@ -242,7 +240,7 @@ export function PredictionSidebar({ isOpen, onClose, messages, onSendMessage, is
             {/* Input Area */}
             <div style={{
                 padding: '16px',
-                backgroundColor: (() => { const t = getTheme(); if (t === 'dark') return '#333333'; if (t === 'sepia') return '#fdf6e3'; return 'var(--input-bg)'; })(),
+                backgroundColor: 'var(--modal-bg)',
                 borderTop: '1px solid var(--modal-border)',
                 borderRadius: '0 0 16px 16px'
             }}>
@@ -250,7 +248,7 @@ export function PredictionSidebar({ isOpen, onClose, messages, onSendMessage, is
                     display: 'flex',
                     gap: '10px',
                     alignItems: 'flex-end',
-                    backgroundColor: (() => { const t = getTheme(); if (t === 'sepia') return '#ffffff'; return 'var(--input-bg)'; })(),
+                    backgroundColor: 'var(--chat-input-bg)',
                     padding: '8px',
                     borderRadius: '12px',
                     border: '1px solid var(--input-border)'
