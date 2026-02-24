@@ -52,6 +52,13 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
 
     const [chapterStatus, setChapterStatus] = useState<'pending' | 'processing' | 'completed' | 'failed' | undefined>(undefined);
 
+    // 제안 적용 모달
+    const [suggestionModal, setSuggestionModal] = useState<{
+        original: string;
+        suggestion: string;
+        replacementText: string;
+    } | null>(null);
+
     // Bible search & export
     const [bibleSearchInput, setBibleSearchInput] = useState('');
     const [bibleSearchQuery, setBibleSearchQuery] = useState('');
@@ -397,21 +404,51 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
     };
 
     const handleApplySuggestion = (original: string, suggestion: string) => {
+        // "▶ " 접두사 제거 후 실제 텍스트만 추출
+        const cleanOriginal = original.replace(/^▶\s*/, '').trim();
+        setSuggestionModal({
+            original: cleanOriginal,
+            suggestion,
+            replacementText: cleanOriginal,
+        });
+    };
+
+    const handleConfirmSuggestion = () => {
+        if (!suggestionModal) return;
+        const { original, replacementText } = suggestionModal;
+        if (!original.trim()) {
+            toast.error("원문이 비어 있습니다.");
+            return;
+        }
+
+        let found = false;
         if (sceneTexts.length > 0) {
-            const newSceneTexts = sceneTexts.map(scene => scene.replace(original, suggestion));
-            setSceneTexts(newSceneTexts);
-            setHasUnsavedChanges(true);
-            toast.success("제안이 적용되었습니다.");
+            const newSceneTexts = sceneTexts.map(scene => {
+                if (scene.includes(original)) {
+                    found = true;
+                    return scene.replace(original, replacementText);
+                }
+                return scene;
+            });
+            if (found) {
+                setSceneTexts(newSceneTexts);
+                setHasUnsavedChanges(true);
+                toast.success("제안이 적용되었습니다.");
+            }
         } else {
-            const newContent = content.replace(original, suggestion);
+            const newContent = content.replace(original, replacementText);
             if (newContent !== content) {
+                found = true;
                 setContent(newContent);
                 setHasUnsavedChanges(true);
                 toast.success("제안이 적용되었습니다.");
-            } else {
-                toast.error("해당 문장을 본문에서 찾을 수 없습니다.");
             }
         }
+
+        if (!found) {
+            toast.error("해당 문장을 본문에서 찾을 수 없습니다. 원문을 직접 수정해주세요.");
+        }
+        setSuggestionModal(null);
     };
 
     const handleNavigateToQuote = (quote: string) => {
@@ -2181,6 +2218,79 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                 chapterId={chapterId}
                 mode={mode}
             />
+
+            {/* 제안 적용 모달 */}
+            {suggestionModal && (
+                <div className="modal-overlay" onClick={() => setSuggestionModal(null)} style={{ zIndex: 3000 }}>
+                    <div className="modal-content" onClick={e => e.stopPropagation()} style={{
+                        backgroundColor: 'var(--modal-bg)',
+                        border: '1px solid var(--modal-border)',
+                        color: 'var(--modal-text)',
+                        width: '560px',
+                        maxWidth: '92vw',
+                        padding: '28px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '18px',
+                        maxHeight: '85vh',
+                        overflowY: 'auto',
+                    }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: '700', color: 'var(--modal-text)' }}>제안 적용</h3>
+                            <button onClick={() => setSuggestionModal(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted-foreground)', fontSize: '1.2rem', lineHeight: 1 }}>✕</button>
+                        </div>
+
+                        {/* AI 제안 내용 */}
+                        <div style={{ padding: '14px', borderRadius: '8px', backgroundColor: 'rgba(5, 150, 105, 0.07)', border: '1px solid rgba(5, 150, 105, 0.2)' }}>
+                            <p style={{ margin: '0 0 6px', fontSize: '0.78rem', fontWeight: '600', color: '#059669', textTransform: 'uppercase', letterSpacing: '0.05em' }}>AI 제안</p>
+                            <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--modal-text)', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>{suggestionModal.suggestion}</p>
+                        </div>
+
+                        {/* 원문 */}
+                        <div>
+                            <p style={{ margin: '0 0 6px', fontSize: '0.8rem', fontWeight: '600', color: 'var(--muted-foreground)' }}>원문 (검색 대상)</p>
+                            <div style={{ padding: '10px 14px', borderRadius: '6px', backgroundColor: 'rgba(220, 38, 38, 0.05)', border: '1px solid rgba(220, 38, 38, 0.2)', fontSize: '0.85rem', lineHeight: '1.6', color: 'var(--modal-text)', fontStyle: 'italic' }}>
+                                {suggestionModal.original}
+                            </div>
+                        </div>
+
+                        {/* 수정 내용 입력 */}
+                        <div>
+                            <p style={{ margin: '0 0 6px', fontSize: '0.8rem', fontWeight: '600', color: 'var(--modal-text)' }}>수정 내용 <span style={{ fontWeight: 400, color: 'var(--muted-foreground)' }}>(AI 제안을 참고하여 직접 입력)</span></p>
+                            <textarea
+                                value={suggestionModal.replacementText}
+                                onChange={e => setSuggestionModal(prev => prev ? { ...prev, replacementText: e.target.value } : null)}
+                                rows={4}
+                                style={{
+                                    width: '100%',
+                                    padding: '10px 14px',
+                                    borderRadius: '6px',
+                                    border: '1px solid var(--modal-border)',
+                                    backgroundColor: 'var(--modal-bg)',
+                                    color: 'var(--modal-text)',
+                                    fontSize: '0.85rem',
+                                    lineHeight: '1.6',
+                                    resize: 'vertical',
+                                    fontFamily: 'inherit',
+                                    boxSizing: 'border-box',
+                                    outline: 'none',
+                                }}
+                            />
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '4px' }}>
+                            <button onClick={() => setSuggestionModal(null)} style={{
+                                padding: '8px 20px', borderRadius: '8px', border: '1px solid var(--modal-border)',
+                                backgroundColor: 'transparent', color: 'var(--modal-text)', cursor: 'pointer', fontSize: '0.9rem',
+                            }}>취소</button>
+                            <button onClick={handleConfirmSuggestion} style={{
+                                padding: '8px 20px', borderRadius: '8px', border: 'none',
+                                backgroundColor: '#059669', color: '#fff', cursor: 'pointer', fontSize: '0.9rem', fontWeight: '600',
+                            }}>적용</button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* 인물 관계도 모달 */}
             <RelationshipGraphModal
