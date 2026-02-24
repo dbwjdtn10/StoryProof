@@ -60,3 +60,7 @@ storyproof-key.pem
 
 # Runtime generated images
 backend/static/images/novel_*
+
+# Local dev artifacts
+benchmark/
+docs/
