@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { X, Network, Check, Users, AlertCircle } from 'lucide-react';
+import { X, Network, Check, Users, AlertCircle, Focus } from 'lucide-react';
 
 interface Relationship {
     source?: string;
@@ -62,9 +62,12 @@ export function RelationshipGraphModal({ isOpen, onClose, relationships, charact
     const nodesRef = useRef<NodeData[]>([]);
     const animFrameRef = useRef<number>(0);
 
-    // 드래그 상태
-    const dragRef = useRef<{ name: string; offsetX: number; offsetY: number } | null>(null);
+    // 드래그 상태 (hasMoved: 클릭 vs 드래그 구분)
+    const dragRef = useRef<{ name: string; offsetX: number; offsetY: number; startX: number; startY: number; hasMoved: boolean } | null>(null);
     const [isDragging, setIsDragging] = useState(false);
+
+    // 포커스 모드: 선택된 인물 + 연결 인물만 표시
+    const [focusedChar, setFocusedChar] = useState<string | null>(null);
 
     // 전체 인물 목록 (관계에 등장하는 인물)
     const allNames = useMemo(() => {
@@ -122,6 +125,11 @@ export function RelationshipGraphModal({ isOpen, onClose, relationships, charact
         }
     }, [isOpen, allNames]);
 
+    // 모달 닫힐 때 포커스 초기화
+    useEffect(() => {
+        if (!isOpen) setFocusedChar(null);
+    }, [isOpen]);
+
     // 선택된 인물 기반 필터링된 관계
     const filteredRels = useMemo(() => {
         if (selected.size === 0) return [];
@@ -131,7 +139,24 @@ export function RelationshipGraphModal({ isOpen, onClose, relationships, charact
     // 선택된 인물 기반 필터링된 이름
     const filteredNames = useMemo(() => Array.from(selected), [selected]);
 
+    // 포커스: 해당 인물과 직접 연결된 모든 인물 자동 선택
+    const handleNodeFocus = useCallback((name: string) => {
+        const connected = new Set<string>([name]);
+        for (const r of relationships) {
+            const s = getSrc(r), t = getTgt(r);
+            if (s === name && t) connected.add(t);
+            if (t === name && s) connected.add(s);
+        }
+        setSelected(connected);
+        setFocusedChar(name);
+    }, [relationships]);
+
+    const clearFocus = useCallback(() => {
+        setFocusedChar(null);
+    }, []);
+
     const toggleChar = (name: string) => {
+        setFocusedChar(null);
         setSelected(prev => {
             const next = new Set(prev);
             if (next.has(name)) next.delete(name);
@@ -140,8 +165,8 @@ export function RelationshipGraphModal({ isOpen, onClose, relationships, charact
         });
     };
 
-    const selectAll = () => setSelected(new Set(allNames));
-    const selectNone = () => setSelected(new Set());
+    const selectAll = () => { setFocusedChar(null); setSelected(new Set(allNames)); };
+    const selectNone = () => { setFocusedChar(null); setSelected(new Set()); };
 
     // 노드 반경 계산 (appearance_count 기반)
     const getNodeRadius = useCallback((name: string, baseR: number): number => {
@@ -182,18 +207,43 @@ export function RelationshipGraphModal({ isOpen, onClose, relationships, charact
         const radius = Math.min(w, h) * 0.32;
         const baseR = Math.max(30, Math.min(45, w / (count * 2.2)));
 
-        nodesRef.current = filteredNames.map((name, i) => {
-            const angle = (2 * Math.PI * i) / count - Math.PI / 2;
-            return {
-                name,
-                x: count === 1 ? cx : cx + radius * Math.cos(angle),
-                y: count === 1 ? cy : cy + radius * Math.sin(angle),
-                color: colorMap.get(name) || '#4F46E5',
-                initials: name.slice(0, 2),
-                radius: getNodeRadius(name, baseR),
-            };
-        });
-    }, [isOpen, filteredNames, canvasSize, colorMap, getNodeRadius]);
+        // 포커스 모드: 중심에 포커스 인물, 주변에 연결 인물
+        if (focusedChar && filteredNames.includes(focusedChar) && count > 1) {
+            const others = filteredNames.filter(n => n !== focusedChar);
+            nodesRef.current = [
+                {
+                    name: focusedChar,
+                    x: cx, y: cy,
+                    color: colorMap.get(focusedChar) || '#4F46E5',
+                    initials: focusedChar.slice(0, 2),
+                    radius: getNodeRadius(focusedChar, baseR * 1.15),
+                },
+                ...others.map((name, i) => {
+                    const angle = (2 * Math.PI * i) / others.length - Math.PI / 2;
+                    return {
+                        name,
+                        x: cx + radius * Math.cos(angle),
+                        y: cy + radius * Math.sin(angle),
+                        color: colorMap.get(name) || '#4F46E5',
+                        initials: name.slice(0, 2),
+                        radius: getNodeRadius(name, baseR),
+                    };
+                }),
+            ];
+        } else {
+            nodesRef.current = filteredNames.map((name, i) => {
+                const angle = (2 * Math.PI * i) / count - Math.PI / 2;
+                return {
+                    name,
+                    x: count === 1 ? cx : cx + radius * Math.cos(angle),
+                    y: count === 1 ? cy : cy + radius * Math.sin(angle),
+                    color: colorMap.get(name) || '#4F46E5',
+                    initials: name.slice(0, 2),
+                    radius: getNodeRadius(name, baseR),
+                };
+            });
+        }
+    }, [isOpen, filteredNames, canvasSize, colorMap, getNodeRadius, focusedChar]);
 
     const getNode = useCallback((name: string) => nodesRef.current.find(n => n.name === name), []);
 
@@ -256,6 +306,7 @@ export function RelationshipGraphModal({ isOpen, onClose, relationships, charact
             if (!src || !tgt) continue;
 
             const isHL = hoveredNode === src.name || hoveredNode === tgt.name;
+            const isFocusEdge = focusedChar !== null && (src.name === focusedChar || tgt.name === focusedChar);
             const edgeWidth = getEdgeWidth(rel, isHL);
 
             // 다중 관계 오프셋 계산
@@ -284,17 +335,15 @@ export function RelationshipGraphModal({ isOpen, onClose, relationships, charact
             } else {
                 ctx.lineTo(tgt.x, tgt.y);
             }
-            ctx.strokeStyle = isHL ? src.color : theme.mutedForeground;
-            ctx.lineWidth = edgeWidth;
+            ctx.strokeStyle = isHL ? src.color : isFocusEdge ? `${src.color}aa` : theme.mutedForeground;
+            ctx.lineWidth = isFocusEdge && !isHL ? edgeWidth + 0.5 : edgeWidth;
             ctx.setLineDash([]);
             ctx.stroke();
 
             // 화살표 (타겟 노드 가장자리)
-            // 곡선 엣지의 경우 타겟 근처 접선 방향 계산
             const arrowAngle = curveOffset !== 0
                 ? Math.atan2(tgt.y - cpy, tgt.x - cpx)
                 : angle;
-            // 타겟 노드 원 가장자리에서 화살표 끝점 계산
             const arrowTipX = tgt.x - tgt.radius * Math.cos(arrowAngle);
             const arrowTipY = tgt.y - tgt.radius * Math.sin(arrowAngle);
             const arrowLen = 12;
@@ -304,7 +353,7 @@ export function RelationshipGraphModal({ isOpen, onClose, relationships, charact
             ctx.lineTo(arrowTipX - arrowLen * Math.cos(arrowAngle - arrowWidth), arrowTipY - arrowLen * Math.sin(arrowAngle - arrowWidth));
             ctx.lineTo(arrowTipX - arrowLen * Math.cos(arrowAngle + arrowWidth), arrowTipY - arrowLen * Math.sin(arrowAngle + arrowWidth));
             ctx.closePath();
-            ctx.fillStyle = isHL ? src.color : theme.mutedForeground;
+            ctx.fillStyle = isHL ? src.color : isFocusEdge ? `${src.color}aa` : theme.mutedForeground;
             ctx.fill();
 
             // 관계 라벨
@@ -332,16 +381,29 @@ export function RelationshipGraphModal({ isOpen, onClose, relationships, charact
         // 노드
         for (const node of nodesRef.current) {
             const isHL = hoveredNode === node.name;
+            const isFocused = node.name === focusedChar;
             const r = isHL ? node.radius + 5 : node.radius;
 
+            // 포커스 노드 외곽 점선 링
+            if (isFocused) {
+                ctx.shadowColor = 'transparent';
+                ctx.beginPath();
+                ctx.arc(node.x, node.y, r + 12, 0, Math.PI * 2);
+                ctx.strokeStyle = `${node.color}88`;
+                ctx.lineWidth = 2;
+                ctx.setLineDash([6, 4]);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+
             // 그림자
-            ctx.shadowColor = isHL ? `${node.color}55` : 'rgba(0,0,0,0.1)';
-            ctx.shadowBlur = isHL ? 20 : 8;
+            ctx.shadowColor = isFocused ? `${node.color}66` : isHL ? `${node.color}55` : 'rgba(0,0,0,0.1)';
+            ctx.shadowBlur = isFocused ? 24 : isHL ? 20 : 8;
             ctx.shadowOffsetX = 0;
             ctx.shadowOffsetY = 3;
 
             // 외곽 글로우
-            if (isHL) {
+            if (isHL || isFocused) {
                 ctx.beginPath();
                 ctx.arc(node.x, node.y, r + 5, 0, Math.PI * 2);
                 ctx.fillStyle = `${node.color}20`;
@@ -356,8 +418,8 @@ export function RelationshipGraphModal({ isOpen, onClose, relationships, charact
             ctx.shadowColor = 'transparent';
 
             // 테두리
-            ctx.strokeStyle = theme.modalBg;
-            ctx.lineWidth = 3;
+            ctx.strokeStyle = isFocused ? '#fff' : theme.modalBg;
+            ctx.lineWidth = isFocused ? 4 : 3;
             ctx.stroke();
 
             // 이니셜
@@ -368,12 +430,21 @@ export function RelationshipGraphModal({ isOpen, onClose, relationships, charact
             ctx.fillText(node.initials, node.x, node.y);
 
             // 이름
-            ctx.font = `${isHL ? 'bold ' : ''}13px Pretendard, "Noto Sans KR", sans-serif`;
-            ctx.fillStyle = theme.foreground;
+            ctx.font = `${isHL || isFocused ? 'bold ' : ''}13px Pretendard, "Noto Sans KR", sans-serif`;
+            ctx.fillStyle = isFocused ? node.color : theme.foreground;
             ctx.textBaseline = 'top';
             ctx.fillText(node.name, node.x, node.y + r + 10);
         }
-    }, [filteredRels, filteredNames, hoveredNode, canvasSize, getNode, getEdgeWidth, edgeIndexMap]);
+
+        // 포커스 모드 힌트 (오른쪽 하단)
+        if (!focusedChar && filteredNames.length > 0) {
+            ctx.font = '11px Pretendard, "Noto Sans KR", sans-serif';
+            ctx.fillStyle = `${theme.mutedForeground}88`;
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'bottom';
+            ctx.fillText('노드 클릭 → 해당 인물 포커스', w - 12, h - 10);
+        }
+    }, [filteredRels, filteredNames, hoveredNode, canvasSize, getNode, getEdgeWidth, edgeIndexMap, focusedChar]);
 
     useEffect(() => {
         if (!isOpen) return;
@@ -403,7 +474,7 @@ export function RelationshipGraphModal({ isOpen, onClose, relationships, charact
         const { mx, my } = getCanvasXY(e);
         const node = hitTest(mx, my);
         if (node) {
-            dragRef.current = { name: node.name, offsetX: mx - node.x, offsetY: my - node.y };
+            dragRef.current = { name: node.name, offsetX: mx - node.x, offsetY: my - node.y, startX: mx, startY: my, hasMoved: false };
             setIsDragging(true);
         }
     }, [getCanvasXY, hitTest]);
@@ -413,6 +484,11 @@ export function RelationshipGraphModal({ isOpen, onClose, relationships, charact
         const { mx, my } = getCanvasXY(e);
 
         if (dragRef.current) {
+            const dx = mx - dragRef.current.startX;
+            const dy = my - dragRef.current.startY;
+            if (Math.sqrt(dx * dx + dy * dy) > 4) {
+                dragRef.current.hasMoved = true;
+            }
             const node = nodesRef.current.find(n => n.name === dragRef.current!.name);
             if (node) {
                 node.x = mx - dragRef.current.offsetX;
@@ -427,11 +503,23 @@ export function RelationshipGraphModal({ isOpen, onClose, relationships, charact
         setHoveredNode(found?.name || null);
     }, [getCanvasXY, hitTest, draw]);
 
-    // mouseup: 드래그 종료
-    const handleMouseUp = useCallback(() => {
+    // mouseup: 드래그 종료 or 클릭 → 포커스
+    const handleMouseUp = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+        if (dragRef.current && !dragRef.current.hasMoved) {
+            const { mx, my } = getCanvasXY(e);
+            const node = hitTest(mx, my);
+            if (node) {
+                if (focusedChar === node.name) {
+                    // 같은 노드 재클릭 → 포커스 해제
+                    clearFocus();
+                } else {
+                    handleNodeFocus(node.name);
+                }
+            }
+        }
         dragRef.current = null;
         setIsDragging(false);
-    }, []);
+    }, [getCanvasXY, hitTest, handleNodeFocus, clearFocus, focusedChar]);
 
     // mouseleave: 드래그 & 호버 종료
     const handleMouseLeave = useCallback(() => {
@@ -453,6 +541,11 @@ export function RelationshipGraphModal({ isOpen, onClose, relationships, charact
     // 빈 데이터 상태
     const hasNoData = allNames.length === 0;
     const hasNoRelationships = allNames.length > 0 && relationships.length === 0;
+
+    const theme = document.documentElement.getAttribute('data-theme') || 'light';
+    const panelBg = theme === 'dark' ? '#0a0a0a' : theme === 'sepia' ? '#fdf6e3' : '#ffffff';
+    const btnColor = theme === 'dark' ? '#ffffff' : theme === 'sepia' ? '#ede1e1' : '#000000';
+    const btnBg = theme === 'dark' ? '#333333' : theme === 'sepia' ? '#6b4f3a' : '#e7e5e4';
 
     return (
         <div style={{
@@ -479,6 +572,25 @@ export function RelationshipGraphModal({ isOpen, onClose, relationships, charact
                         <span style={{ fontSize: '0.78rem', opacity: 0.6 }}>
                             {selected.size}/{allNames.length}명 선택 · {filteredRels.length}개 관계
                         </span>
+                        {focusedChar && (
+                            <div style={{
+                                display: 'flex', alignItems: 'center', gap: '5px',
+                                padding: '3px 10px', borderRadius: '20px',
+                                background: `${colorMap.get(focusedChar) || '#4F46E5'}18`,
+                                border: `1px solid ${colorMap.get(focusedChar) || '#4F46E5'}40`,
+                            }}>
+                                <Focus size={12} color={colorMap.get(focusedChar) || '#4F46E5'} />
+                                <span style={{
+                                    fontSize: '0.75rem', fontWeight: 700,
+                                    color: colorMap.get(focusedChar) || '#4F46E5'
+                                }}>{focusedChar}</span>
+                                <button onClick={clearFocus} style={{
+                                    background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+                                    display: 'flex', color: colorMap.get(focusedChar) || '#4F46E5',
+                                    opacity: 0.7,
+                                }}><X size={12} /></button>
+                            </div>
+                        )}
                     </div>
                     <button onClick={onClose} style={{
                         background: 'none', border: 'none', cursor: 'pointer',
@@ -526,10 +638,7 @@ export function RelationshipGraphModal({ isOpen, onClose, relationships, charact
                         <div style={{
                             width: '220px', borderRight: '1px solid var(--border)',
                             display: 'flex', flexDirection: 'column',
-                            background: (() => {
-                                const t = document.documentElement.getAttribute('data-theme') || 'light';
-                                return t === 'dark' ? '#0a0a0a' : t === 'sepia' ? '#fdf6e3' : '#ffffff';
-                            })()
+                            background: panelBg
                         }}>
                             <div style={{
                                 padding: '10px 14px', borderBottom: '1px solid var(--border)',
@@ -538,21 +647,18 @@ export function RelationshipGraphModal({ isOpen, onClose, relationships, charact
                                 <button onClick={selectAll} style={{
                                     flex: 1, padding: '5px', fontSize: '0.75rem', fontWeight: 600,
                                     border: '1px solid var(--border)', borderRadius: '6px',
-                                    cursor: 'pointer',
-                                    color: (() => { const t = document.documentElement.getAttribute('data-theme') || 'light'; return t === 'dark' ? '#ffffff' : t === 'sepia' ? '#ede1e1' : '#000000'; })(),
-                                    background: (() => { const t = document.documentElement.getAttribute('data-theme') || 'light'; return t === 'dark' ? '#333333' : t === 'sepia' ? '#6b4f3a' : '#e7e5e4'; })()
+                                    cursor: 'pointer', color: btnColor, background: btnBg
                                 }}>전체 선택</button>
                                 <button onClick={selectNone} style={{
                                     flex: 1, padding: '5px', fontSize: '0.75rem', fontWeight: 600,
                                     border: '1px solid var(--border)', borderRadius: '6px',
-                                    cursor: 'pointer',
-                                    color: (() => { const t = document.documentElement.getAttribute('data-theme') || 'light'; return t === 'dark' ? '#ffffff' : t === 'sepia' ? '#ede1e1' : '#000000'; })(),
-                                    background: (() => { const t = document.documentElement.getAttribute('data-theme') || 'light'; return t === 'dark' ? '#333333' : t === 'sepia' ? '#6b4f3a' : '#e7e5e4'; })()
+                                    cursor: 'pointer', color: btnColor, background: btnBg
                                 }}>선택 해제</button>
                             </div>
                             <div style={{ flex: 1, overflowY: 'auto', padding: '6px' }}>
                                 {allNames.map(name => {
                                     const isOn = selected.has(name);
+                                    const isFocused = focusedChar === name;
                                     const color = colorMap.get(name) || '#4F46E5';
                                     const info = charMap.get(name);
                                     const relCount = relCountMap.get(name) || 0;
@@ -564,8 +670,9 @@ export function RelationshipGraphModal({ isOpen, onClose, relationships, charact
                                             style={{
                                                 width: '100%', display: 'flex', alignItems: 'center', gap: '10px',
                                                 padding: '8px 10px', marginBottom: '2px', borderRadius: '8px',
-                                                border: 'none', cursor: 'pointer', textAlign: 'left',
-                                                background: isOn ? `${color}12` : 'transparent',
+                                                border: isFocused ? `1.5px solid ${color}60` : 'none',
+                                                cursor: 'pointer', textAlign: 'left',
+                                                background: isFocused ? `${color}18` : isOn ? `${color}12` : 'transparent',
                                                 transition: 'background 0.15s'
                                             }}
                                         >
@@ -577,7 +684,12 @@ export function RelationshipGraphModal({ isOpen, onClose, relationships, charact
                                                 color: '#fff', fontSize: '0.7rem', fontWeight: 700,
                                                 transition: 'background 0.15s'
                                             }}>
-                                                {isOn ? <Check size={14} strokeWidth={3} /> : name.slice(0, 1)}
+                                                {isFocused
+                                                    ? <Focus size={13} strokeWidth={2.5} />
+                                                    : isOn
+                                                        ? <Check size={14} strokeWidth={3} />
+                                                        : name.slice(0, 1)
+                                                }
                                             </div>
                                             <div style={{ flex: 1, minWidth: 0 }}>
                                                 <div style={{
@@ -589,7 +701,7 @@ export function RelationshipGraphModal({ isOpen, onClose, relationships, charact
                                                     fontSize: '0.7rem', color: 'var(--muted-foreground)',
                                                     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
                                                 }}>
-                                                    {relCount}개 관계{appCount ? ` · ${appCount}회 등장` : ''}{info?.traits?.[0] ? ` · ${info.traits[0]}` : ''}
+                                                    {isFocused ? `포커스 중 · ` : ''}{relCount}개 관계{appCount ? ` · ${appCount}회 등장` : ''}{info?.traits?.[0] ? ` · ${info.traits[0]}` : ''}
                                                 </div>
                                             </div>
                                         </button>
@@ -629,6 +741,10 @@ export function RelationshipGraphModal({ isOpen, onClose, relationships, charact
                                             <div style={{ fontSize: '0.72rem', color: 'var(--muted-foreground)', marginTop: '1px' }}>
                                                 {hoveredRelCount}개 관계
                                                 {hoveredInfo?.appearance_count ? ` · ${hoveredInfo.appearance_count}회 등장` : ''}
+                                                {focusedChar !== hoveredNode
+                                                    ? <span style={{ marginLeft: '6px', opacity: 0.7 }}>· 클릭해서 포커스</span>
+                                                    : <span style={{ marginLeft: '6px', opacity: 0.7 }}>· 클릭해서 포커스 해제</span>
+                                                }
                                             </div>
                                         </div>
                                     </div>
