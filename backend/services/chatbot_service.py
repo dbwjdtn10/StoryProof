@@ -45,6 +45,19 @@ class ChatbotService:
     DEFAULT_ALPHA = settings.SEARCH_DEFAULT_ALPHA
     DEFAULT_SIMILARITY_THRESHOLD = settings.SEARCH_DEFAULT_SIMILARITY_THRESHOLD
 
+    # 광역 질문 감지 키워드 (결말·요약·전반 관련)
+    _GLOBAL_QUESTION_KEYWORDS = [
+        '결말', '엔딩', '어떻게 끝', '어떻게 됩니까', '어떻게 됐', '어떻게 되었',
+        '어떻게 되나', '어떻게 되는', '전체 줄거리', '전반적인 줄거리',
+        '줄거리가', '줄거리는', '줄거리 알려', '줄거리 설명',
+        '주제가 뭐', '주제는 뭐', '테마가 뭐', '테마는 뭐',
+        '전체 내용', '전체적인 내용', '전반적', '내용 요약', '스토리 요약',
+        '요약해줘', '요약해주세요', '요약 설명', '뒷이야기', '이후 이야기',
+        '나중에 어떻', '최종적으로', '결국 어떻', '이야기가 어떻게',
+        '전체 스토리', '스토리 전개', '이야기 결말', '소설 결말',
+        '어떤 내용이야', '어떤 이야기야', '무슨 내용이야', '무슨 이야기야',
+    ]
+
     def __init__(self):
         """
         챗봇 서비스 초기화
@@ -264,29 +277,33 @@ class ChatbotService:
         'max_output_tokens': 2500,
     }
 
-    def generate_answer(self, question: str, context: str, bible: str = "") -> str:
-        """Google Gemini로 RAG 답변 생성. Method C: bible 주입."""
+    def generate_answer(self, question: str, context: str, bible: str = "", prompt_override: str = None) -> str:
+        """Google Gemini로 RAG 답변 생성. Method C: bible 주입.
+        prompt_override가 있으면 해당 프롬프트를 직접 사용 (광역 질문 전용)."""
         if not self.client:
             return "LLM이 설정되지 않았습니다. GOOGLE_API_KEY를 확인해주세요."
         try:
+            prompt = prompt_override if prompt_override is not None else self._build_rag_prompt(question, context, bible)
             response = self.client.models.generate_content(
                 model=settings.GEMINI_CHAT_MODEL,
-                contents=self._build_rag_prompt(question, context, bible),
+                contents=prompt,
                 config=self._LLM_CONFIG,
             )
             return response.text
         except Exception as e:
             return f"답변 생성 중 오류가 발생했습니다: {str(e)}"
 
-    def stream_answer(self, question: str, context: str, bible: str = ""):
-        """Gemini 스트리밍으로 답변을 텍스트 청크 단위로 yield (동기 제너레이터)."""
+    def stream_answer(self, question: str, context: str, bible: str = "", prompt_override: str = None):
+        """Gemini 스트리밍으로 답변을 텍스트 청크 단위로 yield (동기 제너레이터).
+        prompt_override가 있으면 해당 프롬프트를 직접 사용 (광역 질문 전용)."""
         if not self.client:
             yield "LLM이 설정되지 않았습니다."
             return
         try:
+            prompt = prompt_override if prompt_override is not None else self._build_rag_prompt(question, context, bible)
             for chunk in self.client.models.generate_content_stream(
                 model=settings.GEMINI_CHAT_MODEL,
-                contents=self._build_rag_prompt(question, context, bible),
+                contents=prompt,
                 config=self._LLM_CONFIG,
             ):
                 if chunk.text:
@@ -305,14 +322,16 @@ class ChatbotService:
         db=None
     ) -> Dict:
         """검색 + 컨텍스트 준비. 스트리밍 엔드포인트에서 분리 사용."""
+        is_global = self._is_global_question(question)
+
         top_chunks = self.hybrid_search(
             question=question, alpha=alpha, similarity_threshold=similarity_threshold,
             novel_id=novel_id, chapter_id=chapter_id, novel_filter=novel_filter
         )
-        # Iterative Retrieval: 결과는 있지만 best_similarity < 임계값이면 쿼리 재구성 후 재검색
-        if top_chunks and top_chunks[0].get('similarity', 0.0) < settings.ITERATIVE_RETRIEVAL_THRESHOLD:
+        # Iterative Retrieval: 광역 질문은 스킵
+        if not is_global and top_chunks and top_chunks[0].get('similarity', 0.0) < settings.ITERATIVE_RETRIEVAL_THRESHOLD:
             best_sim = top_chunks[0]['similarity']
-            logger.info(f"[IterativeRetrieval][Stream] best_similarity={best_sim:.4f} < {settings.ITERATIVE_RETRIEVAL_THRESHOLD} → 쿼리 재구성 시도")
+            logger.info(f"[IterativeRetrieval][Stream] best_similarity={best_sim:.4f} → 쿼리 재구성 시도")
             reformulated = self._reformulate_query(question)
             if reformulated != question:
                 retry_chunks = self.hybrid_search(
@@ -322,6 +341,7 @@ class ChatbotService:
                 top_chunks = self._merge_and_deduplicate(top_chunks, retry_chunks, settings.SEARCH_DEFAULT_TOP_K)
                 new_best = top_chunks[0]['similarity'] if top_chunks else 0.0
                 logger.info(f"[IterativeRetrieval][Stream] 병합 후 best_similarity: {best_sim:.4f} → {new_best:.4f}")
+
         if not top_chunks:
             lowered = max(similarity_threshold - 0.1, 0.0)
             fallback_kw = self._extract_keywords(question)
@@ -331,14 +351,17 @@ class ChatbotService:
                 novel_id=novel_id, chapter_id=chapter_id, novel_filter=novel_filter,
                 keywords=fallback_kw, original_query=question
             )
-        if not top_chunks:
-            return {"found_context": False, "context": "", "source": None, "similarity": 0.0, "bible": ""}
 
-        # 최종 유사도 하한선: 이 미만이면 소설에 관련 내용 없음으로 처리 (학습 데이터 사용 방지)
-        final_best = top_chunks[0].get('similarity', 0.0)
-        if final_best < settings.CHATBOT_MIN_ANSWER_SIMILARITY:
-            logger.info(f"[Context] best_similarity={final_best:.4f} < {settings.CHATBOT_MIN_ANSWER_SIMILARITY} → 소설에서 관련 내용 없음 처리")
-            return {"found_context": False, "context": "", "source": None, "similarity": final_best, "bible": ""}
+        # 광역 질문은 청크 없어도 바이블로 진행
+        if not top_chunks and not is_global:
+            return {"found_context": False, "context": "", "source": None, "similarity": 0.0, "bible": "", "prompt_override": None}
+
+        # 유사도 하한선: 광역 질문은 건너뜀
+        if not is_global and top_chunks:
+            final_best = top_chunks[0].get('similarity', 0.0)
+            if final_best < settings.CHATBOT_MIN_ANSWER_SIMILARITY:
+                logger.info(f"[Context][Stream] best_similarity={final_best:.4f} → 소설에서 관련 내용 없음")
+                return {"found_context": False, "context": "", "source": None, "similarity": final_best, "bible": "", "prompt_override": None}
 
         context_texts = []
         for i, chunk in enumerate(top_chunks):
@@ -350,7 +373,7 @@ class ChatbotService:
             context_texts.append(f"{header}\n{chunk['text']}")
         context = "\n\n".join(context_texts)
 
-        best_chunk = top_chunks[0]
+        best_chunk = top_chunks[0] if top_chunks else {}
         novel_title = self._get_novel_title(best_chunk['novel_id']) if best_chunk.get('novel_id') else "Unknown Novel"
         retrieved_chapter_id = best_chunk.get('chapter_id')
         chapter_title = self._get_chapter_title(retrieved_chapter_id, db=db) if retrieved_chapter_id else None
@@ -362,6 +385,13 @@ class ChatbotService:
                 bible_summary = AnalysisService.get_bible_summary(db, novel_id, chapter_id)
             except Exception as e:
                 logger.warning(f"바이블 요약 조회 실패 (novel={novel_id}): {e}")
+
+        # 광역 질문 전용 프롬프트 생성
+        prompt_override = None
+        if is_global:
+            novel_description = self._get_novel_description(novel_id, db)
+            prompt_override = self._build_global_rag_prompt(question, bible_summary, novel_description, context)
+            logger.info(f"[GlobalQ][Stream] 광역 질문 전용 프롬프트 준비 (chunks={len(top_chunks)})")
 
         return {
             "found_context": True,
@@ -375,7 +405,8 @@ class ChatbotService:
                 "total_scenes": len(top_chunks)
             },
             "similarity": best_chunk.get('similarity', 0.0),
-            "bible": bible_summary
+            "bible": bible_summary,
+            "prompt_override": prompt_override
         }
 
     def warmup(self):
@@ -459,6 +490,42 @@ class ChatbotService:
         except Exception as e:
             logger.warning(f"[Warning] Keyword Extraction Failed: {e}")
             return text.split()
+
+    def _is_global_question(self, question: str) -> bool:
+        """전체 서사·결말·요약 관련 '광역 질문' 여부 감지 (키워드 기반, LLM 호출 없음)."""
+        return any(kw in question for kw in self._GLOBAL_QUESTION_KEYWORDS)
+
+    def _get_novel_description(self, novel_id: int, db) -> str:
+        """소설 description 필드 조회 (작가가 입력한 시놉시스/설명)."""
+        if not db or not novel_id:
+            return ""
+        try:
+            novel = db.query(Novel).filter(Novel.id == novel_id).first()
+            return (novel.description or "") if novel else ""
+        except Exception as e:
+            logger.warning(f"소설 description 조회 실패 (novel={novel_id}): {e}")
+            return ""
+
+    def _build_global_rag_prompt(self, question: str, bible: str, novel_description: str, context: str = "") -> str:
+        """전체 서사·결말·요약 질문 전용 프롬프트.
+        바이블+시놉시스를 1차 지식 소스로 사용하며, 씬 검색 결과는 보조 참고용."""
+        desc_block = f"\n[소설 시놉시스 / 작가 설명]:\n{novel_description}\n" if novel_description else ""
+        bible_block = f"\n[소설 바이블 — 등장인물·관계·핵심사건·장소]:\n{bible}\n" if bible else ""
+        context_block = f"\n[관련 장면 (참고)]:\n{context[:1500]}\n" if context else ""
+
+        return f"""당신은 소설 전반을 파악한 문학 어시스턴트입니다.
+[소설 시놉시스], [소설 바이블], [관련 장면]에 있는 정보만으로 질문에 답하세요.
+
+━━━ 절대 규칙 ━━━
+1. 제공된 자료([소설 시놉시스], [소설 바이블], [관련 장면])에 명시된 내용만 사용.
+2. 사전 학습 지식(유명 소설·동화·역사·실존 인물 등) 절대 금지 — 등장인물 이름이 유명 작품과 같아도 예외 없음.
+3. 제공된 정보로 답하기 불충분하면 "제공된 정보에서 확인하기 어렵습니다"라고 명시.
+4. 추측·유추 금지 — 근거가 있는 내용만 포함.
+━━━━━━━━━━━━━
+{desc_block}{bible_block}{context_block}
+질문: {question}
+
+답변 (등장인물·사건·결말 등 소설 전반을 중심으로 서술):"""
 
     def _reformulate_query(self, question: str) -> str:
         """
@@ -597,8 +664,11 @@ class ChatbotService:
 
         Method C: db와 novel_id가 있으면 바이블 요약을 조회해 LLM에 주입.
         """
+        # 광역 질문 감지 (결말·요약·전반 등)
+        is_global = self._is_global_question(question)
+        logger.info(f"[Search] 원본 질문: '{question}' | 광역질문={is_global}")
+
         # 1. 하이브리드 검색 실행
-        logger.info(f"[Search] 원본 질문: '{question}'")
         top_chunks = self.hybrid_search(
             question=question,
             alpha=alpha,
@@ -608,8 +678,8 @@ class ChatbotService:
             novel_filter=novel_filter
         )
 
-        # 2. Iterative Retrieval: 결과는 있지만 best_similarity < 임계값이면 쿼리 재구성 후 재검색
-        if top_chunks and top_chunks[0].get('similarity', 0.0) < settings.ITERATIVE_RETRIEVAL_THRESHOLD:
+        # 2. Iterative Retrieval: 광역 질문은 스킵 (바이블로 답변하므로)
+        if not is_global and top_chunks and top_chunks[0].get('similarity', 0.0) < settings.ITERATIVE_RETRIEVAL_THRESHOLD:
             best_sim = top_chunks[0]['similarity']
             logger.info(f"[IterativeRetrieval] best_similarity={best_sim:.4f} < {settings.ITERATIVE_RETRIEVAL_THRESHOLD} → 쿼리 재구성 시도")
             reformulated = self._reformulate_query(question)
@@ -643,47 +713,39 @@ class ChatbotService:
                 original_query=question
             )
 
-        # 4. 여전히 유사한 스토리보드가 없는 경우
-        if not top_chunks:
+        # 4. 여전히 결과 없고 광역 질문도 아니면 에러 반환
+        if not top_chunks and not is_global:
             error_msg = "죄송합니다. 관련 내용을 찾을 수 없습니다."
             if not self.engine:
                 error_msg += " (검색 엔진이 초기화되지 않았습니다)"
             elif self.engine and self.engine.index is None:
                 error_msg += " (Pinecone 연결 실패 - BM25 폴백도 결과 없음)"
+            return {"answer": error_msg, "source": None, "similarity": 0.0, "found_context": False}
 
-            return {
-                "answer": error_msg,
-                "source": None,
-                "similarity": 0.0,
-                "found_context": False
-            }
+        # 5. 유사도 하한선: 광역 질문은 건너뜀 (바이블이 주 지식 소스)
+        if not is_global and top_chunks:
+            final_best = top_chunks[0].get('similarity', 0.0)
+            if final_best < settings.CHATBOT_MIN_ANSWER_SIMILARITY:
+                logger.info(f"[Context] best_similarity={final_best:.4f} < {settings.CHATBOT_MIN_ANSWER_SIMILARITY} → 소설에서 관련 내용 없음")
+                return {
+                    "answer": "죄송합니다. 소설에서 해당 내용을 찾을 수 없습니다.",
+                    "source": None,
+                    "similarity": final_best,
+                    "found_context": False
+                }
 
-        # 최종 유사도 하한선: 이 미만이면 소설에 관련 내용 없음으로 처리 (학습 데이터 사용 방지)
-        final_best = top_chunks[0].get('similarity', 0.0)
-        if final_best < settings.CHATBOT_MIN_ANSWER_SIMILARITY:
-            logger.info(f"[Context] best_similarity={final_best:.4f} < {settings.CHATBOT_MIN_ANSWER_SIMILARITY} → 소설에서 관련 내용 없음 처리")
-            return {
-                "answer": "죄송합니다. 소설에서 해당 내용을 찾을 수 없습니다.",
-                "source": None,
-                "similarity": final_best,
-                "found_context": False
-            }
-
-        # 5. 컨텍스트 생성 (상위 청크 텍스트 결합)
+        # 6. 컨텍스트 생성 (상위 청크 텍스트 결합)
         context_texts = []
         for i, chunk in enumerate(top_chunks):
-            # 씬 번호나 요약이 있으면 포함
             header = f"[Context {i+1}]"
             if chunk.get('scene_index') is not None:
                 header += f" Scene {chunk['scene_index']}"
             if chunk.get('summary'):
                 header += f" (Summary: {chunk['summary']})"
-                
             context_texts.append(f"{header}\n{chunk['text']}")
-        
         context = "\n\n".join(context_texts)
-        
-        # 6. LLM으로 답변 생성 (Method C: 바이블 주입)
+
+        # 7. 바이블 조회 (항상)
         bible_summary = ""
         if db and novel_id:
             try:
@@ -691,12 +753,18 @@ class ChatbotService:
                 bible_summary = AnalysisService.get_bible_summary(db, novel_id, chapter_id)
             except Exception as e:
                 logger.warning(f"바이블 요약 조회 실패 (novel={novel_id}): {e}")
-        answer = self.generate_answer(question, context, bible=bible_summary)
-        
-        # 가장 높은 유사도 정보
-        best_chunk = top_chunks[0]
 
-        # novel title 가져오기 (캐시 사용)
+        # 8. 광역 질문: 시놉시스+바이블 기반 전용 프롬프트 사용
+        if is_global:
+            novel_description = self._get_novel_description(novel_id, db)
+            prompt_override = self._build_global_rag_prompt(question, bible_summary, novel_description, context)
+            logger.info(f"[GlobalQ] 광역 질문 전용 프롬프트 사용 (desc={bool(novel_description)}, bible={bool(bible_summary)}, chunks={len(top_chunks)})")
+            answer = self.generate_answer(question, context, bible=bible_summary, prompt_override=prompt_override)
+        else:
+            answer = self.generate_answer(question, context, bible=bible_summary)
+
+        # 가장 높은 유사도 정보
+        best_chunk = top_chunks[0] if top_chunks else {}
         novel_title = self._get_novel_title(best_chunk['novel_id']) if best_chunk.get('novel_id') else "Unknown Novel"
         retrieved_chapter_id = best_chunk.get('chapter_id')
         chapter_title = self._get_chapter_title(retrieved_chapter_id, db=db) if retrieved_chapter_id else None

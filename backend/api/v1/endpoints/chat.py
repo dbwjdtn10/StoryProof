@@ -109,7 +109,7 @@ async def ask_question_stream(
 
         def _run_stream():
             try:
-                for token in chatbot.stream_answer(request.question, ctx["context"], ctx["bible"]):
+                for token in chatbot.stream_answer(request.question, ctx["context"], ctx["bible"], ctx.get("prompt_override")):
                     asyncio.run_coroutine_threadsafe(queue.put(token), loop)
             except Exception as e:
                 asyncio.run_coroutine_threadsafe(queue.put(e), loop)
