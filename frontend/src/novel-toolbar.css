@@ -121,7 +121,7 @@
 
 .novel-toolbar select {
     padding: 4px 6px;
-    border: 1px solid var(--border);
+    border: 1px solid #ccbeb0;
     border-radius: 4px;
     background-color: var(--card);
     font-size: 13px;
@@ -195,7 +195,7 @@
     gap: 4px;
     margin-left: auto;
     background-color: var(--secondary);
-    border: 1px solid var(--border);
+    border: 1px solid #bdad9e;
     border-radius: 4px;
     padding: 0 4px 0 8px;
     height: 32px;
@@ -451,7 +451,7 @@
 .tiptap table td,
 .tiptap table th {
     min-width: 1em;
-    border: 2px solid var(--border);
+    border: 2px solid #ced4da;
     padding: 3px 5px;
     vertical-align: top;
     box-sizing: border-box;
@@ -461,7 +461,7 @@
 .tiptap table th {
     font-weight: bold;
     text-align: left;
-    background-color: var(--secondary);
+    background-color: #f8f9fa;
 }
 
 .tiptap table .selectedCell:after {
@@ -474,14 +474,6 @@
     bottom: 0;
     background: rgba(200, 200, 255, 0.4);
     pointer-events: none;
-}
-
-[data-theme="sepia"] .tiptap table .selectedCell:after {
-    background: rgba(107, 79, 58, 0.15);
-}
-
-[data-theme="dark"] .tiptap table .selectedCell:after {
-    background: rgba(250, 250, 249, 0.1);
 }
 
 .tiptap table .column-resize-handle {
@@ -511,13 +503,4 @@
     background-color: #ffff00;
     padding: 0.1em 0.3em;
     border-radius: 3px;
-}
-
-[data-theme="sepia"] .tiptap mark {
-    background-color: rgba(181, 137, 0, 0.35);
-}
-
-[data-theme="dark"] .tiptap mark {
-    background-color: rgba(255, 215, 0, 0.4);
-    color: #1a1a1a;
 }

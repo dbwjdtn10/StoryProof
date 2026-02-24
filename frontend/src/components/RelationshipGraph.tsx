@@ -526,7 +526,10 @@ export function RelationshipGraphModal({ isOpen, onClose, relationships, charact
                         <div style={{
                             width: '220px', borderRight: '1px solid var(--border)',
                             display: 'flex', flexDirection: 'column',
-                            background: 'var(--chat-input-bg)'
+                            background: (() => {
+                                const t = document.documentElement.getAttribute('data-theme') || 'light';
+                                return t === 'dark' ? '#0a0a0a' : t === 'sepia' ? '#fdf6e3' : '#ffffff';
+                            })()
                         }}>
                             <div style={{
                                 padding: '10px 14px', borderBottom: '1px solid var(--border)',
@@ -536,15 +539,15 @@ export function RelationshipGraphModal({ isOpen, onClose, relationships, charact
                                     flex: 1, padding: '5px', fontSize: '0.75rem', fontWeight: 600,
                                     border: '1px solid var(--border)', borderRadius: '6px',
                                     cursor: 'pointer',
-                                    color: 'var(--foreground)',
-                                    background: 'var(--secondary)'
+                                    color: (() => { const t = document.documentElement.getAttribute('data-theme') || 'light'; return t === 'dark' ? '#ffffff' : t === 'sepia' ? '#ede1e1' : '#000000'; })(),
+                                    background: (() => { const t = document.documentElement.getAttribute('data-theme') || 'light'; return t === 'dark' ? '#333333' : t === 'sepia' ? '#6b4f3a' : '#e7e5e4'; })()
                                 }}>전체 선택</button>
                                 <button onClick={selectNone} style={{
                                     flex: 1, padding: '5px', fontSize: '0.75rem', fontWeight: 600,
                                     border: '1px solid var(--border)', borderRadius: '6px',
                                     cursor: 'pointer',
-                                    color: 'var(--foreground)',
-                                    background: 'var(--secondary)'
+                                    color: (() => { const t = document.documentElement.getAttribute('data-theme') || 'light'; return t === 'dark' ? '#ffffff' : t === 'sepia' ? '#ede1e1' : '#000000'; })(),
+                                    background: (() => { const t = document.documentElement.getAttribute('data-theme') || 'light'; return t === 'dark' ? '#333333' : t === 'sepia' ? '#6b4f3a' : '#e7e5e4'; })()
                                 }}>선택 해제</button>
                             </div>
                             <div style={{ flex: 1, overflowY: 'auto', padding: '6px' }}>

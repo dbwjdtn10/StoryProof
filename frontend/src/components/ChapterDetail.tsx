@@ -88,7 +88,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
 
     // Refs for auto-save interval (avoid stale closures)
     const hasUnsavedChangesRef = useRef(false);
-    const handleSaveRef = useRef<() => Promise<void>>(() => Promise.resolve());
+    const handleSaveRef = useRef<(silent?: boolean) => Promise<void>>(() => Promise.resolve());
 
     // Reader settings (theme sync, localStorage persistence)
     const { readerSettings, handleReaderSettingsChange } = useReaderSettings(mode);
@@ -295,16 +295,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
         }).catch(() => {});
     }, [novelId]);
 
-    // Auto-save every 30 seconds (silent — no toast)
-    useEffect(() => {
-        if (mode === 'reader' || !novelId || !chapterId) return;
-        const interval = setInterval(() => {
-            if (hasUnsavedChangesRef.current) {
-                handleSaveRef.current(true);
-            }
-        }, 30000);
-        return () => clearInterval(interval);
-    }, [novelId, chapterId, mode]);
+    // Auto-save disabled
 
     // Warn before leaving with unsaved changes
     useEffect(() => {

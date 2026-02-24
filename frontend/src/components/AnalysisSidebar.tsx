@@ -532,7 +532,7 @@ export function AnalysisSidebar({ isOpen, onClose, result, isLoading, isCachedRe
                 height: window.innerWidth <= 640 ? '100%' : '750px',
                 maxHeight: '100dvh',
                 borderRadius: window.innerWidth <= 640 ? '0' : '16px',
-                backgroundColor: 'var(--secondary)', color: 'var(--modal-text)',
+                backgroundColor: 'var(--modal-bg)', color: 'var(--modal-text)',
                 boxShadow: '0 8px 32px rgba(0,0,0,0.15)', zIndex: 1000,
                 display: 'flex', flexDirection: 'column',
                 border: window.innerWidth <= 640 ? 'none' : '1px solid var(--modal-border)', animation: 'slideUp 0.3s ease'
@@ -591,7 +591,10 @@ export function AnalysisSidebar({ isOpen, onClose, result, isLoading, isCachedRe
                 <div style={{
                     padding: '10px 20px', borderBottom: '1px solid var(--modal-border)',
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    backgroundColor: 'rgba(59, 130, 246, 0.08)'
+                    backgroundColor: (() => {
+                        const t = document.documentElement.getAttribute('data-theme') || 'light';
+                        return t === 'dark' ? '#3b82f614' : 'rgba(59, 130, 246, 0.08)';
+                    })()
                 }}>
                     <span style={{ fontSize: '0.8rem', color: 'var(--muted-foreground)' }}>
                         이전 분석 결과입니다

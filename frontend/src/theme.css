@@ -408,16 +408,6 @@
     background: #4a3728;
 }
 
-/* Dark Mode: chatbot toggle button (black btn invisible on dark bg) */
-[data-theme="dark"] .chatbot-toggle-btn {
-    background: #ffffff;
-    color: #000000;
-    border: none;
-}
-[data-theme="dark"] .chatbot-toggle-btn:hover {
-    background: #e5e7eb;
-}
-
 /* Sidebar Dark Mode Fixes */
 [data-theme="dark"] .dictionary-sidebar {
     background-color: #1a1a1a;

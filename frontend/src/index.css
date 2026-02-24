@@ -782,10 +782,6 @@
   --floating-btn-border: #e5e7eb;
   --floating-btn-hover-bg: #f9fafb;
 
-  /* Chat UI Theme Variables */
-  --input-wrapper-bg: #f5f5f4;
-  --send-btn-inactive: #e1e1de;
-
   /* Botanical Theme Variables (Extracted from botanical-herbs.jpg) */
   --botanical-cream: #ede0d4;
   --botanical-cream-dark: #e2d1c3;
@@ -893,10 +889,6 @@
   --chat-assistant-bg: #f9f7f2;
   --chat-assistant-text: #4a3728;
   --chat-input-bg: #f9f7f2;
-
-  /* Chat UI Theme Variables - Sepia */
-  --input-wrapper-bg: var(--botanical-cream-dark);
-  --send-btn-inactive: var(--botanical-cream-dark);
 }
 
 [data-theme='dark'] {
@@ -948,10 +940,7 @@
   --chat-assistant-bg: #333333;
   --chat-assistant-text: #e0e0e0;
   --chat-input-bg: #333333;
-
-  /* Chat UI Theme Variables - Dark */
-  --input-wrapper-bg: #333333;
-  --send-btn-inactive: #292524;
+}
 }
 
 [data-reader-theme='light'] {

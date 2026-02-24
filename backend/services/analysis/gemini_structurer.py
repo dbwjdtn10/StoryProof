@@ -12,6 +12,28 @@ from backend.core.config import settings
 
 
 # ============================================================================
+# 헬퍼 함수
+# ============================================================================
+
+def _normalize_trait(t: str) -> str:
+    """
+    한국어 인물 특성을 명사형으로 표준화하여 유사 중복을 제거합니다.
+    예) "단호한" → "단호함",  "용감한" → "용감함",  "지혜로운" → "지혜로움"
+    """
+    t = t.strip()
+    # 형용사형 어미 → 명사형으로 변환
+    if t.endswith('한') and len(t) > 1:
+        return t[:-1] + '함'
+    if t.endswith('운') and len(t) > 1:
+        return t[:-1] + '움'
+    if t.endswith('은') and len(t) > 1:
+        return t[:-1] + '음'
+    if t.endswith('인') and len(t) > 1:
+        return t[:-1] + '임'
+    return t
+
+
+# ============================================================================
 # 데이터 클래스 정의
 # ============================================================================
 
@@ -104,7 +126,7 @@ class GeminiStructurer:
 
 {
   "summary": "씬의 핵심 요약 (2-3문장. 누가 무엇을 왜 했는지, 결과는 어떠한지 포함)",
-  "characters": [{"name": "인물 이름", "description": "이 씬에서의 행동과 감정 상태 (1-2문장)", "visual_description": "외모 묘사 (머리색, 눈색, 체형, 복장, 나이대, 인상 등 시각적 특징을 최대한 상세하게. 언급 없으면 빈 문자열)", "traits": ["특성1", "특성2"]}],
+  "characters": [{"name": "인물 이름", "description": "이 씬에서의 행동과 감정 상태 (1-2문장)", "visual_description": "외모 묘사 (머리색, 눈색, 체형, 복장, 나이대, 인상 등 시각적 특징을 최대한 상세하게. 언급 없으면 빈 문자열)", "traits": ["명사형특성1", "명사형특성2"]}],
   "relationships": [{"source": "인물A", "target": "인물B", "relation": "관계 유형 (예: 연인, 적대, 상하, 동료, 가족)", "description": "이 씬에서 드러나는 두 인물의 관계 묘사"}],
   "locations": [{"name": "장소 이름", "description": "장소 묘사", "visual_description": "장소의 시각적 묘사 (건축 양식, 분위기, 조명, 색감, 크기 등)"}],
   "items": [{"name": "아이템 이름", "description": "용도/의미", "visual_description": "아이템의 시각적 묘사 (재질, 색상, 크기, 형태, 장식 등)"}],
@@ -123,6 +145,9 @@ class GeminiStructurer:
 - visual_description은 이미지 생성에 사용되므로, 소설 본문에서 언급된 외모/시각적 정보를 최대한 구체적으로 추출
 - relationships는 이 씬에서 상호작용하는 인물 쌍만 추출 (단순 언급은 제외)
 - summary에는 핵심 갈등이나 변화를 반드시 포함
+- traits는 반드시 **명사형**으로 작성 (예: "단호함" O, "단호한" X / "용감함" O, "용감한" X / "지혜로움" O, "지혜로운" X)
+- traits는 의미가 유사하거나 겹치는 항목을 하나로 통합 (예: "단호함"과 "결단력" 중 하나만, "용감함"과 "대담함" 중 하나만)
+- traits는 씬 전체에서 실제로 드러나는 성격·태도만 최대 3개까지
 """
 
     def _generate_with_retry(self, prompt: str):
@@ -961,11 +986,13 @@ Output Format (JSON List of Strings):
                 if len(visual_desc) > len(all_characters[name].get('visual_description', '')):
                     all_characters[name]['visual_description'] = visual_desc
                 
-                # Traits 통합 (중복 제거)
+                # Traits 통합 (정규화 + 유사 중복 제거)
                 if traits:
-                     for t in traits:
-                         if t not in all_characters[name]['traits']:
-                             all_characters[name]['traits'].append(t)
+                    for t in traits:
+                        norm = _normalize_trait(t)
+                        existing_norms = [_normalize_trait(e) for e in all_characters[name]['traits']]
+                        if norm not in existing_norms:
+                            all_characters[name]['traits'].append(norm)
                 
                 if idx not in all_characters[name]['appearances']:
                     all_characters[name]['appearances'].append(idx)

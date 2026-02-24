@@ -57,18 +57,18 @@
     width: 48px;
     height: 48px;
     padding: 0;
-    background: var(--card);
-    border: 1px solid var(--border);
+    background: white;
+    border: 1px solid #cbcbcb;
     border-radius: 50%;
     cursor: pointer;
-    color: var(--foreground);
+    color: #1a1a1a;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     transition: all 0.2s ease;
 }
 
 .menu-option:hover {
-    background: var(--secondary);
-    border-color: var(--foreground);
+    background: #f9fafb;
+    border-color: #000000;
     transform: scale(1.1);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
@@ -112,16 +112,6 @@
     background: #3b82f6 !important;
     color: white !important;
     border: none !important;
-}
-
-[data-theme="sepia"] .btn-blue {
-    background: #6b4f3a !important;
-    color: #fdf6e3 !important;
-}
-
-[data-theme="sepia"] .btn-purple {
-    background: #7c5c3a !important;
-    color: #fdf6e3 !important;
 }
 
 .menu-option svg {
@@ -268,37 +258,4 @@
 
 [data-theme="sepia"] .chatbot-close:hover {
     color: #311900;
-}
-
-/* Dark Mode: colored buttons need inversion so they don't disappear */
-[data-theme="dark"] .btn-blue {
-    background: #2563eb !important;
-    color: #ffffff !important;
-    border: none !important;
-}
-
-[data-theme="dark"] .btn-blue:hover {
-    background: #1d4ed8 !important;
-}
-
-[data-theme="dark"] .btn-purple {
-    background: #7c3aed !important;
-    color: #ffffff !important;
-    border: none !important;
-}
-
-[data-theme="dark"] .btn-purple:hover {
-    background: #6d28d9 !important;
-}
-
-[data-theme="dark"] .btn-brown-rich {
-    background: #78350f !important;
-    color: #fef3c7 !important;
-    border: none !important;
-}
-
-[data-theme="dark"] .btn-brown-med {
-    background: #92400e !important;
-    color: #fef3c7 !important;
-    border: none !important;
 }
