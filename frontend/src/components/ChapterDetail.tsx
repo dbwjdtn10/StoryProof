@@ -89,6 +89,7 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
     // Refs for auto-save interval (avoid stale closures)
     const hasUnsavedChangesRef = useRef(false);
     const handleSaveRef = useRef<(silent?: boolean) => Promise<void>>(() => Promise.resolve());
+    const isReanalyzingRef = useRef(false);
 
     // Reader settings (theme sync, localStorage persistence)
     const { readerSettings, handleReaderSettingsChange } = useReaderSettings(mode);
@@ -180,7 +181,8 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
                         setChapterStatus(currentStatus);
                         setIsAnalyzing(false);
                         if (currentStatus === 'completed') {
-                            toast.success("분석이 완료되었습니다! 데이터를 새로고침합니다.");
+                            toast.success(isReanalyzingRef.current ? "재분석이 완료되었습니다!" : "분석이 완료되었습니다!");
+                            isReanalyzingRef.current = false;
                             loadChapterContent();
                             loadBibleData();
                         } else {
@@ -529,15 +531,14 @@ export function ChapterDetail({ fileName, onBack, novelId, chapterId, mode = 'wr
             action: {
                 label: "재분석",
                 onClick: async () => {
-                    setIsAnalyzing(true);
-                    setChapterStatus('processing');
                     try {
                         await reanalyzeChapter(novelId, chapterId);
-                        toast.success("재분석 요청이 완료되었습니다. 백그라운드에서 분석이 진행됩니다.");
+                        // API 호출 성공 후에 상태 변경 → 백엔드가 이미 PENDING으로 설정한 뒤 폴링 시작
+                        isReanalyzingRef.current = true;
+                        setIsAnalyzing(true);
+                        setChapterStatus('pending');
                     } catch {
                         toast.error("재분석 요청 실패");
-                        setChapterStatus('failed');
-                        setIsAnalyzing(false);
                     }
                 }
             },
