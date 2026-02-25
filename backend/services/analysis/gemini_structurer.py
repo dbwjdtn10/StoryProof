@@ -297,7 +297,7 @@ class GeminiStructurer:
         return found_anchors
 
     # ── 최대 크기 기반 분할 (헤더 없는 경우 폴백) ──────────────────────────────
-    _MAX_PARENT_SCENE_CHARS = 12000  # Gemini가 구조화 분석 시 안정적으로 처리하는 최대 길이
+    _MAX_PARENT_SCENE_CHARS = 50000  # Gemini가 구조화 분석 시 안정적으로 처리하는 최대 길이
 
     def _split_by_paragraph(self, text: str, max_chars: int = None) -> List[str]:
         """
