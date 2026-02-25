@@ -122,3 +122,15 @@ def get_current_user_profile(
 ):
     """현재 사용자 프로필 조회"""
     return AuthService.get_user_by_id(db, user_id)
+
+
+# ===== 계정 삭제 =====
+
+@router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
+def delete_account(
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db)
+):
+    """현재 사용자 계정 및 모든 관련 데이터 영구 삭제"""
+    AuthService.delete_user(db, user_id)
+    return None

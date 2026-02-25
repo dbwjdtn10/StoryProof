@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { LogOut, X, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { request } from "../api/client";
+import { deleteAccount } from "../api/auth";
 import "./Settings.css";
 
 interface UserProfile {
@@ -45,8 +46,23 @@ export function Settings({ onClose }: { onClose: () => void }) {
         window.location.href = '/';
     };
 
-    const handleDeleteAccount = () => {
-        toast.info('계정 삭제 기능은 준비 중입니다.');
+    const handleDeleteAccount = async () => {
+        toast.warning('정말로 계정을 삭제하시겠습니까? 모든 소설과 데이터가 영구 삭제됩니다.', {
+            action: {
+                label: '삭제',
+                onClick: async () => {
+                    try {
+                        await deleteAccount();
+                        localStorage.removeItem('token');
+                        localStorage.removeItem('userMode');
+                        toast.success('계정이 삭제되었습니다.');
+                        window.location.href = '/';
+                    } catch {
+                        toast.error('계정 삭제에 실패했습니다. 다시 시도해주세요.');
+                    }
+                },
+            },
+        });
     };
 
     const models = [

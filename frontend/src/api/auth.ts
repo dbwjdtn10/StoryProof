@@ -14,3 +14,9 @@ export async function login(data: LoginRequest): Promise<TokenResponse> {
         body: JSON.stringify(data),
     });
 }
+
+export async function deleteAccount(): Promise<void> {
+    return request<void>('/auth/me', {
+        method: 'DELETE',
+    });
+}

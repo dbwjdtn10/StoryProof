@@ -100,3 +100,15 @@ class AuthService:
                 detail="사용자를 찾을 수 없습니다."
             )
         return user
+
+    @staticmethod
+    def delete_user(db: Session, user_id: int) -> None:
+        """계정 및 관련 데이터 영구 삭제 (cascade로 소설/채팅 기록 포함)"""
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="사용자를 찾을 수 없습니다."
+            )
+        db.delete(user)
+        db.commit()
