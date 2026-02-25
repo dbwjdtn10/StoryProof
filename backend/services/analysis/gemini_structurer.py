@@ -296,6 +296,69 @@ class GeminiStructurer:
         
         return found_anchors
 
+    # ── 최대 크기 기반 분할 (헤더 없는 경우 폴백) ──────────────────────────────
+    _MAX_PARENT_SCENE_CHARS = 12000  # Gemini가 구조화 분석 시 안정적으로 처리하는 최대 길이
+
+    def _split_by_paragraph(self, text: str, max_chars: int = None) -> List[str]:
+        """
+        텍스트를 문단(빈 줄) 경계를 기준으로 max_chars 이하의 청크로 분할합니다.
+        헤더가 감지되지 않을 때 Gemini가 각 부분을 제대로 분석할 수 있도록
+        parent 씬 크기를 제한합니다.
+        """
+        if max_chars is None:
+            max_chars = self._MAX_PARENT_SCENE_CHARS
+
+        if len(text) <= max_chars:
+            return [text]
+
+        # 1차: 빈 줄(문단) 경계로 분할
+        paragraphs = re.split(r'\n{2,}', text)
+
+        chunks: List[str] = []
+        current: List[str] = []
+        current_len = 0
+
+        for para in paragraphs:
+            para_len = len(para)
+
+            if para_len > max_chars:
+                # 단일 문단이 max_chars 초과 → 줄 단위로 재분할
+                if current:
+                    chunks.append('\n\n'.join(current))
+                    current = []
+                    current_len = 0
+
+                lines = para.split('\n')
+                sub_current: List[str] = []
+                sub_len = 0
+                for line in lines:
+                    line_len = len(line)
+                    if sub_len + line_len + 1 > max_chars and sub_current:
+                        chunks.append('\n'.join(sub_current))
+                        sub_current = [line]
+                        sub_len = line_len
+                    else:
+                        sub_current.append(line)
+                        sub_len += line_len + 1
+                if sub_current:
+                    current = ['\n'.join(sub_current)]
+                    current_len = len(current[0])
+
+            elif current_len + para_len + 2 > max_chars and current:
+                chunks.append('\n\n'.join(current))
+                current = [para]
+                current_len = para_len
+            else:
+                current.append(para)
+                current_len += para_len + 2
+
+        if current:
+            chunks.append('\n\n'.join(current))
+
+        result = [c for c in chunks if c.strip()]
+        print(f"[_split_by_paragraph] 텍스트({len(text)}자) → {len(result)}개 청크 (최대 {max_chars}자/청크)")
+        return result if result else [text]
+
     def split_scenes(self, text: str) -> List[str]:
         """
         LLM을 사용하여 텍스트를 씬 단위로 분할 (Anchor-based Approach)
@@ -360,11 +423,11 @@ Output Format (JSON List of Strings):
                 start_anchors = json.loads(json_text)
             except json.JSONDecodeError as e:
                 print(f"!!! LLM 앵커 응답 JSON 파싱 실패: {e}")
-                return [text]
+                return self._split_by_paragraph(text)
 
             if not isinstance(start_anchors, list):
                 print("!!! LLM 응답이 리스트가 아닙니다.")
-                return [text]
+                return self._split_by_paragraph(text)
 
             print(f"[Anchors] {len(start_anchors)}개의 씬 시작점(Anchor) 발견. 텍스트 슬라이싱 중...")
             
@@ -529,7 +592,7 @@ Output Format (JSON List of Strings):
 
             # 2. 인덱스 기반으로 자르기
             if not start_indices:
-                return [text]
+                return self._split_by_paragraph(text)
             
             # 첫 번째 씬이 0부터 시작하지 않으면 강제로 0 추가
             if start_indices[0] != 0:
@@ -548,7 +611,7 @@ Output Format (JSON List of Strings):
             # 3. 후처리: 너무 짧은 씬(TOC 항목 등)을 이전 씬에 병합
             merged_scenes = []
             if not scenes:
-                return [text]
+                return self._split_by_paragraph(text)
 
             current_chunk = scenes[0]
             
@@ -591,11 +654,22 @@ Output Format (JSON List of Strings):
             merged_scenes.append(current_chunk)
             
             print(f"[OK] 씬 병합 완료: {len(scenes)} -> {len(merged_scenes)}개")
-            return merged_scenes
+
+            # 4. 후처리: 너무 큰 씬을 추가 분할 (헤더 병합 후 과대해진 경우 포함)
+            final_scenes: List[str] = []
+            for scene in merged_scenes:
+                if len(scene) > self._MAX_PARENT_SCENE_CHARS:
+                    print(f"    [Post-Split] 씬({len(scene)}자)이 {self._MAX_PARENT_SCENE_CHARS}자 초과. 분할합니다.")
+                    final_scenes.extend(self._split_by_paragraph(scene))
+                else:
+                    final_scenes.append(scene)
+
+            print(f"[OK] 씬 최종 정리: {len(merged_scenes)} -> {len(final_scenes)}개")
+            return final_scenes
 
         except Exception as e:
             print(f"[Error] LLM 씬 분할 실패: {e}")
-            return [text]
+            return self._split_by_paragraph(text)
 
     def structure_scene(self, scene_text: str, scene_index: int) -> StructuredScene:
         """단일 씬 구조화 분석"""
