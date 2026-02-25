@@ -84,13 +84,12 @@ class Settings(BaseSettings):
     # ===== 검색 설정 =====
     SEARCH_DEFAULT_ALPHA: float = 0.7            # Vector 70%, BM25 30% (한국어 키워드 매칭 강화)
     SEARCH_DEFAULT_SIMILARITY_THRESHOLD: float = 0.2  # Reranker 도입으로 기준 하향
-    SEARCH_DEFAULT_TOP_K: int = 8                # 검색 후보 수 (더 많은 컨텍스트)
-    SEARCH_CONTEXT_MAX_CHARS: int = 5000         # Gemini 컨텍스트 최대 길이
-    GEMINI_RESPONSE_TEMPERATURE: float = 0.1
-    GEMINI_RESPONSE_TOP_P: float = 0.8
-    GEMINI_RESPONSE_TOP_K: int = 20
-    ITERATIVE_RETRIEVAL_THRESHOLD: float = 0.79  # best_similarity < 이 값이면 쿼리 재구성 후 재검색 (E5 모델 유사도 분포: 0.7~0.9)
-    CHATBOT_MIN_ANSWER_SIMILARITY: float = 0.55  # 모든 재시도 후에도 이 미만이면 "소설에서 찾을 수 없음" 처리 (학습 데이터 사용 방지)
+    SEARCH_DEFAULT_TOP_K: int = 12               # 검색 후보 수 (top_k 증가로 더 넓은 컨텍스트 확보)
+    SEARCH_CONTEXT_MAX_CHARS: int = 8000         # Gemini 컨텍스트 최대 길이 (top_k 증가에 맞춰 확대)
+    GEMINI_RESPONSE_TEMPERATURE: float = 0.0  # greedy decoding → 동일 입력에 동일 출력 보장
+    GEMINI_RESPONSE_TOP_P: float = 0.95
+    GEMINI_RESPONSE_TOP_K: int = 1            # temperature=0 + top_k=1 → 완전 결정론적
+    CHATBOT_MIN_ANSWER_SIMILARITY: float = 0.55  # 이 미만이면 "소설에서 찾을 수 없음" 처리 (학습 데이터 사용 방지)
     
     # ===== Chunking Strategy =====
     CHILD_CHUNK_SIZE: int = 500  # 200 -> 500 (문맥 확보)

@@ -251,8 +251,9 @@ class ChatbotService:
 ━━━ 절대 규칙 (위반 불가) ━━━
 1. 오직 [소설 문맥]과 [소설 바이블]에 명시된 내용만 사용하세요.
 2. 사전 학습 지식 절대 금지 — 유명 소설·동화·드라마·역사·실존 인물 등 어떤 외부 지식도 사용하지 마세요. 등장인물 이름이 유명 작품과 같아도 예외 없이 적용됩니다.
-3. 질문의 주요 인물·사건·개념이 [소설 문맥]에 직접 등장하지 않으면 → [핵심 요약]에 "소설에서 해당 내용을 찾을 수 없습니다." 한 문장만 쓰고 끝내세요. [상세 설명] 섹션은 출력하지 마세요.
+3. [소설 문맥]에 질문과 관련된 내용이 조금이라도 있으면 반드시 그 내용을 바탕으로 답변하세요. "찾을 수 없습니다"는 [소설 문맥] 전체에 질문과 관련된 내용이 단 하나도 없을 때만 사용하세요.
 4. 추측·유추·보완 설명 금지. [소설 문맥]에 근거가 있는 내용만 포함하세요.
+5. [소설 문맥]에 답이 있다면, 관련 인물 이름·행동·대사를 직접 인용하여 구체적으로 서술하세요.
 ━━━━━━━━━━━━━━━━━━━━━━━━
 
 [출력 형식 — 반드시 아래 형식만 사용]
@@ -260,7 +261,7 @@ class ChatbotService:
 (소설 문맥 기반 답을 2~3문장으로 요약. 관련 내용이 없으면 "소설에서 해당 내용을 찾을 수 없습니다." 만 출력)
 
 [상세 설명]
-(관련 장면의 구체적 내용과 맥락 서술. 핵심 요약이 "찾을 수 없습니다"인 경우 이 섹션 생략)
+(관련 장면의 구체적 내용과 맥락을 서술하고, 등장인물 이름·행동·대사를 직접 인용하여 근거를 제시하세요. 핵심 요약이 "찾을 수 없습니다"인 경우 이 섹션 생략)
 ━━━━━━━━━━━━━━━━━━━━━━━━
 {bible_block}
 [소설 문맥]:
@@ -270,12 +271,15 @@ class ChatbotService:
 
 답변:"""
 
-    _LLM_CONFIG = {
-        'temperature': settings.GEMINI_RESPONSE_TEMPERATURE,
-        'top_p': settings.GEMINI_RESPONSE_TOP_P,
-        'top_k': settings.GEMINI_RESPONSE_TOP_K,
-        'max_output_tokens': 2500,
-    }
+    @property
+    def _llm_config(self) -> dict:
+        """LLM 생성 설정 — settings에서 매번 읽어 최신값 반영."""
+        return {
+            'temperature': settings.GEMINI_RESPONSE_TEMPERATURE,
+            'top_p': settings.GEMINI_RESPONSE_TOP_P,
+            'top_k': settings.GEMINI_RESPONSE_TOP_K,
+            'max_output_tokens': 2500,
+        }
 
     def generate_answer(self, question: str, context: str, bible: str = "", prompt_override: str = None) -> str:
         """Google Gemini로 RAG 답변 생성. Method C: bible 주입.
@@ -287,7 +291,7 @@ class ChatbotService:
             response = self.client.models.generate_content(
                 model=settings.GEMINI_CHAT_MODEL,
                 contents=prompt,
-                config=self._LLM_CONFIG,
+                config=self._llm_config,
             )
             return response.text
         except Exception as e:
@@ -304,7 +308,7 @@ class ChatbotService:
             for chunk in self.client.models.generate_content_stream(
                 model=settings.GEMINI_CHAT_MODEL,
                 contents=prompt,
-                config=self._LLM_CONFIG,
+                config=self._llm_config,
             ):
                 if chunk.text:
                     yield chunk.text
@@ -328,19 +332,6 @@ class ChatbotService:
             question=question, alpha=alpha, similarity_threshold=similarity_threshold,
             novel_id=novel_id, chapter_id=chapter_id, novel_filter=novel_filter
         )
-        # Iterative Retrieval: 광역 질문은 스킵
-        if not is_global and top_chunks and top_chunks[0].get('similarity', 0.0) < settings.ITERATIVE_RETRIEVAL_THRESHOLD:
-            best_sim = top_chunks[0]['similarity']
-            logger.info(f"[IterativeRetrieval][Stream] best_similarity={best_sim:.4f} → 쿼리 재구성 시도")
-            reformulated = self._reformulate_query(question)
-            if reformulated != question:
-                retry_chunks = self.hybrid_search(
-                    question=reformulated, alpha=alpha, similarity_threshold=similarity_threshold,
-                    novel_id=novel_id, chapter_id=chapter_id, novel_filter=novel_filter
-                )
-                top_chunks = self._merge_and_deduplicate(top_chunks, retry_chunks, settings.SEARCH_DEFAULT_TOP_K)
-                new_best = top_chunks[0]['similarity'] if top_chunks else 0.0
-                logger.info(f"[IterativeRetrieval][Stream] 병합 후 best_similarity: {best_sim:.4f} → {new_best:.4f}")
 
         if not top_chunks:
             lowered = max(similarity_threshold - 0.1, 0.0)
@@ -527,56 +518,6 @@ class ChatbotService:
 
 답변 (등장인물·사건·결말 등 소설 전반을 중심으로 서술):"""
 
-    def _reformulate_query(self, question: str) -> str:
-        """
-        검색 결과가 낮은 신뢰도일 때, 소설 텍스트에 실제 등장할 법한 표현으로 쿼리를 재구성합니다.
-        _generate_multi_queries()와 달리 1개의 쿼리만 생성하며, 원본 검색이 실패한 이유를 고려합니다.
-        """
-        if not self.client:
-            return question
-
-        prompt = f"""소설 검색 시스템에서 다음 질문으로 검색했으나 관련 장면을 찾지 못했습니다.
-소설 원문에 실제로 등장할 법한 표현, 장면 묘사, 대사 패턴으로 검색 쿼리를 재구성해주세요.
-
-[원본 질문]
-"{question}"
-
-[재구성 규칙]
-- 추상적/분석적 표현 → 구체적 장면 묘사로 변환
-- 메타적 질문(예: "주제가 뭐야") → 관련 장면에서 나올 법한 키워드/상황으로 변환
-- 인물의 감정이나 행동을 묻는 경우 → 해당 감정/행동이 드러나는 장면 묘사로 변환
-- 쿼리 1개만 출력, 설명 없이 쿼리만 출력
-
-재구성된 쿼리:"""
-
-        try:
-            response = self.client.models.generate_content(
-                model=settings.GEMINI_CHAT_MODEL,
-                contents=prompt,
-                config={'temperature': 0.4, 'max_output_tokens': 150}
-            )
-            reformulated = response.text.strip().strip('"').strip()
-            if len(reformulated) > 3:
-                logger.info(f"[IterativeRetrieval] Query reformulated: '{question}' → '{reformulated}'")
-                return reformulated
-            return question
-        except Exception as e:
-            logger.warning(f"[IterativeRetrieval] Query reformulation failed: {e}")
-            return question
-
-    def _merge_and_deduplicate(self, chunks1: List[Dict], chunks2: List[Dict], top_k: int) -> List[Dict]:
-        """
-        두 검색 결과를 (chapter_id, scene_index) 기준으로 중복 제거하고 병합합니다.
-        동일 청크는 유사도 최대값을 보존합니다.
-        """
-        merged: Dict[tuple, Dict] = {}
-        for chunk in chunks1 + chunks2:
-            key = (chunk.get('chapter_id'), chunk.get('scene_index'))
-            if key not in merged or chunk['similarity'] > merged[key]['similarity']:
-                merged[key] = chunk
-        sorted_results = sorted(merged.values(), key=lambda x: x['similarity'], reverse=True)
-        return sorted_results[:top_k]
-
     def hybrid_search(
         self,
         question: str,
@@ -586,64 +527,26 @@ class ChatbotService:
         **kwargs
     ) -> List[Dict]:
         """
-        Multi-Query Hybrid Search: 여러 쿼리 관점으로 검색하여 재현율(recall) 극대화
+        Hybrid Search: Dense + Sparse 단일 쿼리 검색.
 
-        1. LLM으로 질문을 3가지 다른 검색 쿼리로 변환
-        2. 각 쿼리로 독립적인 하이브리드 검색 (Dense + Sparse) 실행
-        3. 결과를 (chapter_id, scene_index) 기준으로 병합, 최고 유사도 보존
+        Multi-Query 제거 후 단순 하이브리드로 교체.
+        - top_k를 높여(settings.SEARCH_DEFAULT_TOP_K=12) 더 넓은 컨텍스트 확보
+        - 프롬프트 개선(_build_rag_prompt)으로 응답 품질 보완
         """
         top_k = kwargs.pop('top_k', settings.SEARCH_DEFAULT_TOP_K)
-
-        # 짧은 질문 바이패스: 단순 질문은 multi-query 스킵하여 Gemini 호출 절약
-        words = question.strip().split()
-        if len(question) < 10 and len(words) <= 2:
-            logger.info(f"[MultiQuery] Skipped (short question): '{question}'")
-            keywords = self._extract_keywords(question)
-            return self.find_similar_chunks(
-                question=question,
-                top_k=top_k,
-                novel_id=novel_id,
-                chapter_id=chapter_id,
-                novel_filter=novel_filter,
-                keywords=keywords,
-                original_query=question,
-                **kwargs
-            )
-
-        # 1. 원본 질문에서 키워드 1회 추출 (모든 쿼리에서 재사용)
-        base_keywords = self._extract_keywords(question)
-
-        # 2. Multi-query 생성 (1회 LLM 호출)
-        queries = self._generate_multi_queries(question)
-
-        # 3. 각 쿼리로 검색 실행 및 결과 병합
-        all_results: Dict[tuple, Dict] = {}
-
-        for q in queries:
-            # 생성된 쿼리 고유 키워드 추출 후 원본 키워드와 합침
-            q_keywords = self._extract_keywords(q)
-            merged_keywords = list(dict.fromkeys(base_keywords + q_keywords))
-            results = self.find_similar_chunks(
-                question=q,
-                top_k=top_k,
-                novel_id=novel_id,
-                chapter_id=chapter_id,
-                novel_filter=novel_filter,
-                keywords=merged_keywords,
-                original_query=question,  # 리랭커는 항상 원본 질문 사용
-                **kwargs
-            )
-
-            for r in results:
-                key = (r.get('chapter_id'), r.get('scene_index'))
-                if key not in all_results or r['similarity'] > all_results[key]['similarity']:
-                    all_results[key] = r
-
-        # 3. 유사도 기준 정렬
-        merged = sorted(all_results.values(), key=lambda x: x['similarity'], reverse=True)
-        logger.info(f"[MultiQuery] 병합 결과: {len(merged)}건 (쿼리 {len(queries)}개 × top_k={top_k})")
-
-        return merged[:top_k]
+        keywords = self._extract_keywords(question)
+        results = self.find_similar_chunks(
+            question=question,
+            top_k=top_k,
+            novel_id=novel_id,
+            chapter_id=chapter_id,
+            novel_filter=novel_filter,
+            keywords=keywords,
+            original_query=question,
+            **kwargs
+        )
+        logger.info(f"[HybridSearch] 결과: {len(results)}건 (top_k={top_k})")
+        return results
 
     def ask(
         self,
@@ -678,25 +581,7 @@ class ChatbotService:
             novel_filter=novel_filter
         )
 
-        # 2. Iterative Retrieval: 광역 질문은 스킵 (바이블로 답변하므로)
-        if not is_global and top_chunks and top_chunks[0].get('similarity', 0.0) < settings.ITERATIVE_RETRIEVAL_THRESHOLD:
-            best_sim = top_chunks[0]['similarity']
-            logger.info(f"[IterativeRetrieval] best_similarity={best_sim:.4f} < {settings.ITERATIVE_RETRIEVAL_THRESHOLD} → 쿼리 재구성 시도")
-            reformulated = self._reformulate_query(question)
-            if reformulated != question:
-                retry_chunks = self.hybrid_search(
-                    question=reformulated,
-                    alpha=alpha,
-                    similarity_threshold=similarity_threshold,
-                    novel_id=novel_id,
-                    chapter_id=chapter_id,
-                    novel_filter=novel_filter
-                )
-                top_chunks = self._merge_and_deduplicate(top_chunks, retry_chunks, settings.SEARCH_DEFAULT_TOP_K)
-                new_best = top_chunks[0]['similarity'] if top_chunks else 0.0
-                logger.info(f"[IterativeRetrieval] 병합 후 best_similarity: {best_sim:.4f} → {new_best:.4f}")
-
-        # 3. 결과 없으면 임계값을 낮춰 원본 쿼리로 재시도 (키워드 포함)
+        # 2. 결과 없으면 임계값을 낮춰 원본 쿼리로 재시도 (키워드 포함)
         if not top_chunks:
             lowered_threshold = max(similarity_threshold - 0.1, 0.0)
             logger.warning(f"하이브리드 검색 결과 없음. 임계값 {similarity_threshold}→{lowered_threshold}으로 원본 쿼리 재시도")

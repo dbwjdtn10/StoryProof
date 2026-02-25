@@ -71,7 +71,7 @@ StoryProof/
 - **Vector DB**: Pinecone
 - **AI/LLM**: Google Gemini 2.5 Flash (분석/챗봇), Imagen 4.0 (이미지 생성)
 - **Embedding**: multilingual-e5-small-ko (sentence-transformers)
-- **검색**: Vector (82.5%) + BM25 (17.5%) 하이브리드 검색, 선택적 리랭킹
+- **검색**: Vector (70%) + BM25 (30%) 하이브리드 검색 (α=0.7), 선택적 리랭킹
 - **비동기 처리**: Celery + Redis
 - **인증**: JWT (python-jose) + Argon2 해싱
 - **한국어 NLP**: kiwipiepy (형태소 분석)
