@@ -126,7 +126,7 @@ class GeminiStructurer:
 
 {
   "summary": "씬의 핵심 요약 (2-3문장. 누가 무엇을 왜 했는지, 결과는 어떠한지 포함)",
-  "characters": [{"name": "인물 이름", "description": "이 씬에서의 행동과 감정 상태 (1-2문장)", "visual_description": "외모 묘사 (머리색, 눈색, 체형, 복장, 나이대, 인상 등 시각적 특징을 최대한 상세하게. 언급 없으면 빈 문자열)", "traits": ["명사형특성1", "명사형특성2"]}],
+  "characters": [{"name": "인물의 가장 완전한 고유 이름", "aliases": ["이 씬에서 사용된 다른 호칭/약칭/자(字)/별호"], "description": "이 씬에서의 행동과 감정 상태 (1-2문장)", "visual_description": "외모 묘사 (머리색, 눈색, 체형, 복장, 나이대, 인상 등 시각적 특징을 최대한 상세하게. 언급 없으면 빈 문자열)", "traits": ["명사형특성1", "명사형특성2"]}],
   "relationships": [{"source": "인물A", "target": "인물B", "relation": "관계 유형 (예: 연인, 적대, 상하, 동료, 가족)", "description": "이 씬에서 드러나는 두 인물의 관계 묘사"}],
   "locations": [{"name": "장소 이름", "description": "장소 묘사", "visual_description": "장소의 시각적 묘사 (건축 양식, 분위기, 조명, 색감, 크기 등)"}],
   "items": [{"name": "아이템 이름", "description": "용도/의미", "visual_description": "아이템의 시각적 묘사 (재질, 색상, 크기, 형태, 장식 등)"}],
@@ -138,10 +138,15 @@ class GeminiStructurer:
 **중요 규칙:**
 - 정확히 JSON 형식으로만 응답
 - 없는 정보는 빈 리스트([]) 또는 null로 표시
-- 인물 이름은 일관성 있게 표기:
-  * 경칭/호칭 제거: "씨", "님", "선생님", "교수", "박사", "군", "양" 등을 제거한 순수 이름만 사용 (예: "어터슨 씨" → "어터슨", "김 박사" → "김")
+- 인물 이름(name)은 **가장 완전한 고유 이름**을 사용:
+  * 경칭/호칭 제거: "씨", "님", "선생님", "교수", "박사", "군", "양" 등 제거 (예: "어터슨 씨" → "어터슨")
   * 영문 경칭도 제거: "Mr.", "Ms.", "Dr." 등 (예: "Mr. Hyde" → "Hyde")
-  * 같은 인물의 별칭/다른 표기를 대표 이름 하나로 통일 (예: "Utterson", "어터슨 씨" → "어터슨")
+  * **한 인물의 모든 호칭 변형을 aliases에 반드시 기록**: 이름·자(字)·별호·약칭을 모두 포함
+    예) 제갈공명 → name: "제갈공명", aliases: ["제갈량", "공명"]
+    예) 관우 → name: "관우", aliases: ["관운장", "운장", "관장군"]
+  * **역할·직위 표현은 이름이 아님**: "손권의 사자", "촉의 장수"처럼 역할로만 언급되는 인물은
+    고유 이름이 없으면 characters에서 생략하거나 "이름없는 사자"처럼 표기
+  * 동일 인물이 이 씬에서 여러 호칭으로 불려도 name은 하나로 통일
 - visual_description은 이미지 생성에 사용되므로, 소설 본문에서 언급된 외모/시각적 정보를 최대한 구체적으로 추출
 - relationships는 이 씬에서 상호작용하는 인물 쌍만 추출 (단순 언급은 제외)
 - summary에는 핵심 갈등이나 변화를 반드시 포함
@@ -888,13 +893,14 @@ Output Format (JSON List of Strings):
 
     @staticmethod
     def _normalize_character_name(name: str) -> str:
-        """경칭/호칭 접미사를 제거하여 인물 이름 정규화.
-        예: "어터슨 씨" → "어터슨", "Mr. Hyde" → "Hyde", "김 박사" → "김"
+        """경칭/호칭 접미사, 역할 명사를 제거하여 인물 이름 정규화.
+        예: "어터슨 씨" → "어터슨", "Mr. Hyde" → "Hyde", "손권 사자" → "손권"
         """
         if not name or not isinstance(name, str):
             return name
         name = name.strip()
-        # 한국어 경칭 접미사 (긴 것부터 매칭)
+
+        # 1. 한국어 경칭 접미사 (긴 것부터 매칭)
         kr_suffixes = ['선생님', '교수님', '박사님', '사장님', '부장님', '과장님',
                        '선생', '교수', '박사', '사장', '부장', '과장',
                        '씨', '님', '군', '양']
@@ -905,12 +911,31 @@ Output Format (JSON List of Strings):
             elif name.endswith(suffix) and len(name) > len(suffix):
                 name = name[:-len(suffix)].strip()
                 break
-        # 영문 경칭 접두사
+
+        # 2. 영문 경칭 접두사
         en_titles = ['Mr.', 'Ms.', 'Mrs.', 'Miss', 'Dr.', 'Prof.', 'Sir', 'Madam', 'Lord', 'Lady']
         for title in en_titles:
             if name.startswith(title + ' ') and len(name) > len(title) + 1:
                 name = name[len(title) + 1:].strip()
                 break
+
+        # 3. 역할/직위 명사가 마지막 단어로 붙은 경우 제거
+        #    예: "손권 사자" → "손권", "유비 사신" → "유비"
+        #    단, 제거 후 이름이 2자 이상인 경우에만 적용
+        kr_role_words = {
+            '사자', '사신',           # 使者/使臣 (messenger)
+            '장군', '대장', '장수',    # 将軍/大将/将帥 (general)
+            '태수', '자사', '제후',    # 太守/刺史/諸侯 (governor/lord)
+            '황제', '대왕', '왕',      # 皇帝/大王/王 (emperor/king)
+            '승상', '재상', '대신',    # 丞相/宰相/大臣 (prime minister)
+            '군사', '참모',            # 軍師/参謀 (strategist)
+        }
+        parts = name.split()
+        if len(parts) >= 2 and parts[-1] in kr_role_words:
+            candidate = ' '.join(parts[:-1]).strip()
+            if len(candidate) >= 2:
+                name = candidate
+
         return name
 
     def _merge_alias_characters(self, all_characters: dict) -> tuple:
@@ -923,14 +948,20 @@ Output Format (JSON List of Strings):
         MIN_NAME_LEN = 2
 
         def is_name_part_of(short: str, long_n: str) -> bool:
-            """short가 long_n의 공백 구분 토큰 중 하나이거나 연속 토큰 부분문자열인지 확인"""
+            """short가 long_n의 공백 구분 토큰 중 하나이거나 연속 토큰 부분문자열인지 확인.
+            한자/한글 비공백 이름의 부분문자열도 처리 (예: '공명' ⊂ '제갈공명').
+            """
             if short == long_n or len(short) < MIN_NAME_LEN:
                 return False
-            # 단일 토큰 매칭: "셜록" in ["셜록", "홈즈"] → True
+            # 공백 구분 단일 토큰 매칭: "셜록" in ["셜록", "홈즈"] → True
             if short in long_n.split():
                 return True
-            # 다중 토큰 매칭: "셜록 홈즈" in "위대한 셜록 홈즈" → True
+            # 공백 구분 다중 토큰 매칭: "셜록 홈즈" in "위대한 셜록 홈즈" → True
             if f' {short} ' in f' {long_n} ':
+                return True
+            # 비공백 이름의 부분문자열 매칭: "공명" ⊂ "제갈공명", "제갈" ⊂ "제갈공명"
+            # 두 이름 모두 공백 없는 단일 토큰이어야 함 (오탐 방지)
+            if ' ' not in long_n and ' ' not in short and short in long_n:
                 return True
             return False
 
@@ -1011,7 +1042,28 @@ Output Format (JSON List of Strings):
         - 안정성: JSON 파싱 오류 원천 차단
         """
         print("[Aggregation] 전역 엔티티 통합(Aggregation) 시작 (LLM 호출 생략)...")
-        
+
+        # ── Pass 1: 모든 씬에서 alias_registry 구축 ──────────────────────────────
+        # structure_scene이 aliases 필드를 반환하면, 별칭→정규이름 매핑을 미리 수집.
+        # 이후 Pass 2에서 같은 인물이 다른 호칭으로 등장할 때 자동으로 동일 엔트리로 합산.
+        alias_registry: dict = {}  # normalized_alias → canonical_name
+        for scene in structured_scenes:
+            for char in scene.characters:
+                if not isinstance(char, dict):
+                    continue
+                raw_name = char.get('name') or ''
+                if not raw_name:
+                    continue
+                canonical = self._normalize_character_name(raw_name)
+                for alias_raw in char.get('aliases') or []:
+                    if not alias_raw or not isinstance(alias_raw, str):
+                        continue
+                    alias_norm = self._normalize_character_name(alias_raw)
+                    if alias_norm and alias_norm != canonical and alias_norm not in alias_registry:
+                        alias_registry[alias_norm] = canonical
+        if alias_registry:
+            print(f"[Alias Registry] {len(alias_registry)}개 별칭 등록: {list(alias_registry.items())[:8]}")
+
         all_characters = {}
         all_items = {}
         all_locations = {}
@@ -1043,6 +1095,8 @@ Output Format (JSON List of Strings):
                     traits = char.get('traits') or []
 
                 name = self._normalize_character_name(raw_name)
+                # alias_registry에 등록된 별칭이면 정규 이름으로 리다이렉트
+                name = alias_registry.get(name, name)
                 if name not in all_characters:
                     all_characters[name] = {
                         "name": name,
@@ -1134,8 +1188,10 @@ Output Format (JSON List of Strings):
             # 4. Relationships 통합
             for rel in getattr(scene, 'relationships', []) or []:
                 if isinstance(rel, dict):
-                    src = self._normalize_character_name(rel.get('source', ''))
-                    tgt = self._normalize_character_name(rel.get('target', ''))
+                    src_raw = self._normalize_character_name(rel.get('source', ''))
+                    tgt_raw = self._normalize_character_name(rel.get('target', ''))
+                    src = alias_registry.get(src_raw, src_raw)
+                    tgt = alias_registry.get(tgt_raw, tgt_raw)
                     if src and tgt:
                         key = tuple(sorted([src, tgt]))
                         desc = rel.get('description', '')
