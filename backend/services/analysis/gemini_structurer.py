@@ -893,8 +893,8 @@ Output Format (JSON List of Strings):
 
     @staticmethod
     def _normalize_character_name(name: str) -> str:
-        """경칭/호칭 접미사, 역할 명사를 제거하여 인물 이름 정규화.
-        예: "어터슨 씨" → "어터슨", "Mr. Hyde" → "Hyde", "손권 사자" → "손권"
+        """경칭/호칭 접미사를 제거하여 인물 이름 정규화.
+        예: "어터슨 씨" → "어터슨", "Mr. Hyde" → "Hyde", "김 박사" → "김"
         """
         if not name or not isinstance(name, str):
             return name
@@ -918,23 +918,6 @@ Output Format (JSON List of Strings):
             if name.startswith(title + ' ') and len(name) > len(title) + 1:
                 name = name[len(title) + 1:].strip()
                 break
-
-        # 3. 역할/직위 명사가 마지막 단어로 붙은 경우 제거
-        #    예: "손권 사자" → "손권", "유비 사신" → "유비"
-        #    단, 제거 후 이름이 2자 이상인 경우에만 적용
-        kr_role_words = {
-            '사자', '사신',           # 使者/使臣 (messenger)
-            '장군', '대장', '장수',    # 将軍/大将/将帥 (general)
-            '태수', '자사', '제후',    # 太守/刺史/諸侯 (governor/lord)
-            '황제', '대왕', '왕',      # 皇帝/大王/王 (emperor/king)
-            '승상', '재상', '대신',    # 丞相/宰相/大臣 (prime minister)
-            '군사', '참모',            # 軍師/参謀 (strategist)
-        }
-        parts = name.split()
-        if len(parts) >= 2 and parts[-1] in kr_role_words:
-            candidate = ' '.join(parts[:-1]).strip()
-            if len(candidate) >= 2:
-                name = candidate
 
         return name
 
