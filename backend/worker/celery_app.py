@@ -21,7 +21,7 @@ celery_app.conf.update(
     timezone="Asia/Seoul",
     enable_utc=True,
     task_track_started=True,
-    task_time_limit=3600,  # 1시간
+    task_time_limit=21600,  # 6시간 (긴 소설 처리 대응)
 )
 
 
