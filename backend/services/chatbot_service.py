@@ -220,6 +220,7 @@ class ChatbotService:
                     
                 formatted_results.append({
                     'text': doc.get('original_text', ''),
+                    'matched_chunk': doc.get('matched_chunk', ''),
                     'scene_index': doc.get('scene_index'),
                     'chapter_id': res.get('chapter_id'),
                     'summary': doc.get('summary'),
@@ -238,6 +239,34 @@ class ChatbotService:
             logger.error(f"검색 중 예기치 않은 오류: {e}", exc_info=True)
             return []
     
+    @staticmethod
+    def _build_context_text(top_chunks: list) -> str:
+        """검색된 청크 목록에서 LLM 컨텍스트 문자열을 구성한다.
+
+        matched_chunk(검색에 매칭된 500자 child chunk)를 우선 사용하고,
+        없으면 original_text 앞 2000자를 fallback으로 사용한다.
+        씬 요약이 있으면 [씬 요약] 섹션으로 먼저 제공하여 LLM이
+        매칭 구절의 배경을 이해할 수 있도록 한다.
+        """
+        parts = []
+        for i, chunk in enumerate(top_chunks):
+            header = f"[Context {i+1}]"
+            if chunk.get('scene_index') is not None:
+                header += f" Scene {chunk['scene_index']}"
+
+            # matched_chunk: 실제 검색에 매칭된 500자 child chunk
+            # original_text가 수만 자여도 핵심 구절만 LLM에 전달
+            matched = chunk.get('matched_chunk', '').strip()
+            text_for_llm = matched if matched else chunk.get('text', '')[:2000]
+
+            summary = chunk.get('summary', '')
+            if summary and summary != '분석 실패':
+                entry = f"{header}\n[씬 요약] {summary}\n[관련 구절]\n{text_for_llm}"
+            else:
+                entry = f"{header}\n{text_for_llm}"
+            parts.append(entry)
+        return "\n\n".join(parts)
+
     def _build_rag_prompt(self, question: str, context: str, bible: str = "") -> str:
         """RAG Q&A 프롬프트 구성 (generate_answer/stream_answer 공유).
 
@@ -354,15 +383,7 @@ class ChatbotService:
                 logger.info(f"[Context][Stream] best_similarity={final_best:.4f} → 소설에서 관련 내용 없음")
                 return {"found_context": False, "context": "", "source": None, "similarity": final_best, "bible": "", "prompt_override": None}
 
-        context_texts = []
-        for i, chunk in enumerate(top_chunks):
-            header = f"[Context {i+1}]"
-            if chunk.get('scene_index') is not None:
-                header += f" Scene {chunk['scene_index']}"
-            if chunk.get('summary'):
-                header += f" (Summary: {chunk['summary']})"
-            context_texts.append(f"{header}\n{chunk['text']}")
-        context = "\n\n".join(context_texts)
+        context = self._build_context_text(top_chunks)
 
         best_chunk = top_chunks[0] if top_chunks else {}
         novel_title = self._get_novel_title(best_chunk['novel_id']) if best_chunk.get('novel_id') else "Unknown Novel"
@@ -619,16 +640,8 @@ class ChatbotService:
                     "found_context": False
                 }
 
-        # 6. 컨텍스트 생성 (상위 청크 텍스트 결합)
-        context_texts = []
-        for i, chunk in enumerate(top_chunks):
-            header = f"[Context {i+1}]"
-            if chunk.get('scene_index') is not None:
-                header += f" Scene {chunk['scene_index']}"
-            if chunk.get('summary'):
-                header += f" (Summary: {chunk['summary']})"
-            context_texts.append(f"{header}\n{chunk['text']}")
-        context = "\n\n".join(context_texts)
+        # 6. 컨텍스트 생성 (matched_chunk 우선 사용)
+        context = self._build_context_text(top_chunks)
 
         # 7. 바이블 조회 (항상)
         bible_summary = ""
