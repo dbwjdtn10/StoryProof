@@ -144,9 +144,14 @@ class GeminiStructurer:
   * **한 인물의 모든 호칭 변형을 aliases에 반드시 기록**: 이름·자(字)·별호·약칭을 모두 포함
     예) 제갈공명 → name: "제갈공명", aliases: ["제갈량", "공명"]
     예) 관우 → name: "관우", aliases: ["관운장", "운장", "관장군"]
-  * **역할·직위 표현은 이름이 아님**: "손권의 사자", "촉의 장수"처럼 역할로만 언급되는 인물은
-    고유 이름이 없으면 characters에서 생략하거나 "이름없는 사자"처럼 표기
-  * 동일 인물이 이 씬에서 여러 호칭으로 불려도 name은 하나로 통일
+    예) 유비 → name: "유비", aliases: ["유현덕", "현덕", "유황숙"]
+  * **"X의 Y" 형태의 역할 표현은 절대 characters에 포함 금지**:
+    "주유의 사자", "조조의 부하", "손권의 신하", "촉의 장수" 등 고유 이름 없이
+    조사 "의"로 연결된 역할/직위 표현은 인물이 아님. key_events에 역할로 기술할 것.
+    틀린 예) name: "주유의 사자" → 올바른 처리) key_events에 "주유의 사자가 도착했다"로 기술
+  * **동일 인물이 이 씬에서 여러 호칭으로 불릴 경우**: name은 하나로 통일하고 나머지는 aliases에 전부 기록
+    같은 씬에 "제갈량"과 "공명"이 모두 등장하면 → name: "제갈공명", aliases: ["제갈량", "공명"]
+  * 이름이 없는 군중(병사들, 백성들 등)은 characters에 포함하지 말 것
 - visual_description은 이미지 생성에 사용되므로, 소설 본문에서 언급된 외모/시각적 정보를 최대한 구체적으로 추출
 - relationships는 이 씬에서 상호작용하는 인물 쌍만 추출 (단순 언급은 제외)
 - summary에는 핵심 갈등이나 변화를 반드시 포함
@@ -945,6 +950,12 @@ Output Format (JSON List of Strings):
             # 비공백 이름의 부분문자열 매칭: "공명" ⊂ "제갈공명", "제갈" ⊂ "제갈공명"
             # 두 이름 모두 공백 없는 단일 토큰이어야 함 (오탐 방지)
             if ' ' not in long_n and ' ' not in short and short in long_n:
+                # 한국어 조사 "의" 패턴 제외: "주유" ⊂ "주유의사자" 같은 오탐 방지
+                idx = long_n.index(short)
+                suffix = long_n[idx + len(short):]
+                prefix = long_n[:idx]
+                if suffix.startswith('의') or prefix.endswith('의'):
+                    return False
                 return True
             return False
 
@@ -1014,15 +1025,133 @@ Output Format (JSON List of Strings):
 
         return all_characters, merged_into
 
+    def _deduplicate_characters_with_llm(self, all_characters: dict) -> dict:
+        """
+        LLM을 사용하여 캐릭터 중복 제거 및 역할 표현 필터링.
+        - 같은 인물이 다른 이름으로 등록된 경우 병합 (예: 제갈량 + 제갈공명 + 공명)
+        - 역할 표현("~의 사자", "~의 부하" 등)으로 잘못 등록된 인물 제거
+        """
+        if len(all_characters) <= 1:
+            return all_characters
+
+        char_list = []
+        for name, char in all_characters.items():
+            desc_snippet = (char.get('description') or '')[:80]
+            count = len(char.get('appearances') or [])
+            char_list.append({"name": name, "appearances": count, "desc": desc_snippet})
+
+        # 등장 횟수 기준으로 정렬 (주요 인물 먼저)
+        char_list.sort(key=lambda x: x['appearances'], reverse=True)
+
+        prompt = f"""소설에서 추출된 인물 목록입니다. 두 가지 작업을 수행하고 JSON으로만 응답하세요.
+
+인물 목록:
+{json.dumps(char_list, ensure_ascii=False, indent=2)}
+
+**작업 1 - 동일 인물 그룹화:**
+같은 인물이 다른 이름/호칭으로 중복 등록된 경우를 찾아 병합하세요.
+- canonical_name: 가장 완전하고 정식적인 이름 (등장 횟수가 많고 가장 완전한 이름 선택)
+- aliases: 병합할 다른 이름들
+- 역사 소설의 경우 이름(名)과 자(字)는 같은 인물: 예) 제갈량(名)+공명(字)=제갈공명
+- 확실히 같은 인물인 경우만 병합 (불확실하면 유지)
+
+**작업 2 - 역할 표현 제거:**
+고유 이름 없이 역할/직위만으로 이루어진 항목을 제거하세요.
+- "~의 사자", "~의 부하", "~의 장수", "~의 신하" 등 "X의 Y" 패턴
+- "이름없는 ~", "알 수 없는 ~" 등
+- 등장 횟수가 1-2회이고 설명이 역할 표현인 경우
+
+응답 형식 (변경 없는 인물은 포함 금지):
+{{
+  "merge_groups": [
+    {{"canonical": "정식 이름", "aliases": ["다른 이름1", "다른 이름2"]}}
+  ],
+  "remove": ["제거할 이름1", "제거할 이름2"]
+}}"""
+
+        try:
+            from google.genai import types
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    temperature=0.0,
+                    response_mime_type='application/json'
+                )
+            )
+            result = json.loads(response.text)
+
+            # ── 병합 처리 (제거보다 먼저: canonical이 실수로 remove에도 있어도 병합 우선) ──
+            merge_canonicals: set = set()  # 병합에 사용된 canonical은 remove에서 보호
+            merged = []
+            for group in result.get('merge_groups') or []:
+                canonical = group.get('canonical')
+                aliases = group.get('aliases') or []
+
+                # canonical이 all_characters에 없으면 aliases 중 등장 가장 많은 것으로 대체
+                if canonical and canonical not in all_characters:
+                    available = [a for a in aliases if a and a in all_characters]
+                    if available:
+                        canonical = max(available, key=lambda x: len(all_characters[x].get('appearances') or []))
+                    else:
+                        canonical = None
+
+                if not canonical or canonical not in all_characters:
+                    continue
+
+                merge_canonicals.add(canonical)
+                canonical_char = all_characters[canonical]
+                for alias_name in aliases:
+                    if not alias_name or alias_name == canonical or alias_name not in all_characters:
+                        continue
+                    alias_char = all_characters[alias_name]
+                    # aliases 합산
+                    for a in [alias_name] + (alias_char.get('aliases') or []):
+                        if a and a not in canonical_char['aliases']:
+                            canonical_char['aliases'].append(a)
+                    # appearances 합산
+                    for app in alias_char.get('appearances') or []:
+                        if app not in canonical_char['appearances']:
+                            canonical_char['appearances'].append(app)
+                    # traits 합산
+                    for trait in alias_char.get('traits') or []:
+                        norm = _normalize_trait(trait)
+                        existing = [_normalize_trait(e) for e in canonical_char.get('traits') or []]
+                        if norm not in existing:
+                            canonical_char['traits'].append(norm)
+                    # description/visual_description: 더 긴 것 유지
+                    if len(alias_char.get('description') or '') > len(canonical_char.get('description') or ''):
+                        canonical_char['description'] = alias_char['description']
+                    if len(alias_char.get('visual_description') or '') > len(canonical_char.get('visual_description') or ''):
+                        canonical_char['visual_description'] = alias_char['visual_description']
+                    del all_characters[alias_name]
+                    merged.append(f"{alias_name} → {canonical}")
+            if merged:
+                print(f"[LLM Dedup] 병합: {merged}")
+
+            # ── 제거 처리 (병합 후: canonical로 사용된 이름은 보호) ──
+            removed = []
+            for name_to_remove in result.get('remove') or []:
+                if name_to_remove in all_characters and name_to_remove not in merge_canonicals:
+                    del all_characters[name_to_remove]
+                    removed.append(name_to_remove)
+            if removed:
+                print(f"[LLM Dedup] 역할 표현 제거: {removed}")
+
+        except Exception as e:
+            print(f"[LLM Dedup] 실패 (무시하고 계속): {e}")
+
+        return all_characters
+
     def extract_global_entities(
         self,
         structured_scenes: List[StructuredScene],
         custom_system_prompt: Optional[str] = None
     ) -> Dict:
         """
-        [최적화됨] 별도의 Gemini 호출 없이, 각 씬에서 추출된 정보를 통합(Aggregation)하여 전역 엔티티 생성.
-        - 속도: 즉시 완료 (LLM 호출 제거)
-        - 안정성: JSON 파싱 오류 원천 차단
+        각 씬에서 추출된 정보를 통합(Aggregation)하여 전역 엔티티 생성.
+        - Aggregation: LLM 호출 없이 씬 데이터 즉시 병합
+        - 사후 중복 제거: LLM으로 같은 인물 다른 이름 병합 + 역할 표현 필터링
         """
         print("[Aggregation] 전역 엔티티 통합(Aggregation) 시작 (LLM 호출 생략)...")
 
@@ -1212,6 +1341,14 @@ Output Format (JSON List of Strings):
         # 별칭/부분명 병합: '셜록' + '홈즈' + '셜록 홈즈' → '셜록 홈즈' (aliases 포함)
         all_characters, merged_into = self._merge_alias_characters(all_characters)
 
+        # LLM 기반 사후 중복 제거: 같은 인물 다른 이름 병합 + 역할 표현 필터링
+        all_characters = self._deduplicate_characters_with_llm(all_characters)
+        # LLM 병합 결과도 merged_into에 반영 (관계도 업데이트용)
+        for name, char in list(all_characters.items()):
+            for alias in char.get('aliases') or []:
+                if alias not in merged_into and alias != name:
+                    merged_into[alias] = name
+
         # 관계도에서도 병합된 이름 반영
         if merged_into:
             new_relationships: dict = {}
@@ -1237,6 +1374,13 @@ Output Format (JSON List of Strings):
                         if s not in existing['scenes']:
                             existing['scenes'].append(s)
             all_relationships = new_relationships
+
+        # LLM으로 제거된 캐릭터의 고아 관계 정리 (merged_into 여부와 무관하게 항상 실행)
+        valid_char_names = set(all_characters.keys())
+        all_relationships = {
+            k: v for k, v in all_relationships.items()
+            if v.get('character1') in valid_char_names and v.get('character2') in valid_char_names
+        }
 
         # 결과 포맷팅 (리스트 변환 & 정렬)
 
