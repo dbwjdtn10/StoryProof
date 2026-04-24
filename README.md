@@ -61,3 +61,9 @@ backend/worker/tasks.py => 비동기 작업
 backend/api/v1/endpoints/analysis.py => API 작업
 
 backend/core/prompts.py => 프롬프트 작업 
+
+--
+## 정량적 지표 시각화
+https://story-proof-dash-bord.vercel.app/
+
+
