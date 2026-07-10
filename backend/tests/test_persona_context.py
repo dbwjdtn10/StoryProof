@@ -38,12 +38,13 @@ class TestPersonaContext(unittest.IsolatedAsyncioTestCase):
         # Chapter 2: Jekyll (has Analysis)
         # Chapter 3: Alice (No Analysis, but has Vectors)
         
+        # 페르소나 생성은 CHARACTER 타입 분석을 우선 조회한다 (_fetch_analysis_for_character)
         self.analysis_ch1 = Analysis(
-            novel_id=1, chapter_id=1, analysis_type="overall", status="completed",
+            novel_id=1, chapter_id=1, analysis_type="character", status="completed",
             result={"characters": [{"name": "Peter", "description": "Boy who never grows up"}]}
         )
         self.analysis_ch2 = Analysis(
-            novel_id=1, chapter_id=2, analysis_type="overall", status="completed",
+            novel_id=1, chapter_id=2, analysis_type="character", status="completed",
             result={"characters": [{"name": "Jekyll", "description": "Doctor"}]}
         )
         self.db.add_all([self.analysis_ch1, self.analysis_ch2])

@@ -6,7 +6,7 @@ StoryProof는 소설 텍스트를 구조적으로 분석(인물, 사건, 장소)
 
 ## 주요 기능
 
-- **소설 업로드 및 관리**: txt/docx/pdf 파일 업로드, 챕터 단위 관리 및 병합
+- **소설 업로드 및 관리**: txt/docx/pdf/epub 파일 업로드, 챕터 단위 관리 및 병합
 - **스토리보드 분석**: 업로드된 텍스트를 자동으로 청킹 → 구조 분석 → 벡터 임베딩 (Celery 비동기 처리)
 - **RAG 챗봇**: 소설 내용 기반 Q&A (Vector + BM25 하이브리드 검색, 스트리밍 응답)
 - **캐릭터 채팅**: AI가 소설 속 캐릭터의 페르소나를 생성하고, 해당 캐릭터로서 대화
@@ -14,6 +14,9 @@ StoryProof는 소설 텍스트를 구조적으로 분석(인물, 사건, 장소)
 - **스토리 예측**: 현재 맥락을 기반으로 다음 전개 방향 예측
 - **이미지 생성**: Google Imagen API를 활용한 캐릭터/아이템/장소 이미지 생성
 - **테마 지원**: 라이트/다크/세피아 3종 테마
+- **B2B 파트너 API**: 인터넷서점/웹소설 플랫폼용 API 상품 (API 키 인증, 테넌트 격리, 사용량 계측/쿼터) → [docs/PARTNER_API.md](docs/PARTNER_API.md)
+
+> 사업화 발전방향: [docs/BUSINESS_ROADMAP.md](docs/BUSINESS_ROADMAP.md)
 
 ---
 
@@ -101,7 +104,17 @@ StoryProof/
 
 ## 설치 및 실행
 
-### 1. 프로젝트 설정
+### 빠른 시작 (Docker, 권장)
+
+```bash
+cp .env.example .env    # GOOGLE_API_KEY, PINECONE_API_KEY 입력
+docker compose up -d --build
+# 프론트엔드: http://localhost:3000 / API 문서: http://localhost:8000/docs
+```
+
+PostgreSQL, Redis, API 서버, Celery 워커, 프론트엔드(Nginx)가 한 번에 기동됩니다.
+
+### 1. 프로젝트 설정 (수동 설치)
 
 ```bash
 git clone https://github.com/dbwjdtn10/StoryProof.git
@@ -175,6 +188,16 @@ npm run dev
 | | GET | `/api/v1/prediction/task/{task_id}` | 예측 결과 조회 |
 | **이미지** | POST | `/api/v1/images/generate` | 엔티티 이미지 생성 |
 | **헬스** | GET | `/health` | 서버 상태 확인 |
+| **파트너 API** | POST | `/api/partner/v1/manuscripts` | 원고 접수 (X-API-Key 인증) |
+| | POST | `/api/partner/v1/manuscripts/upload` | 원고 파일 접수 (EPUB 자동 회차 분리) |
+| | GET | `/api/partner/v1/manuscripts/{id}/status` | 처리 상태 조회 |
+| | PUT/GET/DELETE | `/api/partner/v1/webhook` | 웹훅 등록/조회/해제 (완료 이벤트 push) |
+| | POST | `/api/partner/v1/widget-sessions` | 임베드 위젯용 세션 토큰 발급 |
+| **위젯 API** | POST | `/api/widget/v1/qa` | 임베드 위젯 Q&A (세션 토큰 인증) |
+| | POST | `/api/partner/v1/manuscripts/{id}/qa` | 작품 Q&A (스포일러 방지 회차 필터) |
+| | POST | `/api/partner/v1/manuscripts/{id}/consistency` | 설정 일관성 검증 |
+| | GET | `/api/partner/v1/usage` | 사용량/쿼터 조회 |
+| **파트너 관리** | POST | `/api/v1/admin/partners` | 파트너 등록 + API 키 발급 (관리자) |
 
 ---
 

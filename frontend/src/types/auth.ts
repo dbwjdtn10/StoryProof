@@ -25,6 +25,7 @@ export interface TokenResponse {
     token_type: string;
     refresh_token: string;
     user_mode: 'reader' | 'writer';
+    is_admin?: boolean;
 }
 
 export interface UserResponse extends User { }

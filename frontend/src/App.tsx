@@ -21,10 +21,11 @@ const ChapterDetail = lazy(() => import('./components/ChapterDetail').then(m => 
 const FileUpload = lazy(() => import('./components/FileUpload').then(m => ({ default: m.FileUpload })));
 const CharacterChatBot = lazy(() => import('./components/CharacterChatBot').then(m => ({ default: m.CharacterChatBot })));
 const LandingPage = lazy(() => import('./components/LandingPage').then(m => ({ default: m.LandingPage })));
+const AdminDashboard = lazy(() => import('./components/AdminDashboard').then(m => ({ default: m.AdminDashboard })));
 
 const SPLASH_IMAGES = [splashImg1, splashImg2, splashImg3, splashImg4, splashImg5];
 
-type Screen = 'landing' | 'login' | 'signup' | 'upload' | 'chapterDetail';
+type Screen = 'landing' | 'login' | 'signup' | 'upload' | 'chapterDetail' | 'admin';
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState<Screen>('landing');
@@ -32,6 +33,9 @@ export default function App() {
   const [selectedChapterId, setSelectedChapterId] = useState<number | undefined>(undefined);
   const [currentNovel, setCurrentNovel] = useState<Novel | null>(null);
   const [showChatBot, setShowChatBot] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(
+    (localStorage.getItem('isAdmin') || sessionStorage.getItem('isAdmin')) === 'true'
+  );
 
   // 서버 준비 상태 (AI 모델 로딩)
   const [isServerReady, setIsServerReady] = useState(false);
@@ -86,6 +90,8 @@ export default function App() {
           headers: { 'Authorization': `Bearer ${token}` },
         });
         if (!res.ok) throw new Error('Token invalid');
+        const profile = await res.json();
+        setIsAdmin(!!profile.is_admin);
 
         if (savedMode) setUserMode(savedMode);
 
@@ -138,13 +144,16 @@ export default function App() {
         // 로그인 유지: localStorage (브라우저 닫아도 유지) + 플래그
         localStorage.setItem('token', tokenResponse.access_token);
         localStorage.setItem('userMode', tokenResponse.user_mode);
+        localStorage.setItem('isAdmin', String(!!tokenResponse.is_admin));
         localStorage.setItem('remembered', 'true');
       } else {
         // 일반 로그인: sessionStorage (탭 닫으면 삭제)
         sessionStorage.setItem('token', tokenResponse.access_token);
         sessionStorage.setItem('userMode', tokenResponse.user_mode);
+        sessionStorage.setItem('isAdmin', String(!!tokenResponse.is_admin));
       }
       setUserMode(tokenResponse.user_mode);
+      setIsAdmin(!!tokenResponse.is_admin);
 
       try {
         const novelsResponse = await getNovels();
@@ -242,6 +251,22 @@ export default function App() {
     );
   }
 
+  // Admin Dashboard Screen (관리자 전용 — 백엔드에서도 require_admin으로 이중 차단)
+  if (currentScreen === 'admin') {
+    return (
+      <ErrorBoundary>
+        <Suspense fallback={
+          <div className="skeleton-loader">
+            <div className="skeleton-bar skeleton-wide" />
+            <div className="skeleton-bar skeleton-narrow" />
+          </div>
+        }>
+          <AdminDashboard onBack={() => setCurrentScreen('upload')} />
+        </Suspense>
+      </ErrorBoundary>
+    );
+  }
+
   // Upload Screen
   if (currentScreen === 'upload') {
     return (
@@ -261,6 +286,22 @@ export default function App() {
             novelId={currentNovel?.id}
             mode={userMode}
           />
+          {isAdmin && (
+            <button
+              onClick={() => setCurrentScreen('admin')}
+              title="파트너 관리 (관리자)"
+              style={{
+                position: 'fixed', bottom: '24px', left: '24px', zIndex: 50,
+                padding: '10px 16px', borderRadius: '999px', border: 'none',
+                background: '#4F46E5', color: '#fff', cursor: 'pointer',
+                fontSize: '0.85rem', fontWeight: 600,
+                boxShadow: '0 4px 12px rgba(79, 70, 229, 0.35)',
+                display: 'flex', alignItems: 'center', gap: '6px',
+              }}
+            >
+              🏢 파트너 관리
+            </button>
+          )}
         </Suspense>
       </ErrorBoundary>
     );

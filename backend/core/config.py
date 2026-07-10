@@ -102,7 +102,7 @@ class Settings(BaseSettings):
     # ===== 파일 업로드 설정 =====
     UPLOAD_DIR: str = "./data/uploads"
     MAX_UPLOAD_SIZE: int = 10 * 1024 * 1024  # 10MB
-    ALLOWED_EXTENSIONS: list[str] = [".txt", ".docx", ".pdf"]
+    ALLOWED_EXTENSIONS: list[str] = [".txt", ".docx", ".pdf", ".epub"]
     
     # ===== 로깅 설정 =====
     LOG_LEVEL: str = "INFO"
@@ -150,11 +150,19 @@ class Settings(BaseSettings):
     def is_development(self) -> bool:
         """
         개발 환경 여부 확인
-        
+
         Returns:
             bool: 개발 환경이면 True
         """
         return self.ENVIRONMENT == "development"
+
+    def model_post_init(self, __context) -> None:
+        """프로덕션 환경에서 기본 SECRET_KEY 사용 차단 (배포 사고 방지)"""
+        if self.is_production() and self.SECRET_KEY == "your-secret-key-change-this-in-production":
+            raise ValueError(
+                "ENVIRONMENT=production인데 SECRET_KEY가 기본값입니다. "
+                ".env에서 SECRET_KEY를 반드시 변경하세요."
+            )
 
 
 # 전역 설정 인스턴스

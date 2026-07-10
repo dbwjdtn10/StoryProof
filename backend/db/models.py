@@ -146,8 +146,8 @@ class Analysis(Base):
     analysis_type = Column(Enum(AnalysisType, values_callable=lambda obj: [e.value for e in obj]), nullable=False)
     status = Column(Enum(AnalysisStatus, values_callable=lambda obj: [e.value for e in obj]), default=AnalysisStatus.PENDING)
     
-    # 분석 결과 (JSONB 형태로 저장하여 유연한 쿼리 지원)
-    result = Column(JSONB, nullable=True)
+    # 분석 결과 (JSONB 형태로 저장하여 유연한 쿼리 지원, SQLite 테스트 환경에서는 JSON)
+    result = Column(JSONB().with_variant(JSON(), "sqlite"), nullable=True)
     
     # 에러 정보
     error_message = Column(Text, nullable=True)
@@ -243,6 +243,89 @@ class CharacterChatRoom(Base):
     
     def __repr__(self):
         return f"<CharacterChatRoom(id={self.id}, character={self.character_name})>"
+
+
+class Partner(Base):
+    """B2B 파트너 모델 (인터넷서점/웹소설 플랫폼 등 API 고객사)
+
+    각 파트너는 전용 서비스 계정(User)을 가지며, 파트너 API로 생성된
+    소설/분석 데이터는 모두 해당 서비스 계정 소유로 격리된다.
+    """
+    __tablename__ = "partners"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), unique=True, nullable=False, index=True)
+    contact_email = Column(String(255), nullable=False)
+
+    plan = Column(String(50), default="starter", nullable=False)  # starter / pro / enterprise
+    monthly_quota = Column(Integer, default=10000, nullable=False)  # 월간 API 호출 한도
+    rate_limit_per_minute = Column(Integer, default=60, nullable=False)
+
+    is_active = Column(Boolean, default=True, nullable=False)
+
+    # 웹훅 설정 (처리 완료 이벤트를 파트너 서버로 push, HMAC-SHA256 서명)
+    webhook_url = Column(String(500), nullable=True)
+    webhook_secret = Column(String(64), nullable=True)
+
+    # 파트너 전용 서비스 계정 (기존 소유권 모델 재사용을 위한 테넌트 경계)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, unique=True)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    user = relationship("User", backref="partner")
+    api_keys = relationship("PartnerApiKey", back_populates="partner", cascade="all, delete-orphan")
+    usage_logs = relationship("ApiUsageLog", back_populates="partner", cascade="all, delete-orphan")
+
+    def __repr__(self):
+        return f"<Partner(id={self.id}, name={self.name}, plan={self.plan})>"
+
+
+class PartnerApiKey(Base):
+    """파트너 API 키 모델 (원본 키는 저장하지 않고 SHA-256 해시만 저장)"""
+    __tablename__ = "partner_api_keys"
+
+    id = Column(Integer, primary_key=True, index=True)
+    partner_id = Column(Integer, ForeignKey("partners.id"), nullable=False, index=True)
+
+    name = Column(String(100), nullable=False, default="default")
+    key_prefix = Column(String(20), nullable=False)  # 표시용 앞부분 (예: sp_live_a1b2)
+    key_hash = Column(String(64), unique=True, index=True, nullable=False)
+
+    is_active = Column(Boolean, default=True, nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+    last_used_at = Column(DateTime(timezone=True), nullable=True)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    partner = relationship("Partner", back_populates="api_keys")
+
+    def __repr__(self):
+        return f"<PartnerApiKey(id={self.id}, partner_id={self.partner_id}, prefix={self.key_prefix})>"
+
+
+class ApiUsageLog(Base):
+    """파트너 API 사용량 로그 (과금/정산 근거 데이터)"""
+    __tablename__ = "api_usage_logs"
+    __table_args__ = (
+        Index('ix_usage_partner_created', 'partner_id', 'created_at'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    partner_id = Column(Integer, ForeignKey("partners.id"), nullable=False, index=True)
+    api_key_id = Column(Integer, ForeignKey("partner_api_keys.id"), nullable=True)
+
+    endpoint = Column(String(255), nullable=False)
+    method = Column(String(10), nullable=False, default="POST")
+    units = Column(Integer, nullable=False, default=1)  # 과금 단위 (예: 분석 챕터 수)
+    status_code = Column(Integer, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    partner = relationship("Partner", back_populates="usage_logs")
+
+    def __repr__(self):
+        return f"<ApiUsageLog(id={self.id}, partner_id={self.partner_id}, endpoint={self.endpoint})>"
 
 
 class CharacterChatMessage(Base):

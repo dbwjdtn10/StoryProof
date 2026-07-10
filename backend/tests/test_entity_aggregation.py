@@ -23,6 +23,7 @@ class TestEntityAggregation(unittest.TestCase):
                 {"name": "Alice", "description": None, "traits": None}, # Explicit None
                 {"name": "Bob"} # Missing keys
             ],
+            relationships=[],
             locations=[
                 {"name": "Forest", "description": None}
             ],

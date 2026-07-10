@@ -5,7 +5,7 @@ FastAPI 메인 애플리케이션 진입점
 - CORS, 미들웨어 설정
 """
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
@@ -22,7 +22,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ... (Previous imports)
-from backend.api.v1.endpoints import auth, novel, chat, analysis, prediction, character_chat, images
+from backend.api.v1.endpoints import auth, novel, chat, analysis, prediction, character_chat, images, partner_admin
+from backend.api.partner import v1 as partner_v1
+from backend.api.widget import v1 as widget_v1
 from backend.core.config import settings
 from backend.db.session import engine, init_db
 
@@ -116,12 +118,42 @@ def register_routers() -> None:
     app.include_router(prediction.router, prefix="/api/v1/prediction", tags=["Prediction"])
     app.include_router(character_chat.router, prefix="/api/v1/character-chat", tags=["CharacterChat"])
     app.include_router(images.router, prefix="/api/v1/images", tags=["Images"])
+    # B2B 파트너 API (X-API-Key 인증) 및 파트너 관리 (관리자 전용)
+    app.include_router(partner_v1.router, prefix="/api/partner/v1", tags=["Partner API"])
+    app.include_router(partner_admin.router, prefix="/api/v1/admin/partners", tags=["Partner Admin"])
+    # 임베드 위젯 공개 API (위젯 세션 토큰 인증, 파트너 도메인에서 호출)
+    app.include_router(widget_v1.router, prefix="/api/widget/v1", tags=["Widget API"])
     logger.info("Routers registered")
 
 
 # 설정 적용 (순서 중요: CORS를 마지막에 - 역순으로 실행되므로 먼저 처리됨)
 register_routers()
 configure_cors()
+
+
+@app.middleware("http")
+async def widget_cors_middleware(request: Request, call_next):
+    """임베드 위젯 경로(/api/widget/*) 전용 CORS
+
+    위젯은 임의의 파트너 도메인에서 로드되므로 모든 origin을 허용한다.
+    쿠키가 아닌 Bearer 세션 토큰 인증이므로 Allow-Origin: * 이 안전하다.
+    (configure_cors 이후에 등록되어 전역 CORS보다 먼저 실행됨 →
+     허용 목록에 없는 파트너 도메인의 preflight가 여기서 처리된다)
+    """
+    if request.url.path.startswith("/api/widget/"):
+        cors_headers = {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Authorization, Content-Type",
+            "Access-Control-Max-Age": "3600",
+        }
+        if request.method == "OPTIONS":
+            return Response(status_code=204, headers=cors_headers)
+        response = await call_next(request)
+        for key, value in cors_headers.items():
+            response.headers[key] = value
+        return response
+    return await call_next(request)
 
 
 @app.get("/")

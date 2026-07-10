@@ -20,6 +20,8 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from backend.db.session import get_db
+from backend.db.models import Novel
+from backend.core.security import get_current_user
 from backend.schemas.chat_schema import (
     ChatQuestionRequest, ChatAnswerResponse
 )
@@ -29,11 +31,21 @@ from backend.services.chatbot_service import get_chatbot_service
 router = APIRouter()
 
 
+def _verify_novel_access(db: Session, novel_id: int, user) -> None:
+    """소설 존재 여부 및 접근 권한 확인 (작가 본인 또는 공개 소설)"""
+    novel = db.query(Novel).filter(Novel.id == novel_id).first()
+    if not novel:
+        raise HTTPException(status_code=404, detail="소설을 찾을 수 없습니다.")
+    if novel.author_id != user.id and not novel.is_public:
+        raise HTTPException(status_code=403, detail="권한이 없습니다.")
+
+
 # ===== 챗봇 Q&A =====
 
 @router.post("/ask", response_model=ChatAnswerResponse)
 def ask_question(
     request: ChatQuestionRequest,
+    current_user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -47,6 +59,8 @@ def ask_question(
     """
     if not request.novel_id and not request.novel_filter:
         raise HTTPException(status_code=400, detail="novel_id 또는 novel_filter가 필요합니다.")
+    if request.novel_id:
+        _verify_novel_access(db, request.novel_id, current_user)
     chatbot = get_chatbot_service()
     result = chatbot.ask(
         question=request.question,
@@ -63,6 +77,7 @@ def ask_question(
 @router.post("/ask/stream")
 async def ask_question_stream(
     request: ChatQuestionRequest,
+    current_user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -76,6 +91,8 @@ async def ask_question_stream(
     """
     if not request.novel_id and not request.novel_filter:
         raise HTTPException(status_code=400, detail="novel_id 또는 novel_filter가 필요합니다.")
+    if request.novel_id:
+        _verify_novel_access(db, request.novel_id, current_user)
     chatbot = get_chatbot_service()
     loop = asyncio.get_running_loop()
 

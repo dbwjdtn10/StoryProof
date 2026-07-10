@@ -7,9 +7,11 @@ export function getToken(): string | null {
 export function clearAuth() {
     localStorage.removeItem('token');
     localStorage.removeItem('userMode');
+    localStorage.removeItem('isAdmin');
     localStorage.removeItem('remembered');
     sessionStorage.removeItem('token');
     sessionStorage.removeItem('userMode');
+    sessionStorage.removeItem('isAdmin');
 }
 
 export async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {

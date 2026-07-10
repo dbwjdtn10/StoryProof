@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StoryProof 위젯 데모 — 파트너 뷰어 시뮬레이션</title>
+<style>
+    body { font-family: -apple-system, "Malgun Gothic", sans-serif; margin: 0; background: #F8F7F5; color: #1c1917; }
+    .demo-bar { background: #1c1917; color: #fff; padding: 14px 20px; font-size: 13px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .demo-bar input { flex: 1; min-width: 240px; padding: 8px 10px; border-radius: 8px; border: none; font-size: 12px; }
+    .demo-bar button { padding: 8px 16px; border-radius: 8px; border: none; background: #4F46E5; color: #fff; cursor: pointer; font-weight: 600; }
+    .viewer { max-width: 680px; margin: 32px auto; background: #fff; padding: 48px; border-radius: 12px; line-height: 1.9; box-shadow: 0 2px 12px rgba(0,0,0,.06); }
+    .viewer h1 { font-size: 1.3rem; }
+    .viewer .ep { color: #78716c; font-size: .85rem; margin-bottom: 24px; }
+    .note { max-width: 680px; margin: 0 auto 40px; font-size: .8rem; color: #a8a29e; text-align: center; }
+</style>
+</head>
+<body>
+    <!-- 데모 컨트롤: 파트너 서버가 발급한 위젯 세션 토큰을 붙여넣어 테스트 -->
+    <div class="demo-bar">
+        <b>StoryProof 위젯 데모</b>
+        <input id="token" placeholder="위젯 세션 토큰 붙여넣기 (POST /api/partner/v1/widget-sessions 응답의 token)">
+        <button onclick="loadWidget()">위젯 로드</button>
+    </div>
+
+    <!-- 파트너 뷰어 페이지 시뮬레이션 -->
+    <div class="viewer">
+        <h1>달빛 조각사</h1>
+        <div class="ep">제3화 — 각성</div>
+        <p>위드는 조각칼을 내려놓았다. 손끝에 남은 나무 부스러기가 달빛에 희미하게 빛났다.
+        길드를 떠난 지 벌써 세 달. 그동안 그가 깎아낸 것은 목각 인형만이 아니었다.</p>
+        <p>"이제 시작이다."</p>
+        <p>그의 눈앞에 떠오른 반투명한 창에는 지금껏 본 적 없는 문구가 새겨져 있었다…</p>
+    </div>
+
+    <div class="note">
+        우측 하단 💬 버튼이 임베드 위젯입니다.<br>
+        파트너 사이트에는 <code>&lt;script src=".../storyproof-widget.js" data-token="..."&gt;&lt;/script&gt;</code> 한 줄만 삽입하면 됩니다.
+    </div>
+
+    <script src="/static/widget/storyproof-widget.js"></script>
+    <script>
+        function loadWidget() {
+            var token = document.getElementById('token').value.trim();
+            if (!token) { alert('위젯 세션 토큰을 입력하세요.'); return; }
+            StoryProofWidget.destroy();
+            StoryProofWidget.init({
+                token: token,
+                apiBase: window.location.origin,
+                title: '달빛 조각사',
+            });
+            StoryProofWidget.open();
+        }
+    </script>
+</body>
+</html>

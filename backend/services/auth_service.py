@@ -87,7 +87,8 @@ class AuthService:
             "token_type": "bearer",
             "refresh_token": refresh_token,
             "user_mode": user.user_mode,
-            "expires_in": expires_in_sec
+            "expires_in": expires_in_sec,
+            "is_admin": bool(user.is_admin),
         }
 
     @staticmethod

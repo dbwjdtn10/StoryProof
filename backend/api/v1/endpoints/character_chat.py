@@ -25,14 +25,35 @@ from backend.schemas.character_chat_schema import (
 # Setup logger (must be before genai import attempt)
 logger = logging.getLogger(__name__)
 
-# Initialize Gemini Client
+# Gemini Client (lazy 초기화 - API 키 없이도 서버는 부팅 가능)
 try:
     from google import genai
     from google.genai import types
-    client = genai.Client(api_key=settings.GOOGLE_API_KEY)
 except ImportError:
-    client = None
+    genai = None
     logger.warning("Warning: google-genai not installed or configured.")
+
+_client = None
+
+
+class _LazyGeminiClient:
+    """모듈 import 시점이 아닌 첫 사용 시점에 Gemini Client를 생성하는 프록시"""
+
+    def __getattr__(self, name):
+        global _client
+        if name != "models":
+            # 실제 API 속성(models) 외의 접근(introspection 등)은 초기화 없이 거부
+            raise AttributeError(name)
+        if _client is None:
+            if genai is None:
+                raise HTTPException(status_code=503, detail="google-genai 라이브러리가 설치되지 않았습니다.")
+            if not settings.GOOGLE_API_KEY:
+                raise HTTPException(status_code=503, detail="GOOGLE_API_KEY가 설정되지 않았습니다.")
+            _client = genai.Client(api_key=settings.GOOGLE_API_KEY)
+        return getattr(_client, name)
+
+
+client = _LazyGeminiClient()
 
 
 

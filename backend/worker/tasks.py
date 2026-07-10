@@ -200,13 +200,31 @@ def process_chapter_storyboard(novel_id: int, chapter_id: int):
         chapter.storyboard_message = "처리 완료"
         chapter.storyboard_completed_at = datetime.utcnow()
         db.commit()
-        
+
         update_chapter_progress(chapter_id, 100, "COMPLETED", "✓ 처리 완료")
-        
+
+        # 파트너 웹훅 알림 (파트너 소유 원고인 경우에만 전송됨)
+        from backend.services.webhook_service import notify_partner_event
+        notify_partner_event(db, novel_id, "manuscript.chapter.completed", {
+            "chapter_id": chapter_id,
+            "chapter_number": chapter.chapter_number,
+            "status": "COMPLETED",
+        })
+
     except Exception as e:
         error_msg = f"스토리보드 처리 중 오류: {str(e)}"
         logger.error(f"[Task Error] Chapter {chapter_id}: {error_msg}", exc_info=True)
         update_chapter_progress(chapter_id, 0, "FAILED", error_msg)
+        try:
+            from backend.services.webhook_service import notify_partner_event
+            with get_db_session() as hook_db:
+                notify_partner_event(hook_db, novel_id, "manuscript.chapter.failed", {
+                    "chapter_id": chapter_id,
+                    "status": "FAILED",
+                    "error": error_msg,
+                })
+        except Exception as hook_exc:
+            logger.warning(f"실패 웹훅 전송 중 오류 (무시): {hook_exc}")
     finally:
         if db:
             db.close()
@@ -509,6 +527,16 @@ def detect_inconsistency_task(self, novel_id: int, text_fragment: str, chapter_i
                 analysis.completed_at = datetime.utcnow()
                 db.commit()
 
+        # 파트너 웹훅 알림 (파트너 소유 원고인 경우에만 전송됨)
+        if db:
+            from backend.services.webhook_service import notify_partner_event
+            notify_partner_event(db, novel_id, "analysis.consistency.completed", {
+                "analysis_id": analysis_id,
+                "chapter_id": chapter_id,
+                "status": "COMPLETED",
+                "result": result,
+            })
+
         return result
     except Exception as exc:
         # DB 상태 업데이트: FAILED
@@ -525,6 +553,21 @@ def detect_inconsistency_task(self, novel_id: int, text_fragment: str, chapter_i
             except Exception as db_exc:
                 logger.warning(f"설정 일관성 검사 실패 DB 상태 업데이트 중 오류: {db_exc}")
         logger.error(f"설정 일관성 검사 실패: {exc}")
+
+        # 재시도 소진 시에만 실패 웹훅 전송 (재시도마다 중복 알림 방지)
+        if self.request.retries >= self.max_retries:
+            try:
+                from backend.services.webhook_service import notify_partner_event
+                with get_db_session() as hook_db:
+                    notify_partner_event(hook_db, novel_id, "analysis.consistency.failed", {
+                        "analysis_id": analysis_id,
+                        "chapter_id": chapter_id,
+                        "status": "FAILED",
+                        "error": str(exc),
+                    })
+            except Exception as hook_exc:
+                logger.warning(f"실패 웹훅 전송 중 오류 (무시): {hook_exc}")
+
         raise self.retry(exc=exc, countdown=min(30 * (2 ** self.request.retries), 300))
     finally:
         if db:

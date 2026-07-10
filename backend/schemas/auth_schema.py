@@ -42,6 +42,7 @@ class TokenResponse(BaseModel):
     token_type: str = Field(default="bearer", description="토큰 타입")
     user_mode: str = Field(..., description="사용자 모드 (reader/writer)")
     expires_in: int = Field(..., description="만료 시간 (초)")
+    is_admin: bool = Field(default=False, description="관리자 여부 (관리 대시보드 접근용)")
 
 
 class TokenRefresh(BaseModel):
@@ -58,6 +59,7 @@ class UserProfile(BaseModel):
     username: str
     is_active: bool
     is_verified: bool
+    is_admin: bool = False
     user_mode: str
     created_at: datetime
     last_login: Optional[datetime] = None

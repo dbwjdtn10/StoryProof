@@ -363,6 +363,14 @@ class NovelService:
         if filename.endswith(".docx"):
             return NovelService._extract_docx_text(raw_data)
 
+        # EPUB 파일 처리 (전자책 표준 포맷)
+        if filename.endswith(".epub"):
+            from backend.services.analysis.epub_loader import extract_epub_text
+            try:
+                return extract_epub_text(raw_data)
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e))
+
         # TXT 및 기타 텍스트 파일 처리
         # 1. chardet으로 감지
         result = chardet.detect(raw_data)

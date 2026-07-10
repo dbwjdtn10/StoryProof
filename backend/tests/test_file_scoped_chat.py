@@ -38,7 +38,7 @@ class TestFileScopedChat(unittest.IsolatedAsyncioTestCase):
         # Create Dummy Data
         # User needs to be consistent with auth dependency if strictly enforced, 
         # but for unit testing internal functions we just need DB data.
-        self.user = User(email="test@test.com", username="test", hashed_password="pw", mode="writer")
+        self.user = User(email="test@test.com", username="test", hashed_password="pw", user_mode="writer")
         self.db.add(self.user)
         self.novel = Novel(title="Test Novel", author_id=1)
         self.db.add(self.novel)
@@ -108,7 +108,9 @@ class TestFileScopedChat(unittest.IsolatedAsyncioTestCase):
         # So mocking find_similar_chunks is correct.
         
         # Act: Send message to Room 1 (Chapter 1)
-        msg_create = CharacterChatMessageCreate(content="Hello")
+        # 주의: 5자 이하 단순 메시지는 RAG를 건너뛰므로 (_is_simple_message)
+        # 검색이 실제로 수행되도록 충분히 긴 질문을 사용한다.
+        msg_create = CharacterChatMessageCreate(content="What happened in the forest yesterday?")
         await send_message(room_id=self.room1.id, message=msg_create, db=self.db)
         
         # Assert: Check if chapter_id was passed to finding chunks

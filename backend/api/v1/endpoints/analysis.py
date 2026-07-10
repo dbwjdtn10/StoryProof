@@ -65,6 +65,11 @@ def request_consistency(
 
     Analysis 레코드를 생성하고 Celery 작업으로 비동기 처리합니다.
     """
+    # 소설 소유권 확인
+    novel = db.query(Novel).filter(Novel.id == request.novel_id).first()
+    if not novel or (novel.author_id != current_user.id and not novel.is_public):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="권한이 없습니다.")
+
     # Analysis 레코드 생성 (PENDING)
     analysis = Analysis(
         novel_id=request.novel_id,
