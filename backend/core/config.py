@@ -83,6 +83,7 @@ class Settings(BaseSettings):
 
     # ===== 검색 설정 =====
     SEARCH_DEFAULT_ALPHA: float = 0.7            # Vector 70%, BM25 30% (한국어 키워드 매칭 강화)
+    SEARCH_MIN_BM25_CORPUS_SIZE: int = 5         # 코퍼스가 이보다 작으면 BM25 정규화가 0에 수렴 → dense-only(alpha=1.0)로 폴백
     SEARCH_DEFAULT_SIMILARITY_THRESHOLD: float = 0.2  # Reranker 도입으로 기준 하향
     SEARCH_DEFAULT_TOP_K: int = 12               # 검색 후보 수 (top_k 증가로 더 넓은 컨텍스트 확보)
     SEARCH_CONTEXT_MAX_CHARS: int = 8000         # Gemini 컨텍스트 최대 길이 (top_k 증가에 맞춰 확대)

@@ -259,15 +259,16 @@ class EmbeddingSearchEngine:
         return chunks
 
     def embed_text(self, text: str) -> List[float]:
-        """텍스트를 임베딩 벡터로 변환"""
+        """쿼리 텍스트를 임베딩 벡터로 변환 (e5 계열 모델은 'query: ' 프리픽스 필요)"""
         model = self._get_model()
-        embedding = model.encode(text, normalize_embeddings=True)
+        embedding = model.encode(f"query: {text}", normalize_embeddings=True)
         return embedding.tolist()
 
     def embed_texts_batch(self, texts: List[str], batch_size: int = 32) -> List[List[float]]:
-        """여러 텍스트를 배치로 임베딩 변환 (개별 호출 대비 30-40x 빠름)"""
+        """여러 문서(패시지) 텍스트를 배치로 임베딩 변환 (e5 계열 모델은 'passage: ' 프리픽스 필요)"""
         model = self._get_model()
-        embeddings = model.encode(texts, normalize_embeddings=True, batch_size=batch_size)
+        prefixed_texts = [f"passage: {t}" for t in texts]
+        embeddings = model.encode(prefixed_texts, normalize_embeddings=True, batch_size=batch_size)
         return embeddings.tolist()
 
     def delete_chapter_vectors(self, novel_id: int, chapter_id: int):
@@ -459,13 +460,15 @@ class EmbeddingSearchEngine:
         # --- 2. Sparse Search (BM25) ---
         sparse_scores_dict = {}
         sparse_top_parents = []
-        
+        bm25_corpus_size = 0
+
         if novel_id:
             self._init_bm25(novel_id)
             bm25 = _global_bm25_map.get(novel_id)
             corpus_indices = _global_corpus_indices_map.get(novel_id)
-            
+
             if bm25 and corpus_indices:
+                bm25_corpus_size = len(corpus_indices)
                 if keywords:
                     tokenized_query = keywords
                 else:
@@ -541,11 +544,21 @@ class EmbeddingSearchEngine:
                     continue
 
         # --- 3. Result Merging & Scoring ---
+        # 코퍼스가 작으면(문서 수 < 임계값) BM25 min-max 정규화가 0으로 수렴해
+        # sparse_weight(기본 30%)가 구조적으로 낭비되어 하이브리드 점수가
+        # dense_weight(0.7)에 갇힌다. 이 경우 dense 가중치를 1.0으로 보정해
+        # 최종 답변 게이트(CHATBOT_MIN_ANSWER_SIMILARITY)를 정상적으로 겨룰 수 있게 한다.
+        sparse_has_signal = any(v > 0 for v in sparse_scores_dict.values())
+        if bm25_corpus_size < settings.SEARCH_MIN_BM25_CORPUS_SIZE or not sparse_has_signal:
+            effective_dense_weight, effective_sparse_weight = 1.0, 0.0
+        else:
+            effective_dense_weight, effective_sparse_weight = alpha, (1.0 - alpha)
+
         combined_candidates = self._merge_results(
             dense_matches=dense_matches,
             sparse_scores_dict=sparse_scores_dict,
-            dense_weight=alpha,
-            sparse_weight=(1.0 - alpha)
+            dense_weight=effective_dense_weight,
+            sparse_weight=effective_sparse_weight
         )
         
         # --- 4. Reranking (Cross-Encoder) ---
