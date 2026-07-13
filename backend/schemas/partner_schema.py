@@ -135,6 +135,10 @@ class PartnerCreateRequest(BaseModel):
     plan: str = Field("starter", pattern="^(starter|pro|enterprise)$")
     monthly_quota: int = Field(10000, ge=1)
     rate_limit_per_minute: int = Field(60, ge=1)
+    content_retention_mode: str = Field(
+        "full", pattern="^(full|minimal)$",
+        description="minimal: 원고 처리 완료 직후 원문 전체를 삭제하고 벡터+청크만 보관 (콘텐츠 보안 계약용)",
+    )
 
 
 class ApiKeyOut(BaseModel):
@@ -156,6 +160,7 @@ class PartnerOut(BaseModel):
     plan: str
     monthly_quota: int
     rate_limit_per_minute: int
+    content_retention_mode: str
     is_active: bool
     created_at: Optional[datetime] = None
 

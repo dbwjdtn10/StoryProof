@@ -268,6 +268,11 @@ class Partner(Base):
     monthly_quota = Column(Integer, default=10000, nullable=False)  # 월간 API 호출 한도
     rate_limit_per_minute = Column(Integer, default=60, nullable=False)
 
+    # 콘텐츠 보안 계약 대응: "minimal"이면 원고 처리 완료 직후 원문 전체
+    # (Chapter.content)를 삭제하고 벡터+청크 메타데이터만 보관한다.
+    # "full"(기본값)은 기존과 동일하게 원문을 그대로 보관.
+    content_retention_mode = Column(String(20), default="full", nullable=False)
+
     is_active = Column(Boolean, default=True, nullable=False)
 
     # 웹훅 설정 (처리 완료 이벤트를 파트너 서버로 push, HMAC-SHA256 서명)

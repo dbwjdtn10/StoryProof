@@ -191,12 +191,24 @@ POST /api/v1/admin/partners
 Authorization: Bearer <admin JWT>
 
 { "name": "카카오페이지", "contact_email": "partner@kakaopage.com",
-  "plan": "pro", "monthly_quota": 100000, "rate_limit_per_minute": 300 }
+  "plan": "pro", "monthly_quota": 100000, "rate_limit_per_minute": 300,
+  "content_retention_mode": "full" }
 ```
 
 응답에 최초 `api_key`가 포함됩니다 (재확인 불가 — 안전한 채널로 전달).
 키 로테이션: `POST /api/v1/admin/partners/{id}/keys` → 신규 키 발급 후
 `DELETE /api/v1/admin/partners/{id}/keys/{key_id}`로 구 키 폐기.
+
+### 콘텐츠 보안 계약 (원문 보존 최소화)
+
+`content_retention_mode`를 `"minimal"`로 등록하면, 원고 회차가 처리(인덱싱)
+완료되는 즉시 원문 전체(`Chapter.content`)가 삭제되고 벡터 인덱스와 청크
+메타데이터만 남습니다. Q&A(`/manuscripts/{id}/qa`)와 일관성 검사
+(`/manuscripts/{id}/consistency`, 검사 대상 텍스트를 매 요청마다 함께
+전송하므로 원문 저장 여부와 무관)는 계속 정상 동작하지만, 원문이 필요한
+재분석·plot/style 분석은 더 이상 불가능합니다. 계약상 원문 보관을 최소화해야
+하는 파트너(예: 미공개 원고를 다루는 서점/플랫폼)에 사용하세요.
+기본값은 `"full"`(기존과 동일하게 원문 보관)입니다.
 
 ## 데이터 격리 원칙
 

@@ -60,6 +60,28 @@ def update_chapter_progress(chapter_id: int, progress: int, status: str = None, 
         logger.warning(f"[DB Update Error] Chapter {chapter_id}: {e}")
 
 
+def maybe_purge_chapter_content(db, novel, chapter, chapter_id: int) -> bool:
+    """콘텐츠 보안 계약(minimal retention) 파트너 소유 챕터면 원문을 삭제한다.
+
+    Returns:
+        bool: 원문을 삭제했으면 True
+    """
+    from backend.db.models import Partner
+
+    if not novel:
+        return False
+
+    partner = db.query(Partner).filter(
+        Partner.user_id == novel.author_id, Partner.content_retention_mode == "minimal"
+    ).first()
+    if not partner:
+        return False
+
+    chapter.content = ""
+    logger.info(f"원문 삭제됨 (콘텐츠 보안 계약, partner={partner.name}, chapter={chapter_id})")
+    return True
+
+
 @celery_app.task
 def process_chapter_storyboard(novel_id: int, chapter_id: int):
     """
@@ -210,7 +232,15 @@ def process_chapter_storyboard(novel_id: int, chapter_id: int):
         chapter.storyboard_message = "처리 완료"
         chapter.storyboard_completed_at = datetime.utcnow()
         # 재분석 요청 시 내용 불변이면 파이프라인을 건너뛰기 위한 캐시 키 저장
+        # (콘텐츠 보안 계약으로 원문이 삭제되기 전, 원본 텍스트 기준으로 계산)
         chapter.storyboard_content_hash = hashlib.sha256(chapter.content.encode('utf-8')).hexdigest()
+
+        # 콘텐츠 보안 계약 대응: 파트너의 원문 보존 최소화 모드가 켜져 있으면
+        # 인덱싱 완료 즉시 원문 전체를 삭제하고 벡터+청크 메타데이터만 남긴다.
+        # (Q&A/일관성 검사는 Pinecone 벡터·VectorDocument.chunk_text로 계속 동작하지만,
+        #  이 챕터의 재분석/plot·style 분석은 원문 소실로 더 이상 불가능해짐)
+        maybe_purge_chapter_content(db, novel, chapter, chapter_id)
+
         db.commit()
 
         update_chapter_progress(chapter_id, 100, "COMPLETED", "✓ 처리 완료")

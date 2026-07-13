@@ -99,7 +99,14 @@ Q&A·일관성 검증·캐릭터 챗봇이 나오는 API"가 되어야 한다.
     컬럼 추가), 회귀 테스트 10건(`test_llm_caching.py`,
     `test_scene_batch_structuring.py`)
 - [ ] 멀티 리전/전용 인스턴스 옵션 (enterprise 플랜)
-- [ ] 콘텐츠 보안 계약 대응: 원문 보존 최소화 모드 (벡터+메타데이터만 보관)
+- [x] **콘텐츠 보안 계약 대응** (2026-07-13): `Partner.content_retention_mode`
+  (`"full"`/`"minimal"`, 파트너 등록 시 지정). `"minimal"`이면 원고 회차
+  인덱싱 완료 즉시 `Chapter.content`(원문 전체)를 삭제하고 Pinecone
+  벡터+`VectorDocument.chunk_text`(청크 단위)만 보관. Q&A/일관성 검사는
+  계속 동작(일관성 검사는 원문 저장이 아닌 매 요청 전송 텍스트 기반이라
+  영향 없음), 원문이 필요한 재분석·plot/style 분석만 이후 불가능해짐 —
+  트레이드오프를 `docs/PARTNER_API.md`에 명시. Alembic 마이그레이션
+  (`e7b2c19f4a08`), 회귀 테스트 4건(`test_content_retention.py`)
 - [ ] 정산 자동화: 월별 사용량 → 인보이스 생성
 - [ ] ISMS/개인정보 처리 방침 등 컴플라이언스 문서
 
