@@ -78,6 +78,12 @@ class Settings(BaseSettings):
     # ===== Embedding Models =====
     KOREAN_EMBEDDING_MODEL: str = "dragonkue/multilingual-e5-small-ko"
     MULTILINGUAL_EMBEDDING_MODEL: str = "intfloat/multilingual-e5-small"
+    # 모델 티어링: 최종 답변 품질에 영향이 적은 보조 작업(검색 공백 탐지 등)은
+    # 더 저렴한 모델로 낮춰 비용 절감 (2026-07-13)
+    GEMINI_LITE_MODEL: str = "gemini-2.5-flash-lite"
+    # 씬 구조화 배치 크기: N개 씬을 한 번의 LLM 호출로 묶어서 처리 (비용 절감).
+    # 배치 응답 파싱 실패 시 해당 배치만 씬별 개별 호출로 자동 폴백함
+    SCENE_STRUCTURE_BATCH_SIZE: int = 3
     ENABLE_RERANKER: bool = False  # 기본값 False (메모리 절약), True로 설정 시 Reranker 활성화
     RERANKER_MODEL: str = "BAAI/bge-reranker-v2-m3"
 

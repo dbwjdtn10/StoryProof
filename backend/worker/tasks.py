@@ -5,6 +5,7 @@ Celery 비동기 작업 정의
 """
 
 import os
+import hashlib
 import logging
 from typing import Dict, Any, Optional
 from dataclasses import asdict
@@ -116,32 +117,41 @@ def process_chapter_storyboard(novel_id: int, chapter_id: int):
         
         update_chapter_progress(chapter_id, 30, "PROCESSING", f"{len(scenes)}개 씬 분할 완료")
         
-        # 3. 씬 구조화 (병렬 처리로 속도 향상)
+        # 3. 씬 구조화 (배치 단위 병렬 처리로 LLM 호출 수·비용 절감)
         from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        batch_size = max(1, settings.SCENE_STRUCTURE_BATCH_SIZE)
+        indexed_scenes = list(enumerate(scenes))
+        batches = [indexed_scenes[i:i + batch_size] for i in range(0, len(indexed_scenes), batch_size)]
         structured_scenes = [None] * len(scenes)
-        failed_scenes = []
-        
-        # 동시에 최대 3개 씬까지 병렬 처리 (Gemini API rate limit 고려)
+
+        def _process_batch(batch):
+            """배치 구조화 시도, 실패 시 씬별 개별 호출로 폴백 (안전한 저하)"""
+            try:
+                return structurer.structure_scenes_batch(batch)
+            except Exception as e:
+                logger.warning(f"배치 구조화 실패, 씬별 개별 호출로 폴백: {e}")
+                return [structurer.structure_scene(text, idx) for idx, text in batch]
+
+        # 동시에 최대 3개 배치까지 병렬 처리 (Gemini API rate limit 고려)
         with ThreadPoolExecutor(max_workers=3) as executor:
-            futures = {}
-            for i, scene in enumerate(scenes):
-                future = executor.submit(structurer.structure_scene, scene, i)
-                futures[future] = i
-            
+            futures = {executor.submit(_process_batch, batch): batch for batch in batches}
+
             completed = 0
             for future in as_completed(futures):
-                i = futures[future]
+                batch = futures[future]
                 try:
-                    structured = future.result()
-                    structured_scenes[i] = structured
-                    completed += 1
-                    
+                    results = future.result()
+                    for structured in results:
+                        structured_scenes[structured.scene_index] = structured
+                    completed += len(batch)
+
                     # 진행률 계산 (25% ~ 75%)
                     progress = 25 + int(completed / len(scenes) * 50)
                     update_chapter_progress(chapter_id, progress, "PROCESSING", f"씬 분석 중 {completed}/{len(scenes)}")
                 except Exception as e:
-                    failed_scenes.append(i)
-        
+                    logger.error(f"배치 처리 완전 실패 (씬 {[i for i, _ in batch]}): {e}")
+
         # None 값 제거 (실패한 씬)
         structured_scenes = [s for s in structured_scenes if s is not None]
         
@@ -199,6 +209,8 @@ def process_chapter_storyboard(novel_id: int, chapter_id: int):
         chapter.storyboard_progress = 100
         chapter.storyboard_message = "처리 완료"
         chapter.storyboard_completed_at = datetime.utcnow()
+        # 재분석 요청 시 내용 불변이면 파이프라인을 건너뛰기 위한 캐시 키 저장
+        chapter.storyboard_content_hash = hashlib.sha256(chapter.content.encode('utf-8')).hexdigest()
         db.commit()
 
         update_chapter_progress(chapter_id, 100, "COMPLETED", "✓ 처리 완료")
@@ -284,7 +296,7 @@ def analyze_chapter_task(self, analysis_id: int, novel_id: int, chapter_id: int,
     """
     db = None
     try:
-        from backend.db.models import Analysis, AnalysisStatus
+        from backend.db.models import Analysis, AnalysisStatus, AnalysisType
         db = SessionLocal()
 
         # 1. 상태 → PROCESSING
@@ -318,26 +330,42 @@ def analyze_chapter_task(self, analysis_id: int, novel_id: int, chapter_id: int,
         else:
             input_text = full_text
 
-        # 3. 에이전트로 분석 수행
-        from backend.services.agent import get_consistency_agent
-        agent = get_consistency_agent()
+        # 2-1. 캐시 확인: 동일 회차·동일 분석유형에 대해 같은 텍스트로 이미
+        # 완료된 결과가 있으면 LLM 재호출 없이 그대로 재사용 (비용 절감)
+        content_hash = hashlib.sha256(full_text.encode('utf-8')).hexdigest()
+        cached = db.query(Analysis).filter(
+            Analysis.chapter_id == chapter_id,
+            Analysis.analysis_type == AnalysisType(analysis_type),
+            Analysis.status == AnalysisStatus.COMPLETED,
+            Analysis.content_hash == content_hash,
+            Analysis.id != analysis_id,
+        ).order_by(Analysis.completed_at.desc()).first()
 
-        if analysis_type == "plot":
-            result = agent.analyze_plot(novel_id, input_text, custom_prompt=custom_prompt)
-        elif analysis_type == "style":
-            result = agent.analyze_style(novel_id, input_text, custom_prompt=custom_prompt)
-        elif analysis_type == "overall":
-            plot_result = agent.analyze_plot(novel_id, input_text, custom_prompt=custom_prompt)
-            style_result = agent.analyze_style(novel_id, input_text, custom_prompt=custom_prompt)
-            result = _build_overall_analysis(plot_result, style_result)
+        if cached:
+            logger.info(f"분석 캐시 히트 (chapter={chapter_id}, type={analysis_type}) — LLM 호출 생략")
+            result = cached.result
         else:
-            raise ValueError(f"Unknown analysis_type: {analysis_type}")
+            # 3. 에이전트로 분석 수행
+            from backend.services.agent import get_consistency_agent
+            agent = get_consistency_agent()
+
+            if analysis_type == "plot":
+                result = agent.analyze_plot(novel_id, input_text, custom_prompt=custom_prompt)
+            elif analysis_type == "style":
+                result = agent.analyze_style(novel_id, input_text, custom_prompt=custom_prompt)
+            elif analysis_type == "overall":
+                plot_result = agent.analyze_plot(novel_id, input_text, custom_prompt=custom_prompt)
+                style_result = agent.analyze_style(novel_id, input_text, custom_prompt=custom_prompt)
+                result = _build_overall_analysis(plot_result, style_result)
+            else:
+                raise ValueError(f"Unknown analysis_type: {analysis_type}")
 
         # 4. 결과 저장
         analysis = db.query(Analysis).filter(Analysis.id == analysis_id).first()
         if analysis:
             analysis.status = AnalysisStatus.COMPLETED
             analysis.result = result
+            analysis.content_hash = content_hash
             analysis.completed_at = datetime.utcnow()
             db.commit()
 
@@ -497,9 +525,10 @@ def detect_inconsistency_task(self, novel_id: int, text_fragment: str, chapter_i
     """
     db = None
     try:
+        from backend.db.models import Analysis, AnalysisStatus, AnalysisType
+
         # DB 상태 업데이트: PROCESSING
         if analysis_id:
-            from backend.db.models import Analysis, AnalysisStatus
             db = SessionLocal()
             analysis = db.query(Analysis).filter(Analysis.id == analysis_id).first()
             if analysis:
@@ -516,7 +545,26 @@ def detect_inconsistency_task(self, novel_id: int, text_fragment: str, chapter_i
             custom_prompt = novel.custom_prompt if novel else None
         except Exception as e:
             logger.warning(f"커스텀 프롬프트 조회 실패 (novel={novel_id}): {e}")
-        result = get_consistency_agent().check_consistency(novel_id, text_fragment, custom_prompt=custom_prompt)
+
+        # 캐시 확인: 동일 회차·동일 텍스트에 대해 이미 완료된 검사 결과가
+        # 있으면 재검사 없이 그대로 재사용 (RAG 검색 + LLM 호출 생략)
+        content_hash = hashlib.sha256(text_fragment.encode('utf-8')).hexdigest()
+        cache_filters = [
+            Analysis.novel_id == novel_id,
+            Analysis.chapter_id == chapter_id,
+            Analysis.analysis_type == AnalysisType.CONSISTENCY,
+            Analysis.status == AnalysisStatus.COMPLETED,
+            Analysis.content_hash == content_hash,
+        ]
+        if analysis_id:
+            cache_filters.append(Analysis.id != analysis_id)
+        cached = db.query(Analysis).filter(*cache_filters).order_by(Analysis.completed_at.desc()).first()
+
+        if cached:
+            logger.info(f"일관성 검사 캐시 히트 (novel={novel_id}, chapter={chapter_id}) — LLM 호출 생략")
+            result = cached.result
+        else:
+            result = get_consistency_agent().check_consistency(novel_id, text_fragment, custom_prompt=custom_prompt)
 
         # DB 상태 업데이트: COMPLETED + 결과 저장
         if analysis_id and db:
@@ -524,6 +572,7 @@ def detect_inconsistency_task(self, novel_id: int, text_fragment: str, chapter_i
             if analysis:
                 analysis.status = AnalysisStatus.COMPLETED
                 analysis.result = result
+                analysis.content_hash = content_hash
                 analysis.completed_at = datetime.utcnow()
                 db.commit()
 

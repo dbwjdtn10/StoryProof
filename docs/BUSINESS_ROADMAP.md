@@ -83,7 +83,21 @@ Q&A·일관성 검증·캐릭터 챗봇이 나오는 API"가 되어야 한다.
   - [ ] **잔여 작업**: 프리픽스 변경으로 기존 Pinecone 인덱스(프리픽스 없이
     임베딩됨)와 새 쿼리(프리픽스 있음) 간 분포가 어긋나므로 **전체 재인덱싱
     필요** — 아직 미실행. 검색 품질 평가셋(질문-정답 쌍)도 아직 없음
-- [ ] LLM 비용 최적화: 분석 결과 캐싱 고도화, 배치 처리, 모델 티어링
+- [x] **LLM 비용 최적화** (2026-07-13):
+  - **캐싱 고도화**: 콘텐츠 SHA-256 해시 기반 캐시 히트 스킵을 3개 경로에
+    추가 — 스토리보드 재분석(`NovelService.analyze_chapter`, 내용 불변 시
+    Celery 큐잉 자체를 생략), 회차 분석(`analyze_chapter_task`, plot/style/
+    overall), 설정 일관성 검사(`detect_inconsistency_task`). 기존 API
+    응답 계약(task_id/폴링) 변경 없이 태스크 내부에서 LLM 호출만 생략
+  - **배치 처리**: 씬 구조화를 `SCENE_STRUCTURE_BATCH_SIZE`(기본 3)개씩
+    묶어 한 번의 LLM 호출로 처리(`structure_scenes_batch`). 배치 응답
+    파싱 실패/개수 불일치 시 해당 배치만 씬별 개별 호출로 자동 폴백.
+    실 Gemini API로 2씬 배치 품질 검증 완료(씬 간 캐릭터/이벤트 혼선 없음)
+  - **모델 티어링**: 최종 답변 품질에 영향이 적은 보조 판단(검색 공백
+    탐지, `_identify_search_gaps`)을 `GEMINI_LITE_MODEL`(gemini-2.5-flash-lite)로 하향
+  - Alembic 마이그레이션(`d3f6a91c5b47`, Chapter/Analysis에 content_hash
+    컬럼 추가), 회귀 테스트 10건(`test_llm_caching.py`,
+    `test_scene_batch_structuring.py`)
 - [ ] 멀티 리전/전용 인스턴스 옵션 (enterprise 플랜)
 - [ ] 콘텐츠 보안 계약 대응: 원문 보존 최소화 모드 (벡터+메타데이터만 보관)
 - [ ] 정산 자동화: 월별 사용량 → 인보이스 생성

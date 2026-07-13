@@ -6,6 +6,7 @@
 
 import os
 import glob
+import hashlib
 from typing import List, Optional, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
@@ -212,7 +213,13 @@ class NovelService:
         """
         # 1. 권한 확인
         chapter = NovelService.get_chapter(db, novel_id, chapter_id, user_id, is_admin)
-        
+
+        # 1-1. 콘텐츠 해시 캐시 확인: 마지막 성공 처리 이후 내용이 그대로면
+        # LLM 파이프라인(씬 분할+구조화+임베딩) 전체를 건너뛴다 (비용 절감)
+        content_hash = hashlib.sha256(chapter.content.encode('utf-8')).hexdigest()
+        if chapter.storyboard_status == "COMPLETED" and chapter.storyboard_content_hash == content_hash:
+            return {"status": "skipped", "message": "내용이 변경되지 않아 재분석을 건너뛰었습니다."}
+
         # 2. 상태 초기화 및 Celery Task 호출
         chapter.storyboard_status = "PENDING"
         chapter.storyboard_progress = 0
@@ -221,7 +228,7 @@ class NovelService:
 
         from backend.worker.tasks import process_chapter_storyboard
         process_chapter_storyboard.delay(novel_id, chapter_id)
-        
+
         return {"status": "accepted", "message": "Analysis started in background"}
 
     @staticmethod

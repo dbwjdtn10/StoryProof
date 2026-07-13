@@ -119,6 +119,9 @@ class Chapter(Base):
     storyboard_message = Column(String(255), nullable=True)  # 진행 메시지
     storyboard_error = Column(Text, nullable=True)    # 에러 메시지
     storyboard_completed_at = Column(DateTime(timezone=True), nullable=True)
+    # 마지막 성공 처리 시점의 content SHA-256 해시. 재분석 요청 시 내용이
+    # 바뀌지 않았으면 LLM 파이프라인 전체를 건너뛰기 위한 캐시 키 (비용 절감)
+    storyboard_content_hash = Column(String(64), nullable=True)
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -148,7 +151,11 @@ class Analysis(Base):
     
     # 분석 결과 (JSONB 형태로 저장하여 유연한 쿼리 지원, SQLite 테스트 환경에서는 JSON)
     result = Column(JSONB().with_variant(JSON(), "sqlite"), nullable=True)
-    
+
+    # 분석에 사용된 입력 텍스트의 SHA-256 해시. 동일 텍스트 재분석 요청 시
+    # 기존 COMPLETED 결과를 재사용하기 위한 캐시 키 (LLM 재호출 비용 절감)
+    content_hash = Column(String(64), nullable=True, index=True)
+
     # 에러 정보
     error_message = Column(Text, nullable=True)
     

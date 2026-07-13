@@ -128,8 +128,10 @@ class StoryConsistencyAgent:
 충분하면 빈 배열을 반환하세요.
 반드시 JSON 배열만 반환: ["키워드1", "키워드2"] 또는 []"""
         try:
+            # 최종 답변 품질과 무관한 보조 판단(추가 검색 필요 여부)이라 저렴한
+            # 모델로 티어링 — 실패 시 빈 배열 반환이라 품질 저하 리스크도 낮음
             response = self.client.models.generate_content(
-                model=settings.GEMINI_STRUCTURING_MODEL,
+                model=settings.GEMINI_LITE_MODEL,
                 contents=prompt,
                 config={'temperature': 0.1, 'response_mime_type': 'application/json'}
             )

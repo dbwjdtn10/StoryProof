@@ -740,6 +740,63 @@ Output Format (JSON List of Strings):
                 time_period=None
             )
     
+    def structure_scenes_batch(self, indexed_scenes: List[tuple]) -> List[StructuredScene]:
+        """
+        여러 씬을 한 번의 LLM 호출로 구조화 (비용 절감용 배치 처리).
+
+        Args:
+            indexed_scenes: [(scene_index, scene_text), ...] — 배치 하나 분량
+
+        Returns:
+            입력과 같은 순서·개수의 StructuredScene 리스트.
+
+        Raises:
+            Exception: 파싱 실패/개수 불일치 등 — 호출자가 씬별 구조화로 폴백해야 함.
+        """
+        scene_blocks = "\n\n".join(
+            f"[씬 {pos}]\n{text}" for pos, (_, text) in enumerate(indexed_scenes)
+        )
+        prompt = f"""{self.system_prompt}
+
+아래는 서로 다른 {len(indexed_scenes)}개의 씬입니다. 각 씬을 위 지침에 따라 개별적으로
+분석하고, 결과를 씬 순서와 동일한 순서의 JSON 배열로 반환하세요.
+배열 길이는 반드시 {len(indexed_scenes)}개여야 하며, 각 원소는 단일 씬 분석과 동일한
+JSON 객체 스키마([summary, characters, relationships, locations, items, key_events, mood, time_period])를 따릅니다.
+
+{scene_blocks}
+
+반드시 JSON 배열만 반환하세요. 예: [{{...씬 0 분석...}}, {{...씬 1 분석...}}]"""
+
+        response = self._generate_with_retry(prompt)
+        json_text = response.text.strip()
+        if json_text.startswith("```"):
+            json_text = re.sub(r'^```json?\s*|\s*```$', '', json_text, flags=re.MULTILINE)
+
+        data = json.loads(json_text)
+        if not isinstance(data, list) or len(data) != len(indexed_scenes):
+            raise ValueError(
+                f"배치 응답 형식 불일치: 기대 {len(indexed_scenes)}개, 실제 "
+                f"{len(data) if isinstance(data, list) else type(data)}"
+            )
+
+        results = []
+        for (scene_index, scene_text), item in zip(indexed_scenes, data):
+            if not isinstance(item, dict):
+                raise ValueError(f"씬 {scene_index}: 배치 응답 원소가 dict가 아님")
+            results.append(StructuredScene(
+                scene_index=scene_index,
+                original_text=scene_text,
+                summary=item.get('summary', ''),
+                characters=item.get('characters', []),
+                relationships=item.get('relationships', []),
+                locations=item.get('locations', []),
+                items=item.get('items', []),
+                key_events=item.get('key_events', []),
+                mood=item.get('mood', ''),
+                time_period=item.get('time_period')
+            ))
+        return results
+
     def _extract_global_entities_batched(
         self,
         scenes_summary: List[Dict],
