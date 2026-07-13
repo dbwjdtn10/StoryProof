@@ -13,7 +13,7 @@ from typing import Optional, Tuple
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import APIKeyHeader
-from sqlalchemy import func as sa_func
+from sqlalchemy import func as sa_func, text as sa_text
 from sqlalchemy.orm import Session
 
 from backend.db.session import get_db
@@ -107,15 +107,33 @@ def _check_rate_limit(partner: Partner) -> None:
         )
 
 
-def _check_monthly_quota(db: Session, partner: Partner) -> None:
-    """월간 사용량 쿼터 검사"""
-    month_start = datetime.now(timezone.utc).replace(
-        day=1, hour=0, minute=0, second=0, microsecond=0
-    )
-    used = db.query(sa_func.coalesce(sa_func.sum(ApiUsageLog.units), 0)).filter(
-        ApiUsageLog.partner_id == partner.id,
-        ApiUsageLog.created_at >= month_start,
+def get_current_month_start() -> datetime:
+    """이번 달(UTC 기준) 시작 시각. "이번 달" 정의가 바뀌면 여기 한 곳만 고치면
+    쿼터 검사·파트너용/관리자용 사용량 조회가 모두 같이 반영된다 (2026-07-13)."""
+    return datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+
+def get_partner_monthly_usage(db: Session, partner_id: int) -> int:
+    """이번 달 파트너 사용량 합계."""
+    return db.query(sa_func.coalesce(sa_func.sum(ApiUsageLog.units), 0)).filter(
+        ApiUsageLog.partner_id == partner_id,
+        ApiUsageLog.created_at >= get_current_month_start(),
     ).scalar()
+
+
+def _check_monthly_quota(db: Session, partner: Partner) -> None:
+    """월간 사용량 쿼터 검사
+
+    동시 요청이 쿼터 경계에서 모두 통과해버리는 TOCTOU 경합(2026-07-13
+    코드리뷰에서 발견)을 막기 위해, Postgres에서는 partner_id 단위
+    어드바이저 락으로 이 검사를 트랜잭션 동안 직렬화한다. 트랜잭션
+    커밋/롤백 시 자동 해제되므로 명시적 unlock이 필요 없다.
+    SQLite 등 어드바이저 락 미지원 DB(테스트 환경)에서는 건너뛴다.
+    """
+    if db.bind is not None and db.bind.dialect.name == "postgresql":
+        db.execute(sa_text("SELECT pg_advisory_xact_lock(:pid)"), {"pid": partner.id})
+
+    used = get_partner_monthly_usage(db, partner.id)
     if used >= partner.monthly_quota:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,

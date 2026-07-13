@@ -122,6 +122,12 @@ class Chapter(Base):
     # 마지막 성공 처리 시점의 content SHA-256 해시. 재분석 요청 시 내용이
     # 바뀌지 않았으면 LLM 파이프라인 전체를 건너뛰기 위한 캐시 키 (비용 절감)
     storyboard_content_hash = Column(String(64), nullable=True)
+    # 콘텐츠 보안 계약(minimal retention)으로 원문이 삭제됐는지 여부.
+    # content==""와 별개의 명시적 플래그로 둬서, 재분석 요청 시 "내용 없음"과
+    # "의도적으로 삭제됨"을 구분한다 (해시 비교만으로는 이 둘을 구분 못 해
+    # 삭제된 챕터가 재분석 파이프라인을 다시 타면서 남은 벡터 인덱스까지
+    # 지워버리는 문제가 있었음 — 2026-07-13 코드리뷰에서 발견)
+    content_purged = Column(Boolean, default=False, nullable=False)
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

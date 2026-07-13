@@ -39,6 +39,12 @@ _client = None
 class _LazyGeminiClient:
     """모듈 import 시점이 아닌 첫 사용 시점에 Gemini Client를 생성하는 프록시"""
 
+    def __bool__(self):
+        # __bool__ 미정의 시 인스턴스가 항상 truthy로 평가되어, 아래 사용처의
+        # `if not client:` 가드가 무력화되는 문제가 있었음 (2026-07-13 코드리뷰).
+        # 실제 초기화를 트리거하지 않고 "초기화 가능 여부"만 확인해 반환한다.
+        return genai is not None and bool(settings.GOOGLE_API_KEY)
+
     def __getattr__(self, name):
         global _client
         if name != "models":

@@ -46,6 +46,22 @@ class NovelService:
         return novel
 
     @staticmethod
+    def verify_read_access(db: Session, novel_id: int, user_id: int) -> "Novel":
+        """소설 읽기 접근 권한 확인 (작가 본인 또는 공개 소설). 없으면 404, 권한 없으면 403.
+
+        Q&A/일관성 검사/회차 분석처럼 "내 소설이거나 공개 소설이면 조회 가능"
+        정책이 필요한 엔드포인트용 — 소유자만 허용하는 _check_novel_ownership과는
+        의도적으로 다른 정책이다 (chat.py/analysis.py에 중복 구현되어 있던 것을
+        2026-07-13 코드리뷰에서 발견해 통합).
+        """
+        novel = db.query(Novel).filter(Novel.id == novel_id).first()
+        if not novel:
+            raise HTTPException(status_code=404, detail="소설을 찾을 수 없습니다.")
+        if novel.author_id != user_id and not novel.is_public:
+            raise HTTPException(status_code=403, detail="권한이 없습니다.")
+        return novel
+
+    @staticmethod
     def get_novels(
         db: Session, 
         user_id: int, 
@@ -214,7 +230,18 @@ class NovelService:
         # 1. 권한 확인
         chapter = NovelService.get_chapter(db, novel_id, chapter_id, user_id, is_admin)
 
-        # 1-1. 콘텐츠 해시 캐시 확인: 마지막 성공 처리 이후 내용이 그대로면
+        # 1-1. 콘텐츠 보안 계약(minimal retention)으로 원문이 이미 삭제된
+        # 챕터는 재분석 자체를 차단한다. (주의: content_hash만으로는 이 상태를
+        # 감지할 수 없음 — 삭제 후 content=""의 해시가 저장된 원본 해시와
+        # 항상 달라서, 아래 캐시 스킵 로직을 그냥 통과시키면 빈 텍스트로
+        # 파이프라인이 재실행되어 기존 벡터 인덱스가 통째로 삭제됨)
+        if chapter.content_purged:
+            return {
+                "status": "blocked",
+                "message": "콘텐츠 보안 계약에 따라 원문이 삭제되어 재분석할 수 없습니다.",
+            }
+
+        # 1-2. 콘텐츠 해시 캐시 확인: 마지막 성공 처리 이후 내용이 그대로면
         # LLM 파이프라인(씬 분할+구조화+임베딩) 전체를 건너뛴다 (비용 절감)
         content_hash = hashlib.sha256(chapter.content.encode('utf-8')).hexdigest()
         if chapter.storyboard_status == "COMPLETED" and chapter.storyboard_content_hash == content_hash:

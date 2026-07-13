@@ -20,7 +20,7 @@ import logging
 
 import os
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
 from sqlalchemy.orm import Session
 from celery.result import AsyncResult
 
@@ -29,7 +29,7 @@ from backend.db.models import (
     Novel, Chapter, Analysis, AnalysisType, AnalysisStatus, ApiUsageLog,
 )
 from backend.core.partner_auth import (
-    PartnerContext, get_current_partner, log_api_usage,
+    PartnerContext, get_current_partner, log_api_usage, get_partner_monthly_usage,
 )
 from backend.schemas.partner_schema import (
     ManuscriptCreateRequest, ManuscriptCreateResponse,
@@ -121,6 +121,7 @@ def create_manuscript(
 @router.post("/manuscripts/upload", response_model=ManuscriptCreateResponse,
              status_code=status.HTTP_202_ACCEPTED)
 async def upload_manuscript_file(
+    request: Request,
     file: UploadFile = File(...),
     title: str = Form(None),
     genre: str = Form(None),
@@ -143,6 +144,13 @@ async def upload_manuscript_file(
             status_code=400,
             detail=f"지원하지 않는 파일 형식입니다: {ext} (지원: {', '.join(settings.ALLOWED_EXTENSIONS)})",
         )
+
+    # Content-Length로 명백히 큰 업로드는 본문을 메모리에 읽기 전에 거부
+    # (완전한 방어는 아님 — 리버스 프록시의 body size 제한과 함께 사용할 것,
+    # 2026-07-13 코드리뷰에서 발견: read()-then-check는 OOM에 취약)
+    content_length = request.headers.get("content-length")
+    if content_length and int(content_length) > settings.MAX_UPLOAD_SIZE:
+        raise HTTPException(status_code=413, detail="파일 크기가 업로드 한도를 초과합니다.")
 
     raw_data = await file.read()
     if len(raw_data) > settings.MAX_UPLOAD_SIZE:
@@ -430,16 +438,7 @@ def get_usage_summary(
     db: Session = Depends(get_db),
 ):
     """이번 달 사용량 요약 (정산 확인용, 과금하지 않음)"""
-    from datetime import datetime, timezone
-    from sqlalchemy import func as sa_func
-
-    month_start = datetime.now(timezone.utc).replace(
-        day=1, hour=0, minute=0, second=0, microsecond=0
-    )
-    used = db.query(sa_func.coalesce(sa_func.sum(ApiUsageLog.units), 0)).filter(
-        ApiUsageLog.partner_id == ctx.partner.id,
-        ApiUsageLog.created_at >= month_start,
-    ).scalar()
+    used = get_partner_monthly_usage(db, ctx.partner.id)
 
     return UsageSummaryResponse(
         partner_name=ctx.partner.name,

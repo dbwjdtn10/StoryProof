@@ -60,10 +60,15 @@ class PartnerQARequest(BaseModel):
     )
 
 
-class PartnerQAResponse(BaseModel):
+class QAResponse(BaseModel):
+    """Q&A 응답 (파트너 API/위젯 공통 형태)"""
     answer: str
     found_context: bool
     similarity: float
+
+
+# 하위 호환용 별칭 — 기존 파트너 API 스키마 이름을 그대로 유지
+PartnerQAResponse = QAResponse
 
 
 class ConsistencyCheckRequest(BaseModel):
@@ -98,10 +103,7 @@ class WidgetQARequest(BaseModel):
     question: str = Field(..., min_length=1, max_length=2000)
 
 
-class WidgetQAResponse(BaseModel):
-    answer: str
-    found_context: bool
-    similarity: float
+WidgetQAResponse = QAResponse
 
 
 class WebhookConfigRequest(BaseModel):

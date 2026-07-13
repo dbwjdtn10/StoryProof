@@ -51,6 +51,7 @@ class TestMaybePurgeChapterContent:
 
         assert purged is True
         assert chapter.content == ""
+        assert chapter.content_purged is True
 
     def test_keeps_content_when_partner_is_full_retention(self):
         db = _make_session()

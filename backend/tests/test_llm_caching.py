@@ -92,6 +92,40 @@ class TestStoryboardReanalysisSkip:
         assert result["status"] == "accepted"
         delay_mock.assert_called_once_with(1, chapter.id)
 
+    def test_blocks_reanalysis_when_content_purged(self, db_session_factory, monkeypatch):
+        """회귀 테스트(2026-07-13 코드리뷰에서 발견): 콘텐츠 보안 계약으로 원문이
+        삭제된 챕터(content="", content_purged=True)를 재분석 요청하면, 해시
+        불일치로 파이프라인이 재실행되어 남은 벡터 인덱스까지 삭제되던 버그.
+        이제는 content_purged 플래그로 즉시 차단해야 한다."""
+        import backend.services.novel_service as novel_service_mod
+
+        db = db_session_factory()
+        original_content = "원래 있던 민감한 원문"
+        chapter = Chapter(
+            novel_id=1, chapter_number=1, title="1화", content="",  # 삭제됨
+            storyboard_status="COMPLETED",
+            storyboard_content_hash=hashlib.sha256(original_content.encode('utf-8')).hexdigest(),
+            content_purged=True,
+        )
+        db.add(chapter)
+        db.commit()
+
+        monkeypatch.setattr(
+            novel_service_mod.NovelService, "get_chapter",
+            staticmethod(lambda db_, novel_id, chapter_id, user_id, is_admin=False: chapter),
+        )
+
+        delay_mock = MagicMock()
+        monkeypatch.setattr(
+            "backend.worker.tasks.process_chapter_storyboard",
+            MagicMock(delay=delay_mock),
+        )
+
+        result = novel_service_mod.NovelService.analyze_chapter(db, 1, chapter.id, user_id=1)
+
+        assert result["status"] == "blocked"
+        delay_mock.assert_not_called()  # 파이프라인이 재실행되면 안 됨 (기존 벡터 인덱스 보존)
+
 
 class TestChapterAnalysisTaskCache:
     """analyze_chapter_task: 동일 회차·동일 텍스트·동일 유형이면 에이전트 호출을 생략한다."""

@@ -2,24 +2,19 @@
 import sys
 import os
 from unittest.mock import MagicMock, patch
-from sqlalchemy.types import JSON
 
-# 1. Mock JSONB for SQLite compatibility
-# We need to construct the mock strictly enough that SQLAlchemy doesn't complain
-# but permissive enough to allow imports.
-mock_pg = MagicMock()
-mock_pg.JSONB = JSON
-sys.modules['sqlalchemy.dialects.postgresql'] = mock_pg
-
-# 2. Add path
+# Add path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 
-# 3. Mock backend.db.session to prevent real DB connection
-# We must do this BEFORE importing endpoints
-mock_session_module = MagicMock()
-sys.modules['backend.db.session'] = mock_session_module
+# 참고: 예전에는 여기서 sys.modules['sqlalchemy.dialects.postgresql']와
+# sys.modules['backend.db.session']을 이 파일의 import 시점에 영구 교체했음.
+# 이는 pytest 프로세스 전역에 남아 이후 로드되는 다른 테스트 파일의
+# get_db 의존성 주입을 깨뜨리는 테스트 오염 버그였다 (2026-07-13 발견).
+# Analysis.result 컬럼이 이미 JSONB().with_variant(JSON(), "sqlite")로
+# SQLite를 지원하고, backend.db.session import 자체는 실제 DB에 연결하지
+# 않으므로(지연 연결) 두 mock 모두 더 이상 필요하지 않아 제거함.
 
-# 4. Import models and endpoints
+# 모델과 엔드포인트 임포트
 from backend.db.models import Base, CharacterChatRoom, User, Novel
 from backend.api.v1.endpoints.character_chat import list_rooms, send_message, CharacterChatMessageCreate
 

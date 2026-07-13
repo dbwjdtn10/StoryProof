@@ -16,7 +16,8 @@ from backend.core.config import settings
 from backend.core.security import get_current_user
 from backend.schemas.analysis_schema import ConsistencyRequest, ChapterAnalysisRequest
 from backend.db.session import get_db
-from backend.db.models import Analysis, AnalysisType, AnalysisStatus, Novel
+from backend.db.models import Analysis, AnalysisType, AnalysisStatus, Chapter
+from backend.services.novel_service import NovelService
 
 router = APIRouter()
 
@@ -36,9 +37,7 @@ def get_cached_consistency(
     DB에서 가장 최근 COMPLETED 결과를 반환합니다.
     """
     # 소설 소유권 확인
-    novel = db.query(Novel).filter(Novel.id == novel_id).first()
-    if not novel or (novel.author_id != current_user.id and not novel.is_public):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="권한이 없습니다.")
+    NovelService.verify_read_access(db, novel_id, current_user.id)
 
     analysis = db.query(Analysis).filter(
         Analysis.novel_id == novel_id,
@@ -66,9 +65,7 @@ def request_consistency(
     Analysis 레코드를 생성하고 Celery 작업으로 비동기 처리합니다.
     """
     # 소설 소유권 확인
-    novel = db.query(Novel).filter(Novel.id == request.novel_id).first()
-    if not novel or (novel.author_id != current_user.id and not novel.is_public):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="권한이 없습니다.")
+    NovelService.verify_read_access(db, request.novel_id, current_user.id)
 
     # Analysis 레코드 생성 (PENDING)
     analysis = Analysis(
@@ -121,9 +118,16 @@ def request_chapter_analysis(
     Analysis 레코드를 생성하고 Celery 작업으로 비동기 처리합니다.
     """
     # 소설 소유권 확인
-    novel = db.query(Novel).filter(Novel.id == request.novel_id).first()
-    if not novel or (novel.author_id != current_user.id and not novel.is_public):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="권한이 없습니다.")
+    NovelService.verify_read_access(db, request.novel_id, current_user.id)
+
+    # 콘텐츠 보안 계약(minimal retention)으로 원문이 삭제된 챕터는 plot/
+    # style/overall 분석에 필요한 원문이 없으므로 요청 자체를 차단한다
+    chapter = db.query(Chapter).filter(Chapter.id == request.chapter_id).first()
+    if chapter and chapter.content_purged:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="콘텐츠 보안 계약에 따라 원문이 삭제되어 분석할 수 없습니다.",
+        )
 
     # analysis_type 매핑
     type_map = {
@@ -164,9 +168,7 @@ def get_cached_chapter_analysis(
 
     DB에서 가장 최근 COMPLETED 결과를 반환합니다.
     """
-    novel = db.query(Novel).filter(Novel.id == novel_id).first()
-    if not novel or (novel.author_id != current_user.id and not novel.is_public):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="권한이 없습니다.")
+    NovelService.verify_read_access(db, novel_id, current_user.id)
 
     type_map = {
         "plot": AnalysisType.PLOT,

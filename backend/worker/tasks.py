@@ -78,6 +78,7 @@ def maybe_purge_chapter_content(db, novel, chapter, chapter_id: int) -> bool:
         return False
 
     chapter.content = ""
+    chapter.content_purged = True
     logger.info(f"원문 삭제됨 (콘텐츠 보안 계약, partner={partner.name}, chapter={chapter_id})")
     return True
 

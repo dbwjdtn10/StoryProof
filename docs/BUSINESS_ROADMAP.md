@@ -137,6 +137,35 @@ Q&A·일관성 검증·캐릭터 챗봇이 나오는 API"가 되어야 한다.
   비슷해 혼동 소지가 있었음). `worker/tasks.py`의 중복된 "# 6. 처리 완료"
   주석과 리팩터링 메모 잔재 주석 정리. 전체 테스트(47건) 및 앱 임포트
   체인 정상 확인 후 커밋.
+- [x] **문제점 점검 및 수정** (2026-07-13): 워크플로우 기반 다중 에이전트
+  코드리뷰(base `15eaab4`)로 B2B 상용화 diff 전체 점검, 15건 검증된
+  findings 중 correctness 8건 전부 수정:
+  - **(심각) 콘텐츠 삭제 챕터 재분석 시 벡터 인덱스 파괴**: minimal
+    retention으로 원문이 삭제된 챕터를 재분석하면 해시 불일치로 파이프라인이
+    재실행되어 남아있던 벡터 인덱스까지 삭제되던 버그. `Chapter.content_purged`
+    플래그를 신설해 재분석/회차분석 요청 자체를 차단하도록 수정
+    (`novel_service.py`, `analysis.py`, 마이그레이션 `9c1e5b7a3d24`)
+  - **파트너 월간 쿼터 TOCTOU 경합**: 동시 요청이 쿼터 검사를 모두 통과할 수
+    있던 문제 → Postgres에서 partner_id 단위 어드바이저 락으로 직렬화
+    (`partner_auth.py`)
+  - **대용량 업로드 OOM 위험**: 파일 크기 검사 전에 전체를 메모리로 읽던 문제
+    → Content-Length 헤더로 사전 거부 추가 (`partner/v1.py`)
+  - **`_LazyGeminiClient` 항상 truthy 버그**: GOOGLE_API_KEY 미설정 시
+    `if not client:` 가드 3곳이 무력화되던 문제 → `__bool__` 구현으로 수정
+    (`character_chat.py`)
+  - **부수 발견**: `test_file_scoped_chat.py`가 import 시점에
+    `sys.modules['backend.db.session']`를 프로세스 전역으로 영구 교체해
+    이후 로드되는 테스트의 `get_db` 의존성 주입을 깨뜨리던 테스트 오염
+    버그 발견·제거 (풀스위트가 파일 조합에 따라 간헐적으로 실패하던 원인)
+  - cleanup 3건 반영: 월간 사용량 집계 로직 3중 중복 → `get_partner_monthly_usage`/
+    `get_current_month_start` 공용 헬퍼로 통합, `chat.py`/`analysis.py`의
+    소설 읽기 권한 검사 중복 → `NovelService.verify_read_access`로 통합,
+    `PartnerQAResponse`/`WidgetQAResponse` 동일 스키마 중복 → `QAResponse`
+    공용 클래스로 통합
+  - **미반영(후속 과제로 남김)**: `widget/v1.py`의 사용량 로깅 인라인 중복,
+    `v1.py`의 원고 접수 2개 엔드포인트 간 Novel/Chapter 생성 로직 중복 —
+    영향 낮은 스타일 중복으로 이번 패스에서는 보류
+  - 회귀 테스트 8건 추가, 전체 테스트 56건 그린 확인 후 커밋
 
 ---
 

@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from backend.db.session import get_db
 from backend.db.models import User, Partner, PartnerApiKey, ApiUsageLog, Invoice
 from backend.core.security import require_admin, hash_password
-from backend.core.partner_auth import generate_api_key
+from backend.core.partner_auth import generate_api_key, get_current_month_start
 from backend.services.billing_service import generate_invoice
 from backend.schemas.partner_schema import (
     PartnerCreateRequest, PartnerCreateResponse, PartnerOut,
@@ -176,9 +176,7 @@ def get_partner_usage(
     if not partner:
         raise HTTPException(status_code=404, detail="파트너를 찾을 수 없습니다.")
 
-    month_start = datetime.now(timezone.utc).replace(
-        day=1, hour=0, minute=0, second=0, microsecond=0
-    )
+    month_start = get_current_month_start()
     rows = db.query(
         ApiUsageLog.endpoint,
         sa_func.count(ApiUsageLog.id).label("calls"),
