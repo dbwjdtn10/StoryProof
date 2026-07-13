@@ -223,10 +223,8 @@ def process_chapter_storyboard(novel_id: int, chapter_id: int):
         # 6. 임시 파일 삭제
         if temp_file_path and os.path.exists(temp_file_path):
             os.unlink(temp_file_path)
-        
-        # 6. 처리 완료
-        # 6. 처리 완료
-        # from datetime import datetime (Removed: use top-level import)
+
+        # 7. 처리 완료
         chapter.storyboard_status = "COMPLETED"
         chapter.storyboard_progress = 100
         chapter.storyboard_message = "처리 완료"

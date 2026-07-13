@@ -87,12 +87,6 @@ class ChatbotService:
             self.client = None
             logger.warning("GOOGLE_API_KEY not set. LLM functionality will be disabled.")
 
-        self._augment_cache_ttl = 3600  # 1시간
-        self._cache_max_size = 500  # 캐시 최대 항목 수
-
-        # multi-query 캐시 (키: question, 값: (queries_list, timestamp))
-        self._multi_query_cache: Dict[str, tuple] = {}
-
         # 소설 제목 인메모리 캐시 (novel_id → title)
         self._novel_title_cache: Dict[int, str] = {}
     
@@ -131,22 +125,6 @@ class ChatbotService:
         except Exception as e:
             logger.warning(f"챕터 제목 조회 실패 (chapter_id={chapter_id}): {e}")
             return None
-
-    def _trim_cache(self, cache: Dict[str, tuple]) -> None:
-        """LRU 캐시 관리: 만료 항목 제거 → 초과 시 최근 미사용 25% 제거."""
-        if len(cache) <= self._cache_max_size:
-            return
-        now = time.time()
-        # 1차: 만료된 항목 제거
-        expired = [k for k, v in cache.items() if (now - v[-1]) >= self._augment_cache_ttl]
-        for k in expired:
-            del cache[k]
-        # 2차: 여전히 초과 시 LRU 25% 제거 (절반 대신 1/4만 제거하여 캐시 활용률 향상)
-        if len(cache) > self._cache_max_size:
-            sorted_keys = sorted(cache.keys(), key=lambda k: cache[k][-1])
-            remove_count = max(len(cache) // 4, len(cache) - self._cache_max_size)
-            for k in sorted_keys[:remove_count]:
-                del cache[k]
 
     def find_similar_chunks(
         self,
@@ -429,62 +407,6 @@ class ChatbotService:
             self.engine.warmup()
         else:
             logger.warning("[Warning] ChatbotService: Engine not initialized, skipping warmup.")
-
-    def _generate_multi_queries(self, question: str) -> List[str]:
-        """
-        한 번의 LLM 호출로 원본 질문을 3가지 다른 검색 쿼리로 변환합니다.
-        각 쿼리는 다른 관점/어휘를 사용하여 검색 재현율(recall)을 극대화합니다.
-        TTL 캐시 적용.
-        """
-        # 캐시 확인 (LRU: 접근 시 타임스탬프 갱신)
-        now = time.time()
-        cached = self._multi_query_cache.get(question)
-        if cached and (now - cached[1]) < self._augment_cache_ttl:
-            logger.info(f"[MultiQuery] Cache hit: '{question}'")
-            # 접근 시간 갱신 (LRU)
-            self._multi_query_cache[question] = (cached[0], cached[1], now)
-            return cached[0]
-
-        if not self.client:
-            return [question]
-
-        prompt = f"""소설 검색 시스템의 쿼리를 최적화합니다.
-사용자의 질문을 벡터 검색 엔진에서 관련 장면을 더 잘 찾을 수 있도록 3가지 서로 다른 검색 쿼리로 변환하세요.
-
-[사용자 질문]
-"{question}"
-
-[변환 규칙 — 각 쿼리는 반드시 서로 다른 핵심 키워드를 포함해야 함]
-1번(키워드 확장): 원본 질문의 핵심어를 유지하면서, 동의어·유의어·한자어/고유어 변형을 추가. 예) "싸움"→"전투 대결 충돌"
-2번(의도 재구성): 질문의 의도를 다른 어휘와 관점으로 완전히 재작성. 1번과 겹치는 단어 최소화.
-3번(장면 묘사형): 답이 포함될 소설 장면에서 실제로 등장할 법한 표현(인물 행동, 대사 패턴, 상황 묘사)으로 변환.
-
-[출력 형식]
-각 쿼리를 한 줄씩, 번호 없이 출력. 설명·부연 금지. 쿼리만 출력.
-
-출력:"""
-        try:
-            response = self.client.models.generate_content(
-                model=settings.GEMINI_CHAT_MODEL,
-                contents=prompt,
-                config={'temperature': 0.3, 'max_output_tokens': 300}
-            )
-            lines = [l.strip().lstrip('0123456789.-) ') for l in response.text.strip().split('\n') if l.strip()]
-            queries = [l for l in lines if len(l) > 3][:3]
-
-            if not queries:
-                queries = [question]
-
-            # 캐시 저장 (크기 제한, LRU: created_at, last_access 포함)
-            self._trim_cache(self._multi_query_cache)
-            self._multi_query_cache[question] = (queries, now, now)
-            logger.info(f"[MultiQuery] '{question}' → {len(queries)} queries generated")
-            for i, q in enumerate(queries):
-                logger.info(f"  Query {i+1}: {q}")
-            return queries
-        except Exception as e:
-            logger.warning(f"[MultiQuery] Generation failed: {e}")
-            return [question]
 
     def _extract_keywords(self, text: str) -> List[str]:
         """

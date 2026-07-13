@@ -128,6 +128,15 @@ Q&A·일관성 검증·캐릭터 챗봇이 나오는 API"가 되어야 한다.
   **법률 자문 검토 전까지는 초안이며, 실제 게시/인증 취득에는 별도 절차
   필요** — 두 문서 모두 상단에 명시. 회사 등록번호/DPO 연락처 등 사업자가
   채워야 할 항목은 `[ ]`로 표시.
+- [x] **코드 정리** (2026-07-13): B2B 상용화 작업(Phase 1~3) 전체 diff를
+  훑어 죽은 코드 제거 — `backend/services/analysis/agent.py`(호출자 없는
+  `StoryConsistencyAgent` 중복 구현체, 파일 전체 삭제), `chatbot_service.py`의
+  `_generate_multi_queries`/`_trim_cache`(호출자 없던 미사용 캐시 서브시스템
+  전체), `gemini_structurer.py`의 `_extract_global_entities_batched`(호출자
+  없던 구버전 배치 로직, 이번에 새로 만든 `structure_scenes_batch`와 이름이
+  비슷해 혼동 소지가 있었음). `worker/tasks.py`의 중복된 "# 6. 처리 완료"
+  주석과 리팩터링 메모 잔재 주석 정리. 전체 테스트(47건) 및 앱 임포트
+  체인 정상 확인 후 커밋.
 
 ---
 
