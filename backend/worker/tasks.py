@@ -652,6 +652,32 @@ def detect_inconsistency_task(self, novel_id: int, text_fragment: str, chapter_i
         if db:
             db.close()
 
+
+# ===== 정산 자동화 =====
+
+@celery_app.task(name="generate_monthly_invoices_task")
+def generate_monthly_invoices_task(year: int = None, month: int = None) -> Dict[str, Any]:
+    """전체 활성 파트너의 월별 인보이스를 생성한다 (Celery Beat로 매월 1일 자동 실행).
+
+    Args:
+        year, month: 미지정 시 "지난달"(정산 대상은 항상 이미 끝난 달) 기준으로 계산.
+    """
+    from backend.services.billing_service import generate_invoices_for_all_partners
+
+    if year is None or month is None:
+        now = datetime.utcnow()
+        prev_month = now.month - 1 or 12
+        prev_year = now.year - 1 if now.month == 1 else now.year
+        year, month = prev_year, prev_month
+
+    db = SessionLocal()
+    try:
+        invoices = generate_invoices_for_all_partners(db, year, month)
+        logger.info(f"월별 인보이스 자동 생성 완료: {year}-{month:02d}, {len(invoices)}건")
+        return {"year": year, "month": month, "count": len(invoices)}
+    finally:
+        db.close()
+
 # ===== Celery Beat 스케줄 (정기 작업) =====
 
 # celery_app.conf.beat_schedule = {

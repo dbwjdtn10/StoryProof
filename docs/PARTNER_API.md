@@ -210,6 +210,28 @@ Authorization: Bearer <admin JWT>
 하는 파트너(예: 미공개 원고를 다루는 서점/플랫폼)에 사용하세요.
 기본값은 `"full"`(기존과 동일하게 원문 보관)입니다.
 
+### 정산(인보이스)
+
+```http
+POST /api/v1/admin/partners/{id}/invoices
+Authorization: Bearer <admin JWT>
+
+{ "year": 2026, "month": 6 }
+```
+
+해당 연월의 `api_usage_logs` 사용량을 집계해 인보이스를 생성/갱신합니다
+(같은 연월로 재호출하면 최신 사용량으로 갱신될 뿐 중복 생성되지 않음).
+`base_fee_krw`/`overage_unit_price_krw`를 요청 바디에 지정하면 플랜 기본
+단가 대신 그 값을 사용합니다. 이력 조회는 `GET .../invoices`.
+
+매월 1일 00:10(Asia/Seoul)에 Celery Beat가 전체 활성 파트너의 지난달
+인보이스를 자동 생성합니다(`generate_monthly_invoices_task`,
+docker-compose의 `beat` 서비스 필요).
+
+**단가 주의**: `BILLING_PLAN_PRICING`(backend/core/config.py)은 실제 계약
+단가가 확정되기 전까지의 임시값입니다. enterprise 플랜은 개별 계약이라
+0원으로 설정되어 있으며 수동 인보이스 발행을 전제로 합니다.
+
 ## 데이터 격리 원칙
 
 - 파트너별 전용 서비스 계정으로 모든 데이터가 격리되며, 다른 파트너 또는

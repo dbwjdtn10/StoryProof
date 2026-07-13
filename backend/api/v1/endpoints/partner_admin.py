@@ -15,12 +15,13 @@ from sqlalchemy import func as sa_func
 from sqlalchemy.orm import Session
 
 from backend.db.session import get_db
-from backend.db.models import User, Partner, PartnerApiKey, ApiUsageLog
+from backend.db.models import User, Partner, PartnerApiKey, ApiUsageLog, Invoice
 from backend.core.security import require_admin, hash_password
 from backend.core.partner_auth import generate_api_key
+from backend.services.billing_service import generate_invoice
 from backend.schemas.partner_schema import (
     PartnerCreateRequest, PartnerCreateResponse, PartnerOut,
-    ApiKeyOut, ApiKeyIssueResponse,
+    ApiKeyOut, ApiKeyIssueResponse, InvoiceGenerateRequest, InvoiceOut,
 )
 
 logger = logging.getLogger(__name__)
@@ -197,3 +198,46 @@ def get_partner_usage(
             for r in rows
         ],
     }
+
+
+# ===== 정산(인보이스) =====
+
+@router.post("/{partner_id}/invoices", response_model=InvoiceOut, status_code=status.HTTP_201_CREATED)
+def generate_partner_invoice(
+    partner_id: int,
+    request: InvoiceGenerateRequest,
+    admin=Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """파트너의 특정 연월 인보이스를 생성/재생성한다.
+
+    단가 미지정 시 플랜 기본 단가(BILLING_PLAN_PRICING, 임시값) 사용.
+    동일 연월로 재호출하면 기존 인보이스를 최신 사용량으로 갱신한다(중복 생성 없음).
+    """
+    partner = db.query(Partner).filter(Partner.id == partner_id).first()
+    if not partner:
+        raise HTTPException(status_code=404, detail="파트너를 찾을 수 없습니다.")
+
+    invoice = generate_invoice(
+        db, partner, request.year, request.month,
+        base_fee_krw=request.base_fee_krw,
+        overage_unit_price_krw=request.overage_unit_price_krw,
+    )
+    return InvoiceOut.model_validate(invoice)
+
+
+@router.get("/{partner_id}/invoices", response_model=list[InvoiceOut])
+def list_partner_invoices(
+    partner_id: int,
+    admin=Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """파트너의 인보이스 이력 조회 (최신순)"""
+    partner = db.query(Partner).filter(Partner.id == partner_id).first()
+    if not partner:
+        raise HTTPException(status_code=404, detail="파트너를 찾을 수 없습니다.")
+
+    invoices = db.query(Invoice).filter(Invoice.partner_id == partner_id).order_by(
+        Invoice.period_year.desc(), Invoice.period_month.desc()
+    ).all()
+    return [InvoiceOut.model_validate(inv) for inv in invoices]

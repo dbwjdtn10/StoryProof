@@ -340,6 +340,39 @@ class ApiUsageLog(Base):
         return f"<ApiUsageLog(id={self.id}, partner_id={self.partner_id}, endpoint={self.endpoint})>"
 
 
+class Invoice(Base):
+    """파트너 월별 정산 인보이스 (api_usage_logs 집계 기반)"""
+    __tablename__ = "invoices"
+    __table_args__ = (
+        Index('ix_invoice_partner_period', 'partner_id', 'period_year', 'period_month', unique=True),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    partner_id = Column(Integer, ForeignKey("partners.id"), nullable=False, index=True)
+
+    period_year = Column(Integer, nullable=False)
+    period_month = Column(Integer, nullable=False)  # 1-12
+
+    plan = Column(String(50), nullable=False)  # 정산 시점의 플랜 (추후 플랜 변경과 무관하게 보존)
+    total_units = Column(Integer, nullable=False, default=0)
+    included_units = Column(Integer, nullable=False, default=0)  # 정산 시점의 monthly_quota
+    overage_units = Column(Integer, nullable=False, default=0)
+
+    base_fee_krw = Column(Integer, nullable=False, default=0)
+    overage_unit_price_krw = Column(Integer, nullable=False, default=0)
+    overage_amount_krw = Column(Integer, nullable=False, default=0)
+    total_amount_krw = Column(Integer, nullable=False, default=0)
+
+    generated_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    partner = relationship("Partner", backref="invoices")
+
+    def __repr__(self):
+        return (f"<Invoice(id={self.id}, partner_id={self.partner_id}, "
+                f"period={self.period_year}-{self.period_month:02d}, total={self.total_amount_krw})>")
+
+
 class CharacterChatMessage(Base):
     """캐릭터 챗봇 메시지 모델"""
     __tablename__ = "character_chat_messages"

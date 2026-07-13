@@ -176,3 +176,31 @@ class PartnerCreateResponse(BaseModel):
 class ApiKeyIssueResponse(BaseModel):
     key_info: ApiKeyOut
     api_key: str = Field(..., description="원본 API 키 — 이 응답에서만 확인 가능")
+
+
+# ===== 정산(인보이스) =====
+
+class InvoiceGenerateRequest(BaseModel):
+    year: int = Field(..., ge=2020, le=2100)
+    month: int = Field(..., ge=1, le=12)
+    base_fee_krw: Optional[int] = Field(None, ge=0, description="미지정 시 플랜 기본 단가 사용")
+    overage_unit_price_krw: Optional[int] = Field(None, ge=0, description="미지정 시 플랜 기본 단가 사용")
+
+
+class InvoiceOut(BaseModel):
+    id: int
+    partner_id: int
+    period_year: int
+    period_month: int
+    plan: str
+    total_units: int
+    included_units: int
+    overage_units: int
+    base_fee_krw: int
+    overage_unit_price_krw: int
+    overage_amount_krw: int
+    total_amount_krw: int
+    generated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True

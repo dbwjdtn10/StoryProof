@@ -105,6 +105,16 @@ class Settings(BaseSettings):
     # ===== Celery 설정 =====
     CELERY_BROKER_URL: str = "redis://localhost:6379/1"
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/2"
+
+    # ===== 정산(인보이스) 플랜별 단가 =====
+    # !!! 임시값 — BUSINESS_ROADMAP.md §5 가격 구조는 "협의"로 미확정 상태.
+    # 실제 계약 단가가 정해지면 이 값을 교체할 것. enterprise는 개별 계약이라
+    # 자동 계산 대상에서 제외(0원, 수동 인보이스 발행 전제).
+    BILLING_PLAN_PRICING: dict = {
+        "starter": {"base_fee_krw": 0, "overage_unit_price_krw": 10},
+        "pro": {"base_fee_krw": 500_000, "overage_unit_price_krw": 7},
+        "enterprise": {"base_fee_krw": 0, "overage_unit_price_krw": 0},
+    }
     
     # ===== 파일 업로드 설정 =====
     UPLOAD_DIR: str = "./data/uploads"

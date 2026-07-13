@@ -1,6 +1,7 @@
 import logging
 
 from celery import Celery
+from celery.schedules import crontab
 from backend.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -23,6 +24,15 @@ celery_app.conf.update(
     task_track_started=True,
     task_time_limit=21600,  # 6시간 (긴 소설 처리 대응)
 )
+
+# 정산 자동화: 매월 1일 00:10(Asia/Seoul)에 지난달 인보이스 일괄 생성
+# (celery beat 프로세스가 별도로 떠 있어야 동작함 — docker-compose의 beat 서비스)
+celery_app.conf.beat_schedule = {
+    "generate-monthly-invoices": {
+        "task": "generate_monthly_invoices_task",
+        "schedule": crontab(minute=10, hour=0, day_of_month=1),
+    },
+}
 
 
 # 워커 시작 시 모델 프리로딩

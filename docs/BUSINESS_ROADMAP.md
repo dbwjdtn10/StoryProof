@@ -107,7 +107,15 @@ Q&A·일관성 검증·캐릭터 챗봇이 나오는 API"가 되어야 한다.
   영향 없음), 원문이 필요한 재분석·plot/style 분석만 이후 불가능해짐 —
   트레이드오프를 `docs/PARTNER_API.md`에 명시. Alembic 마이그레이션
   (`e7b2c19f4a08`), 회귀 테스트 4건(`test_content_retention.py`)
-- [ ] 정산 자동화: 월별 사용량 → 인보이스 생성
+- [x] **정산 자동화** (2026-07-13): `api_usage_logs`를 연월별로 집계해
+  `Invoice` 레코드 생성(`backend/services/billing_service.py`). 관리자
+  API(`POST/GET /api/v1/admin/partners/{id}/invoices`)로 수동 생성·조회
+  가능, Celery Beat(`generate_monthly_invoices_task`)가 매월 1일 00:10
+  (Asia/Seoul)에 전체 활성 파트너 지난달 인보이스를 자동 생성(docker-compose
+  `beat` 서비스 추가). 동일 연월 재생성 시 갱신(중복 없음). **단가는
+  미확정** — `BILLING_PLAN_PRICING`(config.py)은 임시값이며 실제 계약
+  단가로 교체 필요(§5 참고). enterprise는 개별 계약 전제로 자동 계산 제외.
+  Alembic 마이그레이션(`c5a08e3f1b92`), 회귀 테스트 5건(`test_billing_service.py`)
 - [ ] ISMS/개인정보 처리 방침 등 컴플라이언스 문서
 
 ---
