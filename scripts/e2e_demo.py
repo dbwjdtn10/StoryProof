@@ -119,10 +119,9 @@ def main():
 
     # ---- 3. RAG Q&A ----
     step("3/3 RAG Q&A — 파트너/위젯 API와 동일한 경로")
-    # 단일 회차 데모에서는 BM25 성분이 수학적으로 0이라 (문서 1개 → IDF 0)
-    # 하이브리드 점수 상한이 0.7×코사인으로 제한됨 → 기본 게이트(0.55) 완화.
-    # 회차가 많은 실제 작품에서는 기본값을 그대로 쓸 것.
-    settings.CHATBOT_MIN_ANSWER_SIMILARITY = 0.35
+    # 2026-07-13: 소규모 코퍼스 dense-only 폴백(SEARCH_MIN_BM25_CORPUS_SIZE)과
+    # e5 query:/passage: 프리픽스 수정으로, 단일 회차 데모에서도 기본 게이트
+    # (0.55)를 그대로 통과한다 — 더 이상 게이트를 낮출 필요 없음.
     from backend.services.chatbot_service import get_chatbot_service
     chatbot = get_chatbot_service()
 

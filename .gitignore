@@ -78,3 +78,5 @@ scripts/loadtest/loadtest.db*
 scripts/loadtest/seed.json
 scripts/loadtest/results.json
 scripts/e2e_demo.db*
+scripts/eval_search_quality.db*
+scripts/eval/results.json

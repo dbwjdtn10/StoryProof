@@ -89,8 +89,28 @@ Q&A·일관성 검증·캐릭터 챗봇이 나오는 API"가 되어야 한다.
     인덱싱해 재검증: 질문 2건 모두 유사도 0.57대(게이트 0.55 통과)로
     `found_context=True` 확인 — 소규모 코퍼스 게이트 보정과 e5 프리픽스
     수정이 실 인프라에서 함께 정상 동작함을 확인. 검증용 데이터는 정리 후
-    Pinecone/Postgres 모두 클린 상태로 파일럿 대기. 검색 품질 평가셋(질문-
-    정답 쌍)은 아직 없음 — 실 고객 원고가 들어오는 파일럿 단계에서 구축 권장
+    Pinecone/Postgres 모두 클린 상태로 파일럿 대기.
+
+### Phase 4 — 검색 품질 평가셋 (2026-07-13 착수)
+
+- [x] **평가 하네스 구축**: `scripts/eval_search_quality.py` +
+  `scripts/eval/search_quality_corpus.py`(4챕터 테스트 소설, 질문-정답
+  쌍 12개 — 사실 확인 8건, 스포일러 회차필터 누수 검증 2건, 본문에 없는
+  내용에 대한 "찾을 수 없음" 응답 검증 2건). 파트너/위젯 API와 동일한
+  `chatbot_service.ask()`로 채점하고 결과를 `scripts/eval/results.json`에
+  저장. `--limit N`으로 쿼터 절약용 축소 실행 가능. 채점 로직(found_context+
+  키워드 매칭 / not_found 오탐 방지)은 실 API 호출 없이 유닛 테스트 6건으로
+  검증 완료(`test_eval_search_quality_scoring.py`).
+- [ ] **실행 결과 확보**: 착수 당일 Gemini 무료 티어 일일 한도(모델당 20건)가
+  이미 소진돼(오늘 부하테스트/재인덱싱 검증 등으로 소모) 실제 실행이
+  막혔음 — 여러 차례 429 RESOURCE_EXHAUSTED 확인. **다음 세션에서 쿼터가
+  회복되면(또는 유료 티어로 전환하면) `python scripts/eval_search_quality.py`
+  실행해 기준선(baseline) 결과를 `scripts/eval/results.json`에 남길 것.**
+  참고로 무료 티어 20건/일은 실제 파일럿 운영에도 턱없이 부족하므로,
+  파일럿 계약 전 유료 티어 전환이 어차피 필요함.
+- [x] **부수 수정**: `scripts/e2e_demo.py`의 `CHATBOT_MIN_ANSWER_SIMILARITY`
+  하향 조정 워크어라운드 제거 — 이제 기본 게이트(0.55)를 그대로 통과함
+
 - [x] **LLM 비용 최적화** (2026-07-13):
   - **캐싱 고도화**: 콘텐츠 SHA-256 해시 기반 캐시 히트 스킵을 3개 경로에
     추가 — 스토리보드 재분석(`NovelService.analyze_chapter`, 내용 불변 시
