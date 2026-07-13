@@ -273,6 +273,14 @@ class Partner(Base):
     # "full"(기본값)은 기존과 동일하게 원문을 그대로 보관.
     content_retention_mode = Column(String(20), default="full", nullable=False)
 
+    # 멀티 리전/전용 인스턴스(enterprise 플랜): "shared"(기본값)는 공용
+    # 멀티테넌트 스택. 그 외 값은 이 파트너 전용으로 별도 프로비저닝된
+    # 스택의 리전 식별자(예: "ap-northeast-2-dedicated")를 기록하는 메타데이터일
+    # 뿐 — 실제 격리 배포는 docs/DEDICATED_DEPLOYMENT.md 런북에 따라 운영진이
+    # 별도로 수행한다 (이 앱이 스스로 여러 리전에 자동 배포하지는 않음)
+    deployment_region = Column(String(50), default="shared", nullable=False)
+    dedicated_instance_url = Column(String(500), nullable=True)
+
     is_active = Column(Boolean, default=True, nullable=False)
 
     # 웹훅 설정 (처리 완료 이벤트를 파트너 서버로 push, HMAC-SHA256 서명)

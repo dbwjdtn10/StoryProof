@@ -75,6 +75,27 @@ def test_partner_creation_returns_raw_key(partner):
     assert api_key.startswith("sp_live_")
 
 
+def test_partner_deployment_region_defaults_and_override(client, admin_headers):
+    r = client.post("/api/v1/admin/partners/", headers=admin_headers, json={
+        "name": "리전기본값파트너", "contact_email": "shared@test.com",
+    })
+    assert r.status_code == 201, r.text
+    assert r.json()["partner"]["deployment_region"] == "shared"
+    assert r.json()["partner"]["content_retention_mode"] == "full"
+
+    r2 = client.post("/api/v1/admin/partners/", headers=admin_headers, json={
+        "name": "전용리전파트너", "contact_email": "dedicated@test.com",
+        "deployment_region": "ap-northeast-2-dedicated",
+        "dedicated_instance_url": "https://partner-x.api.storyproof.com",
+        "content_retention_mode": "minimal",
+    })
+    assert r2.status_code == 201, r2.text
+    partner_out = r2.json()["partner"]
+    assert partner_out["deployment_region"] == "ap-northeast-2-dedicated"
+    assert partner_out["dedicated_instance_url"] == "https://partner-x.api.storyproof.com"
+    assert partner_out["content_retention_mode"] == "minimal"
+
+
 def test_non_admin_cannot_create_partner(client):
     db = TestingSession()
     user = User(email="u@test.com", username="user1", hashed_password=hash_password("x"))

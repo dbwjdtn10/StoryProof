@@ -74,6 +74,8 @@ def create_partner(
         monthly_quota=request.monthly_quota,
         rate_limit_per_minute=request.rate_limit_per_minute,
         content_retention_mode=request.content_retention_mode,
+        deployment_region=request.deployment_region,
+        dedicated_instance_url=request.dedicated_instance_url,
         user_id=service_user.id,
     )
     db.add(partner)

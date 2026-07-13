@@ -139,6 +139,11 @@ class PartnerCreateRequest(BaseModel):
         "full", pattern="^(full|minimal)$",
         description="minimal: 원고 처리 완료 직후 원문 전체를 삭제하고 벡터+청크만 보관 (콘텐츠 보안 계약용)",
     )
+    deployment_region: str = Field(
+        "shared", max_length=50,
+        description="'shared'(기본) 또는 전용 인스턴스 리전 식별자. 실제 프로비저닝은 별도 운영 작업(DEDICATED_DEPLOYMENT.md) 필요 — 여기선 메타데이터만 기록",
+    )
+    dedicated_instance_url: Optional[str] = Field(None, max_length=500)
 
 
 class ApiKeyOut(BaseModel):
@@ -161,6 +166,8 @@ class PartnerOut(BaseModel):
     monthly_quota: int
     rate_limit_per_minute: int
     content_retention_mode: str
+    deployment_region: str
+    dedicated_instance_url: Optional[str] = None
     is_active: bool
     created_at: Optional[datetime] = None
 

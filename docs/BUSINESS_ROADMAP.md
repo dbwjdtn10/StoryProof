@@ -98,7 +98,13 @@ Q&A·일관성 검증·캐릭터 챗봇이 나오는 API"가 되어야 한다.
   - Alembic 마이그레이션(`d3f6a91c5b47`, Chapter/Analysis에 content_hash
     컬럼 추가), 회귀 테스트 10건(`test_llm_caching.py`,
     `test_scene_batch_structuring.py`)
-- [ ] 멀티 리전/전용 인스턴스 옵션 (enterprise 플랜)
+- [x] **멀티 리전/전용 인스턴스 옵션** (2026-07-13): 이 항목은 애플리케이션
+  코드가 아니라 배포 절차 문제라, `Partner.deployment_region`/
+  `dedicated_instance_url` 메타데이터 필드만 추가(관리자 API로 등록·조회
+  가능)하고, 실제 격리 배포는 Phase 1 Docker 패키징을 재사용하는 런북으로
+  대응 — `docs/DEDICATED_DEPLOYMENT.md` 참고. 앱이 스스로 여러 리전에
+  자동 배포/라우팅하지는 않음(전용 스택은 별도 URL로 직접 접근).
+  Alembic 마이그레이션(`7f4d9a2e6c31`), 회귀 테스트 1건 추가
 - [x] **콘텐츠 보안 계약 대응** (2026-07-13): `Partner.content_retention_mode`
   (`"full"`/`"minimal"`, 파트너 등록 시 지정). `"minimal"`이면 원고 회차
   인덱싱 완료 즉시 `Chapter.content`(원문 전체)를 삭제하고 Pinecone
